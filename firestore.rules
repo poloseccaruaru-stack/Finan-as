@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function isValidTransaction(data) {
+      return data.userId is string &&
+             data.description is string && data.description.size() > 0 &&
+             data.amount is number &&
+             data.type in ['income', 'expense'] &&
+             data.status in ['pending', 'paid'];
+    }
+    function isValidGoal(data) {
+      return data.userId is string &&
+             data.month is string &&
+             data.targetAmount is number;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidTransaction(request.resource.data);
+      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId && isValidTransaction(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /goals/{goalId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidGoal(request.resource.data);
+      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId && isValidGoal(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
