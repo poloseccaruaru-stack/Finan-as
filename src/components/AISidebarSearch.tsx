@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Search, Sparkles, Save, X, Loader2 } from 'lucide-react';
+import { Search, Sparkles, Save, X, Loader2, Brain, Zap, MessageSquare } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { cn } from '../lib/utils';
@@ -11,11 +13,14 @@ interface Props {
   isSidebarOpen: boolean;
 }
 
+type AIModel = 'gemini' | 'chatgpt' | 'claude';
+
 export default function AISidebarSearch({ isSidebarOpen }: Props) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<AIModel>('gemini');
 
   const handleAISearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,23 +39,54 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
         contextData[col] = snap.docs.map(d => d.data());
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Você é um assistente analista de dados para uma escola (EBD). 
-        Abaixo estão os dados atuais do sistema em formato JSON:
-        ${JSON.stringify(contextData)}
-        
-        O usuário perguntou: "${query}"
-        
-        Responda de forma profissional, gere relatórios se solicitado, e forneça insights baseados nos dados. 
-        Use Markdown para formatar a resposta.`,
-      });
+      const systemPrompt = `Você é um assistente analista de dados para uma escola (EBD). 
+      Abaixo estão os dados atuais do sistema em formato JSON:
+      ${JSON.stringify(contextData)}
+      
+      O usuário perguntou: "${query}"
+      
+      Responda de forma profissional, gere relatórios se solicitado, e forneça insights baseados nos dados. 
+      Use Markdown para formatar a resposta.`;
 
-      setResult(response.text || 'Não foi possível gerar uma resposta.');
-    } catch (err) {
+      let aiResponse = '';
+
+      if (selectedModel === 'gemini') {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: systemPrompt,
+        });
+        aiResponse = response.text || '';
+      } else if (selectedModel === 'chatgpt') {
+        const openai = new OpenAI({
+          apiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
+          dangerouslyAllowBrowser: true // Required for client-side usage
+        });
+        const completion = await openai.chat.completions.create({
+          messages: [{ role: "system", content: systemPrompt }],
+          model: "gpt-4o-mini",
+        });
+        aiResponse = completion.choices[0].message.content || '';
+      } else if (selectedModel === 'claude') {
+        const anthropic = new Anthropic({
+          apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+          dangerouslyAllowBrowser: true // Required for client-side usage
+        });
+        const message = await anthropic.messages.create({
+          model: "claude-3-5-sonnet-20240620",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: systemPrompt }],
+        });
+        // Claude 3 SDK returns an array of content blocks
+        if (message.content[0].type === 'text') {
+          aiResponse = message.content[0].text;
+        }
+      }
+
+      setResult(aiResponse || 'Não foi possível gerar uma resposta.');
+    } catch (err: any) {
       console.error(err);
-      setResult('Erro ao processar sua solicitação com a IA.');
+      setResult(`Erro ao processar sua solicitação com a IA (${selectedModel}). Verifique se a chave de API está configurada corretamente.`);
     } finally {
       setLoading(false);
     }
@@ -73,15 +109,52 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
   if (!isSidebarOpen) return null;
 
   return (
-    <div className="px-4 py-2 space-y-2">
-      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assistente IA</p>
+    <div className="px-4 py-2 space-y-3">
+      <div className="flex items-center justify-between ml-1">
+        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Assistente IA</p>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setSelectedModel('gemini')}
+            className={cn(
+              "p-1 rounded-md transition-all",
+              selectedModel === 'gemini' ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
+            )}
+            title="Gemini"
+          >
+            <Sparkles className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => setSelectedModel('chatgpt')}
+            className={cn(
+              "p-1 rounded-md transition-all",
+              selectedModel === 'chatgpt' ? "bg-green-600 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
+            )}
+            title="ChatGPT"
+          >
+            <MessageSquare className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => setSelectedModel('claude')}
+            className={cn(
+              "p-1 rounded-md transition-all",
+              selectedModel === 'claude' ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
+            )}
+            title="Claude"
+          >
+            <Brain className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
       <form onSubmit={handleAISearch} className="relative group">
         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-          <Sparkles className="w-4 h-4 text-indigo-400 group-focus-within:text-indigo-500 transition-colors" />
+          {selectedModel === 'gemini' && <Sparkles className="w-4 h-4 text-indigo-400" />}
+          {selectedModel === 'chatgpt' && <MessageSquare className="w-4 h-4 text-green-400" />}
+          {selectedModel === 'claude' && <Brain className="w-4 h-4 text-amber-400" />}
         </div>
         <input
           type="text"
-          placeholder="O que você deseja?"
+          placeholder={`Perguntar ao ${selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'chatgpt' ? 'ChatGPT' : 'Claude'}...`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
