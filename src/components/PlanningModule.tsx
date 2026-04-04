@@ -23,7 +23,9 @@ import {
   Edit,
   Save,
   Info,
-  Printer
+  Printer,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { 
   format, 
@@ -40,6 +42,7 @@ import { ptBR } from 'date-fns/locale';
 import { Planning, Teacher, Class } from '../types';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { suggestPlanning } from '../services/geminiService';
 
 interface Props {
   user: Teacher;
@@ -62,6 +65,7 @@ export default function PlanningModule({ user }: Props) {
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
+  const [suggesting, setSuggesting] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
@@ -124,6 +128,25 @@ export default function PlanningModule({ user }: Props) {
     const end = endOfMonth(currentMonth);
     return eachDayOfInterval({ start, end }).filter(date => isSunday(date));
   }, [currentMonth]);
+
+  const handleAISuggest = async () => {
+    if (!selectedDate || !selectedClassId) return;
+    const className = classes.find(c => c.id === selectedClassId)?.name || "";
+    const dateStr = format(selectedDate, 'dd/MM/yyyy');
+    
+    setSuggesting(true);
+    try {
+      const suggestion = await suggestPlanning(className, dateStr);
+      setForm({
+        content: suggestion.content,
+        methodology: suggestion.methodology
+      });
+    } catch (error) {
+      alert("Erro ao obter sugestão da IA. Verifique sua chave de API.");
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const handleSavePlanning = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,9 +329,21 @@ export default function PlanningModule({ user }: Props) {
                       {format(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
                     </p>
                   </div>
-                  <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full">
-                    <Plus className="w-6 h-6 text-slate-400 rotate-45" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAISuggest}
+                      disabled={suggesting}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-bold hover:bg-amber-100 transition-all disabled:opacity-50"
+                      title="Sugerir com Gemini"
+                    >
+                      {suggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                      <span className="hidden md:inline">Sugerir com IA</span>
+                    </button>
+                    <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                      <Plus className="w-6 h-6 text-slate-400 rotate-45" />
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleSavePlanning} className="space-y-6">

@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import { Search, Sparkles, Save, X, Loader2, Brain, Zap, MessageSquare } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
-import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
+import { Search, Sparkles, Save, X, Loader2, Brain, MessageSquare } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { cn } from '../lib/utils';
@@ -13,7 +10,7 @@ interface Props {
   isSidebarOpen: boolean;
 }
 
-type AIModel = 'gemini' | 'chatgpt' | 'claude';
+type AIModel = 'gemini' | 'openai' | 'claude';
 
 export default function AISidebarSearch({ isSidebarOpen }: Props) {
   const [query, setQuery] = useState('');
@@ -48,45 +45,27 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
       Responda de forma profissional, gere relatórios se solicitado, e forneça insights baseados nos dados. 
       Use Markdown para formatar a resposta.`;
 
-      let aiResponse = '';
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: selectedModel,
+          message: systemPrompt,
+        }),
+      });
 
-      if (selectedModel === 'gemini') {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: systemPrompt,
-        });
-        aiResponse = response.text || '';
-      } else if (selectedModel === 'chatgpt') {
-        const openai = new OpenAI({
-          apiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
-          dangerouslyAllowBrowser: true // Required for client-side usage
-        });
-        const completion = await openai.chat.completions.create({
-          messages: [{ role: "system", content: systemPrompt }],
-          model: "gpt-4o-mini",
-        });
-        aiResponse = completion.choices[0].message.content || '';
-      } else if (selectedModel === 'claude') {
-        const anthropic = new Anthropic({
-          apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
-          dangerouslyAllowBrowser: true // Required for client-side usage
-        });
-        const message = await anthropic.messages.create({
-          model: "claude-3-5-sonnet-20240620",
-          max_tokens: 1024,
-          messages: [{ role: "user", content: systemPrompt }],
-        });
-        // Claude 3 SDK returns an array of content blocks
-        if (message.content[0].type === 'text') {
-          aiResponse = message.content[0].text;
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao processar solicitação');
       }
 
-      setResult(aiResponse || 'Não foi possível gerar uma resposta.');
+      const data = await response.json();
+      setResult(data.text || 'Não foi possível gerar uma resposta.');
     } catch (err: any) {
       console.error(err);
-      setResult(`Erro ao processar sua solicitação com a IA (${selectedModel}). Verifique se a chave de API está configurada corretamente.`);
+      setResult(`Erro ao processar sua solicitação com a IA (${selectedModel}). ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -124,10 +103,10 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
             <Sparkles className="w-3 h-3" />
           </button>
           <button
-            onClick={() => setSelectedModel('chatgpt')}
+            onClick={() => setSelectedModel('openai')}
             className={cn(
               "p-1 rounded-md transition-all",
-              selectedModel === 'chatgpt' ? "bg-green-600 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
+              selectedModel === 'openai' ? "bg-green-600 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
             )}
             title="ChatGPT"
           >
@@ -149,12 +128,12 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
       <form onSubmit={handleAISearch} className="relative group">
         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
           {selectedModel === 'gemini' && <Sparkles className="w-4 h-4 text-indigo-400" />}
-          {selectedModel === 'chatgpt' && <MessageSquare className="w-4 h-4 text-green-400" />}
+          {selectedModel === 'openai' && <MessageSquare className="w-4 h-4 text-green-400" />}
           {selectedModel === 'claude' && <Brain className="w-4 h-4 text-amber-400" />}
         </div>
         <input
           type="text"
-          placeholder={`Perguntar ao ${selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'chatgpt' ? 'ChatGPT' : 'Cloud'}...`}
+          placeholder={`Perguntar ao ${selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'openai' ? 'ChatGPT' : 'Cloud'}...`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
