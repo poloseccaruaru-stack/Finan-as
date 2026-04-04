@@ -81,7 +81,7 @@ export default function App() {
           try {
             const userDoc = await Promise.race([fetchPromise, timeoutPromise]) as any;
             if (userDoc.exists()) {
-              setUserData(userDoc.data() as Teacher);
+              setUserData({ id: userDoc.id, ...userDoc.data() } as Teacher);
             } else {
               // Default for new Google users
               const newData: Teacher = {
@@ -114,7 +114,11 @@ export default function App() {
           // If not Firebase Auth, check if we have a manual session in localStorage
           const manualUser = localStorage.getItem('ebd_manual_user');
           if (manualUser) {
-            setUserData(JSON.parse(manualUser));
+            const parsed = JSON.parse(manualUser);
+            if (!parsed.id && user) {
+              parsed.id = user.uid;
+            }
+            setUserData(parsed);
           } else {
             setUser(null);
             setUserData(null);

@@ -142,7 +142,12 @@ export default function FinanceModule({ user }: Props) {
     e.preventDefault();
     try {
       await addDoc(collection(db, 'transactions'), {
-        ...form,
+        description: form.description || "",
+        amount: form.amount || 0,
+        type: form.type || 'expense',
+        category: form.category || CATEGORIES[0],
+        date: form.date || format(new Date(), 'yyyy-MM-dd'),
+        status: form.status || 'paid',
         createdAt: new Date().toISOString()
       });
       setShowForm(false);
@@ -156,7 +161,9 @@ export default function FinanceModule({ user }: Props) {
     e.preventDefault();
     try {
       await addDoc(collection(db, 'estimated_expenses'), {
-        ...estimateForm,
+        description: estimateForm.description || "",
+        amount: estimateForm.amount || 0,
+        category: estimateForm.category || CATEGORIES[0],
         createdAt: new Date().toISOString()
       });
       setShowEstimateForm(false);
@@ -173,11 +180,12 @@ export default function FinanceModule({ user }: Props) {
       const existing = budgets.find(b => b.month === budgetForm.month);
       if (existing) {
         await updateDoc(doc(db, 'budgets', existing.id), {
-          totalBudget: budgetForm.totalBudget
+          totalBudget: budgetForm.totalBudget || 0
         });
       } else {
         await addDoc(collection(db, 'budgets'), {
-          ...budgetForm,
+          month: budgetForm.month || format(new Date(), 'yyyy-MM'),
+          totalBudget: budgetForm.totalBudget || 0,
           createdAt: new Date().toISOString()
         });
       }

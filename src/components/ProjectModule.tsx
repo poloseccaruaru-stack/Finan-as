@@ -109,14 +109,24 @@ export default function ProjectModule({ user }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const sanitizedForm = {
+        title: form.title || "",
+        description: form.description || "",
+        teacherIds: form.teacherIds || [],
+        studentIds: form.studentIds || [],
+        startDate: form.startDate || format(new Date(), 'yyyy-MM-dd'),
+        endDate: form.endDate || "",
+        status: form.status || 'EM ANDAMENTO'
+      };
+
       if (editingProject) {
         await updateDoc(doc(db, 'projects', editingProject.id), {
-          ...form,
+          ...sanitizedForm,
           updatedAt: new Date().toISOString()
         });
       } else {
         await addDoc(collection(db, 'projects'), {
-          ...form,
+          ...sanitizedForm,
           createdAt: new Date().toISOString()
         });
       }

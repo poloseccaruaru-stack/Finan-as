@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -9,7 +9,8 @@ import {
   where, 
   orderBy,
   doc,
-  deleteDoc
+  deleteDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { 
   Calendar as CalendarIcon, 
@@ -100,7 +101,12 @@ export default function PlanningModule({ user }: Props) {
         );
 
     const unsubPlanning = onSnapshot(planningQuery, (snap) => {
-      setPlannings(snap.docs.map(d => ({ id: d.id, ...d.data() } as Planning)));
+      setPlannings(snap.docs.map(d => {
+        const data = d.data();
+        // Handle serverTimestamp conversion for display
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt;
+        return { id: d.id, ...data, createdAt } as Planning;
+      }));
       setLoading(false);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'planning');
@@ -123,24 +129,32 @@ export default function PlanningModule({ user }: Props) {
     e.preventDefault();
     if (!selectedDate || !selectedClassId) return;
 
+    if (!auth.currentUser || !auth.currentUser.uid) {
+      alert("Usuário não autenticado");
+      return;
+    }
+
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const existing = plannings.find(p => p.date === dateStr && p.classId === selectedClassId);
       
       const planningData = {
-        month: format(currentMonth, 'yyyy-MM'),
-        classId: selectedClassId,
-        teacherId: user.id,
-        date: dateStr,
-        content: form.content,
-        methodology: form.methodology.join(', '),
-        createdAt: new Date().toISOString()
+        month: format(currentMonth, 'yyyy-MM') || "",
+        classId: selectedClassId || "",
+        teacherId: auth.currentUser.uid,
+        date: dateStr || "",
+        content: form.content || "",
+        methodology: form.methodology.join(', ') || "",
+        updatedAt: serverTimestamp()
       };
 
       if (existing) {
         await updateDoc(doc(db, 'planning', existing.id), planningData);
       } else {
-        await addDoc(collection(db, 'planning'), planningData);
+        await addDoc(collection(db, 'planning'), {
+          ...planningData,
+          createdAt: serverTimestamp()
+        });
       }
       
       setShowForm(false);

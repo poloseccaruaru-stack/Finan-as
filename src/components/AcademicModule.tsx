@@ -26,6 +26,7 @@ import {
   BookOpen,
   LayoutDashboard,
   CheckSquare,
+  FileText,
   AlertCircle,
   Save,
   Check,
@@ -36,7 +37,7 @@ import {
 } from 'lucide-react';
 import { format, differenceInYears, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Student, Teacher, Class, Attendance, Planning, JustificationOption } from '../types';
+import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport } from '../types';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -46,6 +47,19 @@ interface Props {
 }
 
 type SortField = 'name' | 'age' | 'class';
+
+const PREDEFINED_METHODOLOGIES = [
+  'Aula Expositiva',
+  'Debate/Discussão',
+  'Atividade em Grupo',
+  'Dinâmica de Grupo',
+  'Teatro/Dramatização',
+  'Uso de Recursos Visuais',
+  'Atividade Lúdica',
+  'Estudo de Caso',
+  'Música/Louvor',
+  'Trabalho Manual'
+];
 
 export default function AcademicModule({ user, subTab }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
@@ -67,6 +81,14 @@ export default function AcademicModule({ user, subTab }: Props) {
   const [newJustification, setNewJustification] = useState('');
   const [attendanceFilterMonth, setAttendanceFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [attendanceFilterClass, setAttendanceFilterClass] = useState<string>('all');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showRangeReportModal, setShowRangeReportModal] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportType, setReportType] = useState<'student' | 'teacher'>('student');
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [reportContent, setReportContent] = useState('');
+  const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const isAdmin = user.role === 'admin';
 
@@ -152,7 +174,8 @@ export default function AcademicModule({ user, subTab }: Props) {
     email: '',
     password: '',
     contact: '',
-    classIds: [] as string[]
+    classIds: [] as string[],
+    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[]
   });
 
   const [classForm, setClassForm] = useState({
@@ -191,11 +214,21 @@ export default function AcademicModule({ user, subTab }: Props) {
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const sanitizedForm = {
+        name: studentForm.name || "",
+        birthDate: studentForm.birthDate || "",
+        guardians: studentForm.guardians || "",
+        emergencyContact: studentForm.emergencyContact || "",
+        phone: studentForm.phone || "",
+        history: studentForm.history || "",
+        classId: studentForm.classId || ""
+      };
+
       if (editingStudent) {
-        await updateDoc(doc(db, 'students', editingStudent.id), studentForm);
+        await updateDoc(doc(db, 'students', editingStudent.id), sanitizedForm);
       } else {
         await addDoc(collection(db, 'students'), {
-          ...studentForm,
+          ...sanitizedForm,
           consecutiveAbsences: 0,
           attendancePercentage: 100,
           createdAt: new Date().toISOString()
@@ -239,10 +272,11 @@ export default function AcademicModule({ user, subTab }: Props) {
     try {
       if (editingTeacher) {
         await updateDoc(doc(db, 'users', editingTeacher.id), {
-          name: teacherForm.name,
-          email: teacherForm.email,
-          contact: teacherForm.contact,
-          classIds: teacherForm.classIds,
+          name: teacherForm.name || "",
+          email: teacherForm.email || "",
+          contact: teacherForm.contact || "",
+          classIds: teacherForm.classIds || [],
+          allowedTabs: teacherForm.allowedTabs || [],
           updatedAt: new Date().toISOString()
         });
       } else {
@@ -252,10 +286,11 @@ export default function AcademicModule({ user, subTab }: Props) {
 
         // Create User Doc
         await setDoc(doc(db, 'users', newUser.uid), {
-          name: teacherForm.name,
-          email: teacherForm.email,
-          contact: teacherForm.contact,
-          classIds: teacherForm.classIds,
+          name: teacherForm.name || "",
+          email: teacherForm.email || "",
+          contact: teacherForm.contact || "",
+          classIds: teacherForm.classIds || [],
+          allowedTabs: teacherForm.allowedTabs || [],
           role: 'teacher',
           firstLogin: true,
           createdAt: new Date().toISOString()
@@ -264,7 +299,7 @@ export default function AcademicModule({ user, subTab }: Props) {
 
       setShowForm(false);
       setEditingTeacher(null);
-      setTeacherForm({ name: '', email: '', password: '', contact: '', classIds: [] });
+      setTeacherForm({ name: '', email: '', password: '', contact: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
     } catch (err) {
       handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
     }
@@ -277,7 +312,8 @@ export default function AcademicModule({ user, subTab }: Props) {
       email: teacher.email,
       password: '', // Don't load password
       contact: teacher.contact,
-      classIds: teacher.classIds
+      classIds: teacher.classIds || [],
+      allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports']
     });
     setShowForm(true);
   };
@@ -286,7 +322,9 @@ export default function AcademicModule({ user, subTab }: Props) {
     e.preventDefault();
     try {
       await addDoc(collection(db, 'classes'), {
-        ...classForm,
+        name: classForm.name || "",
+        ageRange: classForm.ageRange || "",
+        teacherId: classForm.teacherId || "",
         studentIds: [],
         createdAt: new Date().toISOString()
       });
@@ -302,6 +340,7 @@ export default function AcademicModule({ user, subTab }: Props) {
   const [justifications, setJustifications] = useState<{ [key: string]: string }>({});
   const [attendanceDate, setAttendanceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [contentGiven, setContentGiven] = useState('');
+  const [attendanceMethodology, setAttendanceMethodology] = useState<string[]>([]);
   const [observation, setObservation] = useState('');
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -313,6 +352,19 @@ export default function AcademicModule({ user, subTab }: Props) {
     });
     return () => unsubPlanning();
   }, []);
+
+  useEffect(() => {
+    if (selectedClass && attendanceDate && !editingAttendance) {
+      const planning = plannings.find(p => p.classId === selectedClass && p.date === attendanceDate);
+      if (planning) {
+        setContentGiven(planning.content);
+        setAttendanceMethodology(planning.methodology.split(', ').filter(m => m.length > 0));
+      } else {
+        setContentGiven('');
+        setAttendanceMethodology([]);
+      }
+    }
+  }, [selectedClass, attendanceDate, editingAttendance, plannings]);
 
   const currentPlanning = useMemo(() => {
     if (!selectedClass || !attendanceDate) return null;
@@ -344,14 +396,20 @@ export default function AcademicModule({ user, subTab }: Props) {
     const absent = Object.keys(attendanceList).filter(id => !attendanceList[id]);
     
     try {
+      if (currentPlanning && contentGiven !== currentPlanning.content && !observation.trim()) {
+        const confirmChange = confirm('O conteúdo ministrado é diferente do planejado. Deseja adicionar uma justificativa nas observações?');
+        if (confirmChange) return; // Allow user to add justification
+      }
+
       const attendanceData = {
-        classId: selectedClass,
-        date: attendanceDate,
-        presentStudentIds: present,
-        absentStudentIds: absent,
-        justifications,
-        contentGiven,
-        observation,
+        classId: selectedClass || "",
+        date: attendanceDate || "",
+        presentStudentIds: present || [],
+        absentStudentIds: absent || [],
+        justifications: justifications || {},
+        contentGiven: contentGiven || "",
+        methodology: attendanceMethodology.join(', ') || "",
+        observation: observation || "",
         createdAt: new Date().toISOString()
       };
 
@@ -385,6 +443,7 @@ export default function AcademicModule({ user, subTab }: Props) {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setContentGiven('');
+      setAttendanceMethodology([]);
       setObservation('');
       setEditingAttendance(null);
     } catch (err) {
@@ -423,6 +482,7 @@ export default function AcademicModule({ user, subTab }: Props) {
     setSelectedClass(att.classId);
     setAttendanceDate(att.date);
     setContentGiven(att.contentGiven || '');
+    setAttendanceMethodology(att.methodology ? att.methodology.split(', ').filter(m => m.length > 0) : []);
     setObservation(att.observation || '');
     
     const list: { [key: string]: boolean } = {};
@@ -430,6 +490,42 @@ export default function AcademicModule({ user, subTab }: Props) {
     att.absentStudentIds.forEach(id => list[id] = false);
     setAttendanceList(list);
     setJustifications(att.justifications || {});
+  };
+
+  const handleSaveReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportTargetId) return;
+
+    try {
+      const currentUserId = user.id || auth.currentUser?.uid || "";
+      if (!currentUserId) {
+        alert("Erro: Usuário não identificado. Por favor, faça login novamente.");
+        return;
+      }
+
+      const collectionName = reportType === 'student' ? 'student_reports' : 'teacher_reports';
+      const reportData = reportType === 'student' ? {
+        studentId: reportTargetId,
+        teacherId: currentUserId,
+        content: reportContent || "",
+        date: reportDate || format(new Date(), 'yyyy-MM-dd'),
+        createdAt: new Date().toISOString()
+      } : {
+        targetTeacherId: reportTargetId,
+        adminId: currentUserId,
+        content: reportContent || "",
+        date: reportDate || format(new Date(), 'yyyy-MM-dd'),
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, collectionName), reportData);
+      setShowReportModal(false);
+      setReportContent('');
+      setReportTargetId(null);
+      alert('Relatório salvo com sucesso!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, reportType === 'student' ? 'student_reports' : 'teacher_reports');
+    }
   };
 
   return (
@@ -560,6 +656,17 @@ export default function AcademicModule({ user, subTab }: Props) {
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
+                          onClick={() => {
+                            setReportType('student');
+                            setReportTargetId(student.id);
+                            setShowReportModal(true);
+                          }}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Criar Relatório"
+                        >
+                          <FileText className="w-5 h-5" />
+                        </button>
+                        <button 
                           onClick={() => handleEditStudent(student)}
                           className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                         >
@@ -617,6 +724,19 @@ export default function AcademicModule({ user, subTab }: Props) {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        {isAdmin && (
+                          <button 
+                            onClick={() => {
+                              setReportType('teacher');
+                              setReportTargetId(teacher.id);
+                              setShowReportModal(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Criar Relatório"
+                          >
+                            <FileText className="w-5 h-5" />
+                          </button>
+                        )}
                         <button 
                           onClick={() => handleEditTeacher(teacher)}
                           className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
@@ -722,6 +842,53 @@ export default function AcademicModule({ user, subTab }: Props) {
               </div>
             </div>
 
+            {selectedClass && (
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Planejamentos Disponíveis</label>
+                <div className="flex flex-wrap gap-2">
+                  {plannings
+                    .filter(p => p.classId === selectedClass)
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .slice(0, 8)
+                    .map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setAttendanceDate(p.date);
+                          setContentGiven(p.content);
+                          setAttendanceMethodology(p.methodology ? p.methodology.split(', ').filter(m => m.length > 0) : []);
+                          // Check if attendance already exists for this date/class
+                          const att = attendances.find(a => a.classId === selectedClass && a.date === p.date);
+                          if (att) {
+                            handleEditAttendance(att);
+                          } else {
+                            setEditingAttendance(null);
+                            // Reset attendance list to all present for new date
+                            const initial = students.filter(s => s.classId === selectedClass).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
+                            setAttendanceList(initial);
+                            setJustifications({});
+                            setContentGiven('');
+                            setAttendanceMethodology([]);
+                            setObservation('');
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-2 rounded-xl text-xs font-bold border transition-all",
+                          attendanceDate === p.date 
+                            ? "bg-indigo-600 border-indigo-600 text-white shadow-md" 
+                            : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
+                        )}
+                      >
+                        {format(parseISO(p.date), 'dd/MM/yyyy')}
+                      </button>
+                    ))}
+                  {plannings.filter(p => p.classId === selectedClass).length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Nenhum planejamento encontrado para esta turma.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {currentPlanning && (
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 space-y-3">
                 <div className="flex items-center gap-2 text-indigo-600">
@@ -792,7 +959,12 @@ export default function AcademicModule({ user, subTab }: Props) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Conteúdo Ministrado</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Conteúdo Ministrado</label>
+                      {currentPlanning && contentGiven !== currentPlanning.content && (
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">Alterado do Planejado</span>
+                      )}
+                    </div>
                     <textarea
                       value={contentGiven}
                       onChange={(e) => setContentGiven(e.target.value)}
@@ -808,6 +980,49 @@ export default function AcademicModule({ user, subTab }: Props) {
                       placeholder="Alguma observação importante sobre a aula ou alunos?"
                       className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                     />
+                  </div>
+                  <div className="md:col-span-2 space-y-4">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Metodologia Utilizada</label>
+                    <div className="flex flex-wrap gap-2">
+                      {PREDEFINED_METHODOLOGIES.map(method => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => {
+                            const current = attendanceMethodology;
+                            const next = current.includes(method)
+                              ? current.filter(m => m !== method)
+                              : [...current, method];
+                            setAttendanceMethodology(next);
+                          }}
+                          className={cn(
+                            "px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border",
+                            attendanceMethodology.includes(method)
+                              ? "bg-indigo-600 border-indigo-600 text-white shadow-md"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                          )}
+                        >
+                          {method}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Outra metodologia..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = e.currentTarget.value.trim();
+                            if (val && !attendanceMethodology.includes(val)) {
+                              setAttendanceMethodology([...attendanceMethodology, val]);
+                              e.currentTarget.value = '';
+                            }
+                          }
+                        }}
+                        className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -845,6 +1060,13 @@ export default function AcademicModule({ user, subTab }: Props) {
                   <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <h3 className="text-lg font-bold text-slate-900">Relatório de Chamadas Realizadas</h3>
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                      <button 
+                        onClick={() => setShowRangeReportModal(true)}
+                        className="px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Relatório por Período
+                      </button>
                       <select
                         value={attendanceFilterClass}
                         onChange={(e) => setAttendanceFilterClass(e.target.value)}
@@ -1079,6 +1301,35 @@ export default function AcademicModule({ user, subTab }: Props) {
                       ))}
                     </div>
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
+                    <div className="grid grid-cols-2 gap-2 p-2 border border-slate-200 rounded-xl bg-slate-50">
+                      {[
+                        { id: 'dashboard', label: 'Dashboard' },
+                        { id: 'academic', label: 'Acadêmico' },
+                        { id: 'projects', label: 'Projetos' },
+                        { id: 'finance', label: 'Financeiro' },
+                        { id: 'reports', label: 'Relatórios' },
+                        { id: 'planning', label: 'Planejamento' },
+                        { id: 'attendance', label: 'Chamada' },
+                        { id: 'students', label: 'Alunos' },
+                      ].map(tab => (
+                        <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600">
+                          <input 
+                            type="checkbox"
+                            checked={teacherForm.allowedTabs.includes(tab.id)}
+                            onChange={(e) => {
+                              const tabs = e.target.checked 
+                                ? [...teacherForm.allowedTabs, tab.id]
+                                : teacherForm.allowedTabs.filter(id => id !== tab.id);
+                              setTeacherForm({ ...teacherForm, allowedTabs: tabs });
+                            }}
+                          />
+                          {tab.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
                     {editingTeacher ? 'Atualizar Professor' : 'Salvar Professor'}
                   </button>
@@ -1194,6 +1445,62 @@ export default function AcademicModule({ user, subTab }: Props) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReportModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">
+                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Professor'})
+                </h3>
+                <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <XCircle className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveReport} className="p-6 space-y-4">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-sm font-bold text-slate-900">
+                    Alvo: {reportType === 'student' 
+                      ? students.find(s => s.id === reportTargetId)?.name 
+                      : teachers.find(t => t.id === reportTargetId)?.name}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
+                  <input
+                    required
+                    type="date"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Conteúdo do Relatório</label>
+                  <textarea
+                    required
+                    rows={8}
+                    value={reportContent}
+                    onChange={(e) => setReportContent(e.target.value)}
+                    placeholder="Descreva o desempenho, comportamento ou observações..."
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  Salvar Relatório
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {/* Attendance Report at the end */}
       {subTab === 'attendance' && attendances.length > 0 && (
         <div className="mt-12 space-y-6">
@@ -1257,6 +1564,135 @@ export default function AcademicModule({ user, subTab }: Props) {
           </div>
         </div>
       )}
+      {/* Range Report Modal */}
+      <AnimatePresence>
+        {showRangeReportModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm print:p-0 print:bg-white">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col print:shadow-none print:max-h-none print:rounded-none"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
+                <h3 className="text-xl font-bold text-slate-900">Relatório por Período</h3>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => window.print()}
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
+                  >
+                    <Printer className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setShowRangeReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <XCircle className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-4 items-end print:hidden">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Data Início</label>
+                  <input 
+                    type="date" 
+                    value={reportStartDate}
+                    onChange={(e) => setReportStartDate(e.target.value)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Data Fim</label>
+                  <input 
+                    type="date" 
+                    value={reportEndDate}
+                    onChange={(e) => setReportEndDate(e.target.value)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-8 overflow-y-auto print:p-0">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Relatório de Chamadas e Registros</h2>
+                  <p className="text-slate-500 font-bold">
+                    Período: {format(parseISO(reportStartDate), 'dd/MM/yyyy')} até {format(parseISO(reportEndDate), 'dd/MM/yyyy')}
+                  </p>
+                </div>
+
+                <div className="space-y-10">
+                  {attendances
+                    .filter(a => {
+                      const date = a.date;
+                      const matchesRange = date >= reportStartDate && date <= reportEndDate;
+                      const matchesAccess = isAdmin || user.classIds.includes(a.classId);
+                      return matchesRange && matchesAccess;
+                    })
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map(att => (
+                      <div key={att.id} className="space-y-4 border-b border-slate-100 pb-8 last:border-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-sm font-bold">
+                              {format(parseISO(att.date), 'dd/MM/yyyy')}
+                            </div>
+                            <span className="font-bold text-slate-900 uppercase text-sm">
+                              {classes.find(c => c.id === att.classId)?.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs font-bold">
+                            <span className="text-green-600">{att.presentStudentIds.length} Presentes</span>
+                            <span className="text-red-600">{att.absentStudentIds.length} Faltas</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div className="space-y-4">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Conteúdo Ministrado</p>
+                              <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">{att.contentGiven || 'Nenhum conteúdo registrado.'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Metodologia</p>
+                              <p className="text-slate-700 leading-relaxed text-sm">{att.methodology || 'Nenhuma metodologia registrada.'}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-4">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Observações</p>
+                              <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm italic">{att.observation || 'Sem observações.'}</p>
+                            </div>
+                            {att.justifications && Object.keys(att.justifications).length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Justificativas de Falta</p>
+                                <div className="space-y-1">
+                                  {Object.entries(att.justifications).map(([sId, text]) => (
+                                    <p key={sId} className="text-xs text-slate-600">
+                                      <span className="font-bold">{students.find(s => s.id === sId)?.name}:</span> {text}
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  
+                  {attendances.filter(a => {
+                    const date = a.date;
+                    const matchesRange = date >= reportStartDate && date <= reportEndDate;
+                    const matchesAccess = isAdmin || user.classIds.includes(a.classId);
+                    return matchesRange && matchesAccess;
+                  }).length === 0 && (
+                    <div className="text-center py-20 text-slate-400">
+                      Nenhum registro encontrado para o período selecionado.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -30,7 +30,9 @@ import {
   Project, 
   Transaction,
   Class,
-  ManualReport
+  ManualReport,
+  StudentReport,
+  TeacherReport
 } from '../types';
 import { cn } from '../lib/utils';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -42,7 +44,7 @@ interface Props {
   user: Teacher;
 }
 
-type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers';
+type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers';
 
 export default function ReportModule({ user }: Props) {
   const [activeTab, setActiveTab] = useState<ReportType>('students');
@@ -60,6 +62,8 @@ export default function ReportModule({ user }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [manualReports, setManualReports] = useState<ManualReport[]>([]);
+  const [studentReports, setStudentReports] = useState<StudentReport[]>([]);
+  const [teacherReports, setTeacherReports] = useState<TeacherReport[]>([]);
   const [showManualReportForm, setShowManualReportForm] = useState(false);
   const [manualReportForm, setManualReportForm] = useState({
     title: '',
@@ -114,6 +118,14 @@ export default function ReportModule({ user }: Props) {
       setManualReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as ManualReport)));
     });
 
+    const unsubStudentReports = onSnapshot(collection(db, 'student_reports'), (snap) => {
+      setStudentReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentReport)));
+    });
+
+    const unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
+      setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
+    });
+
     return () => {
       unsubStudents();
       unsubTeachers();
@@ -123,6 +135,8 @@ export default function ReportModule({ user }: Props) {
       unsubFinance();
       unsubClasses();
       unsubManualReports();
+      unsubStudentReports();
+      unsubTeacherReports();
     };
   }, []);
 
@@ -158,10 +172,22 @@ export default function ReportModule({ user }: Props) {
           const matchesStatus = financeStatusFilter === 'all' || t.status === financeStatusFilter;
           return matchesDate && matchesStatus;
         });
+      case 'individual_students':
+        return studentReports.filter(r => {
+          const student = students.find(s => s.id === r.studentId);
+          const matchesSearch = student?.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.content.toLowerCase().includes(searchTerm.toLowerCase());
+          return filterByDate(r.date) && matchesSearch;
+        });
+      case 'individual_teachers':
+        return teacherReports.filter(r => {
+          const teacher = teachers.find(t => t.id === r.targetTeacherId);
+          const matchesSearch = teacher?.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.content.toLowerCase().includes(searchTerm.toLowerCase());
+          return filterByDate(r.date) && matchesSearch;
+        });
       default:
         return [];
     }
-  }, [activeTab, students, teachers, attendances, plannings, projects, transactions, searchTerm, dateRange]);
+  }, [activeTab, students, teachers, attendances, plannings, projects, transactions, studentReports, teacherReports, searchTerm, dateRange]);
 
   const handlePrint = () => {
     window.print();
@@ -171,7 +197,9 @@ export default function ReportModule({ user }: Props) {
     e.preventDefault();
     try {
       await addDoc(collection(db, 'manual_reports'), {
-        ...manualReportForm,
+        title: manualReportForm.title || "",
+        content: manualReportForm.content || "",
+        date: manualReportForm.date || format(new Date(), 'yyyy-MM-dd'),
         createdAt: new Date().toISOString()
       });
       setShowManualReportForm(false);
@@ -192,7 +220,9 @@ export default function ReportModule({ user }: Props) {
 
   const tabs: { id: ReportType, label: string, icon: any }[] = [
     { id: 'students', label: 'Alunos', icon: Users },
+    { id: 'individual_students', label: 'Relatórios Alunos', icon: FileText },
     { id: 'teachers', label: 'Professores', icon: User },
+    { id: 'individual_teachers', label: 'Relatórios Prof.', icon: FileText },
     { id: 'attendance', label: 'Frequência', icon: Calendar },
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
@@ -518,6 +548,52 @@ export default function ReportModule({ user }: Props) {
             </div>
           </div>
         )}
+
+          {activeTab === 'individual_students' && (
+            <div className="space-y-6">
+              {(filteredData as StudentReport[]).map(r => {
+                const student = students.find(s => s.id === r.studentId);
+                const teacher = teachers.find(t => t.id === r.teacherId);
+                return (
+                  <div key={r.id} className="p-6 border border-slate-100 rounded-2xl bg-slate-50/30">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-bold text-slate-900">Aluno: {student?.name || 'Removido'}</h4>
+                        <p className="text-xs text-slate-500 font-medium">Professor: {teacher?.name || 'Removido'}</p>
+                      </div>
+                      <span className="text-xs font-black text-slate-400">{format(parseISO(r.date), 'dd/MM/yyyy')}</span>
+                    </div>
+                    <div className="prose prose-sm prose-slate max-w-none bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <ReactMarkdown>{r.content}</ReactMarkdown>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeTab === 'individual_teachers' && (
+            <div className="space-y-6">
+              {(filteredData as TeacherReport[]).map(r => {
+                const targetTeacher = teachers.find(t => t.id === r.targetTeacherId);
+                const admin = teachers.find(t => t.id === r.adminId);
+                return (
+                  <div key={r.id} className="p-6 border border-slate-100 rounded-2xl bg-slate-50/30">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-bold text-slate-900">Professor: {targetTeacher?.name || 'Removido'}</h4>
+                        <p className="text-xs text-slate-500 font-medium">Administrador: {admin?.name || 'Removido'}</p>
+                      </div>
+                      <span className="text-xs font-black text-slate-400">{format(parseISO(r.date), 'dd/MM/yyyy')}</span>
+                    </div>
+                    <div className="prose prose-sm prose-slate max-w-none bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                      <ReactMarkdown>{r.content}</ReactMarkdown>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {filteredData.length === 0 && (
             <div className="py-20 text-center space-y-4">

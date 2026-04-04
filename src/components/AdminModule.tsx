@@ -186,7 +186,10 @@ export default function AdminModule({ user, subTab }: Props) {
     e.preventDefault();
     try {
       const eventData = {
-        ...calendarForm,
+        title: calendarForm.title || "",
+        date: calendarForm.date || "",
+        type: calendarForm.type || 'event',
+        description: calendarForm.description || "",
         calendarType: activeCalendarType,
         createdAt: new Date().toISOString()
       };
@@ -216,11 +219,17 @@ export default function AdminModule({ user, subTab }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const sanitizedForm = {
+        title: form.title || "",
+        content: form.content || "",
+        order: form.order || 0
+      };
+
       if (editingId) {
-        await updateDoc(doc(db, 'regimento', editingId), form);
+        await updateDoc(doc(db, 'regimento', editingId), sanitizedForm);
       } else {
         await addDoc(collection(db, 'regimento'), {
-          ...form,
+          ...sanitizedForm,
           order: regimentos.length + 1
         });
       }

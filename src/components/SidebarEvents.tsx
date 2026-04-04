@@ -54,7 +54,10 @@ export default function SidebarEvents({ user, compact }: Props) {
     e.preventDefault();
     try {
       await addDoc(collection(db, 'events'), {
-        ...newEvent,
+        title: newEvent.title || "",
+        description: newEvent.description || "",
+        date: newEvent.date || format(new Date(), 'yyyy-MM-dd'),
+        type: newEvent.type || 'event',
         createdAt: new Date().toISOString()
       });
       setShowAddEvent(false);

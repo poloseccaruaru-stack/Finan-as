@@ -45,6 +45,7 @@ export interface Attendance {
   absentStudentIds: string[];
   justifications?: Record<string, string>;
   contentGiven?: string;
+  methodology?: string;
   observation?: string;
   createdAt: string;
 }
@@ -128,6 +129,15 @@ export interface StudentReport {
   id: string;
   studentId: string;
   teacherId: string;
+  content: string;
+  date: string;
+  createdAt: string;
+}
+
+export interface TeacherReport {
+  id: string;
+  targetTeacherId: string;
+  adminId: string;
   content: string;
   date: string;
   createdAt: string;

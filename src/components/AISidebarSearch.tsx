@@ -154,7 +154,7 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
         </div>
         <input
           type="text"
-          placeholder={`Perguntar ao ${selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'chatgpt' ? 'ChatGPT' : 'Claude'}...`}
+          placeholder={`Perguntar ao ${selectedModel === 'gemini' ? 'Gemini' : selectedModel === 'chatgpt' ? 'ChatGPT' : 'Cloud'}...`}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
