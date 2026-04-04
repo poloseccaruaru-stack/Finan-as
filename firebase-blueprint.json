@@ -1,46 +1,129 @@
 {
   "entities": {
-    "Transaction": {
-      "title": "Transaction",
-      "description": "A financial transaction (income or expense)",
+    "Student": {
+      "title": "Student",
+      "description": "Student profile with personal and academic data",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
+        "guardians": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "history": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "classId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "birthDate"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Teacher profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "A school class",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "year": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "year"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "presentStudentIds": { "type": "array", "items": { "type": "string" } },
+        "absentStudentIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "date"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "School project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "teacherIds": { "type": "array", "items": { "type": "string" } },
+        "studentIds": { "type": "array", "items": { "type": "string" } },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "startDate"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
         "description": { "type": "string" },
         "amount": { "type": "number" },
         "type": { "type": "string", "enum": ["income", "expense"] },
         "category": { "type": "string" },
-        "date": { "type": "string", "format": "date-time" },
+        "date": { "type": "string", "format": "date" },
         "status": { "type": "string", "enum": ["pending", "paid"] },
-        "dueDate": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "description", "amount", "type", "date", "status"]
+      "required": ["description", "amount", "type", "date", "status"]
     },
-    "Goal": {
-      "title": "Goal",
-      "description": "A monthly financial goal",
+    "Regimento": {
+      "title": "Regimento",
+      "description": "School rules and regulations",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "month": { "type": "string", "description": "YYYY-MM format" },
-        "targetAmount": { "type": "number" },
-        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["title", "content"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "School calendar event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["holiday", "meeting", "event", "other"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "month", "targetAmount"]
+      "required": ["title", "date", "type"]
     }
   },
   "firestore": {
-    "/transactions/{transactionId}": {
-      "schema": "Transaction",
-      "description": "Collection of all transactions"
-    },
-    "/goals/{goalId}": {
-      "schema": "Goal",
-      "description": "Monthly goals for users"
-    }
+    "/students/{studentId}": { "schema": "Student", "description": "Students" },
+    "/teachers/{teacherId}": { "schema": "Teacher", "description": "Teachers" },
+    "/classes/{classId}": { "schema": "Class", "description": "Classes" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance records" },
+    "/projects/{projectId}": { "schema": "Project", "description": "Projects" },
+    "/transactions/{transactionId}": { "schema": "Transaction", "description": "Financial records" },
+    "/regimento/{regimentoId}": { "schema": "Regimento", "description": "School regulations" },
+    "/calendar/{eventId}": { "schema": "CalendarEvent", "description": "Calendar events" }
   }
 }

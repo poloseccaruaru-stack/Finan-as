@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { auth, db } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -13,50 +13,89 @@ import {
   User
 } from 'firebase/auth';
 import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot,
-  orderBy,
   getDocFromServer,
-  doc
+  doc,
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
+import React from 'react';
 import { 
   LayoutDashboard, 
-  Receipt, 
-  Target, 
+  Users, 
+  GraduationCap, 
+  BookOpen, 
+  CheckSquare, 
   FileText, 
+  Calendar, 
+  Briefcase, 
+  DollarSign, 
+  Printer, 
   LogOut, 
   PlusCircle,
-  TrendingUp,
-  TrendingDown,
   Wallet,
-  Calendar,
-  ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Menu,
+  X,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Dashboard from './components/Dashboard';
-import TransactionList from './components/TransactionList';
-import Goals from './components/Goals';
-import Reports from './components/Reports';
-import TransactionForm from './components/TransactionForm';
+import AcademicModule from './components/AcademicModule';
+import SidebarEvents from './components/SidebarEvents';
+import AdminModule from './components/AdminModule';
+import ProjectModule from './components/ProjectModule';
+import FinanceModule from './components/FinanceModule';
+import ReportModule from './components/ReportModule';
+import PlanningModule from './components/PlanningModule';
+import LoginForm from './components/LoginForm';
+import AISidebarSearch from './components/AISidebarSearch';
 import { cn } from './lib/utils';
+import { Teacher } from './types';
+
+type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [userData, setUserData] = useState<Teacher | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'goals' | 'reports'>('dashboard');
-  const [showForm, setShowForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [error, setError] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [expandedModules, setExpandedModules] = useState<string[]>(['academic']);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      setLoading(false);
       if (user) {
         testConnection();
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            setUserData(userDoc.data() as Teacher);
+          } else {
+            // Default for new Google users
+            const newData: Teacher = {
+              id: user.uid,
+              name: user.displayName || '',
+              email: user.email || '',
+              contact: '',
+              classIds: [],
+              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
+              firstLogin: false,
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userDocRef, newData);
+            setUserData(newData);
+          }
+        } catch (err) {
+          handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+        }
+      } else {
+        setUserData(null);
       }
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -66,8 +105,7 @@ export default function App() {
       await getDocFromServer(doc(db, 'test', 'connection'));
     } catch (error: any) {
       if (error.message?.includes('the client is offline')) {
-        console.error("Please check your Firebase configuration.");
-        setError("Erro de conexão com o Firebase. Verifique sua configuração.");
+        setError("Erro de conexão com o Firebase.");
       }
     }
   }
@@ -77,149 +115,195 @@ export default function App() {
     try {
       await signInWithPopup(auth, provider);
     } catch (err) {
-      console.error(err);
       setError("Falha ao entrar com Google.");
     }
   };
 
   const handleLogout = () => signOut(auth);
 
+  const toggleModule = (module: string) => {
+    setExpandedModules(prev => 
+      prev.includes(module) ? prev.filter(m => m !== module) : [...prev, module]
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center"
-        >
-          <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Wallet className="w-8 h-8 text-blue-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Finanças Pro</h1>
-          <p className="text-slate-500 mb-8">Gerencie suas finanças com facilidade, metas e relatórios detalhados.</p>
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            Entrar com Google
-          </button>
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg flex items-center gap-2 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              {error}
-            </div>
-          )}
-        </motion.div>
-      </div>
-    );
+  if (!user || !userData) {
+    return <LoginForm onLoginSuccess={() => {}} />;
   }
 
-  const tabs = [
+  const isAdmin = userData.role === 'admin';
+
+  const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'transactions', label: 'Transações', icon: Receipt },
-    { id: 'goals', label: 'Metas', icon: Target },
-    { id: 'reports', label: 'Relatórios', icon: FileText },
-  ] as const;
+    { 
+      id: 'academic', 
+      label: 'Acadêmico', 
+      icon: GraduationCap,
+      subItems: [
+        { id: 'students', label: 'Alunos', icon: Users },
+        ...(isAdmin ? [{ id: 'teachers', label: 'Professores', icon: BookOpen }] : []),
+        ...(isAdmin ? [{ id: 'classes', label: 'Turmas', icon: LayoutDashboard }] : []),
+        { id: 'attendance', label: 'Chamada', icon: CheckSquare },
+        { id: 'planning', label: 'Planejamento', icon: BookOpen },
+      ]
+    },
+    ...(isAdmin ? [{ 
+      id: 'admin', 
+      label: 'Administrativo', 
+      icon: Briefcase,
+      subItems: [
+        { id: 'regimento', label: 'Regimento', icon: FileText },
+        { id: 'calendar', label: 'Calendário', icon: Calendar },
+        { id: 'system', label: 'Sistema', icon: LayoutDashboard },
+      ]
+    }] : []),
+    { id: 'projects', label: 'Projetos', icon: Briefcase },
+    ...(isAdmin ? [{ id: 'finance', label: 'Financeiro', icon: DollarSign }] : []),
+    { id: 'reports', label: 'Relatórios', icon: Printer },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white border-b md:border-r border-slate-200 p-4 flex flex-col">
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Wallet className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-slate-50 flex">
+        {/* Sidebar */}
+      <aside className={cn(
+        "fixed md:relative z-40 h-screen bg-slate-900 text-slate-300 transition-all duration-300 flex flex-col",
+        isSidebarOpen ? "w-64" : "w-0 md:w-20 overflow-hidden"
+      )}>
+        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-lg shadow-indigo-900/20">
+            <img 
+              src="https://img.icons8.com/color/96/000000/school.png" 
+              alt="Logo" 
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
           </div>
-          <span className="text-xl font-bold text-slate-900">Finanças Pro</span>
+          {isSidebarOpen && <span className="text-xl font-black text-white truncate tracking-tight">EBD IGBAPI</span>}
         </div>
 
-        <nav className="flex-1 space-y-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-                activeTab === tab.id 
-                  ? "bg-blue-50 text-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
+        <AISidebarSearch isSidebarOpen={isSidebarOpen} />
+
+        <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+          {navItems.map((item) => (
+            <div key={item.id}>
+              {item.subItems ? (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => toggleModule(item.id)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors",
+                      expandedModules.includes(item.id) && "text-white"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="w-5 h-5" />
+                      {isSidebarOpen && <span>{item.label}</span>}
+                    </div>
+                    {isSidebarOpen && (expandedModules.includes(item.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
+                  </button>
+                  {isSidebarOpen && expandedModules.includes(item.id) && (
+                    <div className="ml-9 space-y-1">
+                      {item.subItems.map(sub => (
+                        <button
+                          key={sub.id}
+                          onClick={() => setActiveTab(sub.id as TabId)}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
+                            activeTab === sub.id ? "bg-indigo-600 text-white" : "hover:bg-slate-800"
+                          )}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setActiveTab(item.id as TabId)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                    activeTab === item.id ? "bg-indigo-600 text-white" : "hover:bg-slate-800"
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {isSidebarOpen && <span>{item.label}</span>}
+                </button>
               )}
-            >
-              <tab.icon className="w-5 h-5" />
-              {tab.label}
-            </button>
+            </div>
           ))}
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-3 py-3 mb-2">
-            <img src={user.photoURL || ''} className="w-8 h-8 rounded-full" alt={user.displayName || ''} />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">{user.displayName}</p>
-              <p className="text-xs text-slate-500 truncate">{user.email}</p>
-            </div>
+        <div className="p-4 border-t border-slate-800">
+          <div className="flex items-center gap-3 mb-4">
+            <img src={user.photoURL || `https://ui-avatars.com/api/?name=${userData.name}`} className="w-8 h-8 rounded-full" alt="" />
+            {isSidebarOpen && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">{userData.name}</p>
+                <p className="text-xs text-slate-500 truncate">{isAdmin ? 'Administrador' : 'Professor'}</p>
+              </div>
+            )}
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all duration-200"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-red-400 hover:bg-red-900/20 transition-colors"
           >
             <LogOut className="w-5 h-5" />
-            Sair
+            {isSidebarOpen && <span>Sair</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">
-              {tabs.find(t => t.id === activeTab)?.label}
-            </h2>
-            <p className="text-slate-500 text-sm">Bem-vindo de volta, {user.displayName?.split(' ')[0]}!</p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-lg shadow-blue-200 transition-all duration-200"
-          >
-            <PlusCircle className="w-5 h-5" />
-            Nova Transação
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg">
+            <Menu className="w-6 h-6 text-slate-600" />
           </button>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-500 hidden md:block">{new Date().toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span>
+          </div>
         </header>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activeTab === 'dashboard' && <Dashboard user={user} />}
-            {activeTab === 'transactions' && <TransactionList user={user} />}
-            {activeTab === 'goals' && <Goals user={user} />}
-            {activeTab === 'reports' && <Reports user={user} />}
-          </motion.div>
-        </AnimatePresence>
-      </main>
-
-      {/* Transaction Modal */}
-      <AnimatePresence>
-        {showForm && (
-          <TransactionForm 
-            user={user} 
-            onClose={() => setShowForm(false)} 
-          />
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {activeTab === 'dashboard' && <Dashboard user={userData} />}
+              {(['students', 'teachers', 'classes', 'attendance'].includes(activeTab)) && (
+                <AcademicModule user={userData} subTab={activeTab as any} />
+              )}
+              {(['regimento', 'calendar', 'system'].includes(activeTab)) && (
+                <AdminModule user={userData} subTab={activeTab as any} />
+              )}
+              {activeTab === 'projects' && <ProjectModule user={userData} />}
+              {activeTab === 'finance' && <FinanceModule user={userData} />}
+              {activeTab === 'reports' && <ReportModule user={userData} />}
+              {activeTab === 'planning' && <PlanningModule user={userData} />}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+        
+        {/* Compact Events at Bottom */}
+        {userData && (
+          <div className="px-4 md:px-8 pb-4">
+            <SidebarEvents user={userData} compact />
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

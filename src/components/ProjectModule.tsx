@@ -1,0 +1,425 @@
+import { useState, useEffect } from 'react';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  deleteDoc,
+  orderBy,
+  query,
+  where
+} from 'firebase/firestore';
+import { 
+  Briefcase, 
+  Plus, 
+  Trash2, 
+  Edit, 
+  Save, 
+  X, 
+  Users,
+  Calendar,
+  Search,
+  ChevronRight,
+  Printer,
+  Eye
+} from 'lucide-react';
+import { Project, Teacher, Student } from '../types';
+import { cn } from '../lib/utils';
+import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface Props {
+  user: Teacher;
+}
+
+export default function ProjectModule({ user }: Props) {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [viewingProject, setViewingProject] = useState<Project | null>(null);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    teacherIds: [] as string[],
+    studentIds: [] as string[],
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: '',
+    status: 'EM ANDAMENTO' as 'EM ANDAMENTO' | 'FINALIZADO'
+  });
+
+  const isAdmin = user.role === 'admin';
+
+  useEffect(() => {
+    const q = isAdmin 
+      ? collection(db, 'projects')
+      : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
+
+    const unsub = onSnapshot(q, (snap) => {
+      setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
+
+    const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
+      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    });
+
+    const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
+      setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
+    });
+
+    return () => {
+      unsub();
+      unsubStudents();
+      unsubTeachers();
+    };
+  }, [user, isAdmin]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja excluir este projeto?')) return;
+    try {
+      await deleteDoc(doc(db, 'projects', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `projects/${id}`);
+    }
+  };
+
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setForm({
+      title: project.title,
+      description: project.description,
+      teacherIds: project.teacherIds,
+      studentIds: project.studentIds,
+      startDate: project.startDate,
+      endDate: project.endDate || '',
+      status: project.status || 'EM ANDAMENTO'
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingProject) {
+        await updateDoc(doc(db, 'projects', editingProject.id), {
+          ...form,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, 'projects'), {
+          ...form,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowForm(false);
+      setEditingProject(null);
+      setForm({ title: '', description: '', teacherIds: [], studentIds: [], startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', status: 'EM ANDAMENTO' });
+    } catch (err) {
+      handleFirestoreError(err, editingProject ? OperationType.UPDATE : OperationType.CREATE, 'projects');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+        <div className="relative w-full md:w-96">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar projetos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => window.print()}
+            className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold hover:bg-slate-200 transition-all print:hidden"
+          >
+            <Printer className="w-5 h-5" />
+            Imprimir
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100 print:hidden"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Projeto
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {projects.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map((project) => (
+          <div key={project.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
+            <div className="p-6 flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                    <Briefcase className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 line-clamp-1">{project.title}</h3>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase",
+                      project.status === 'FINALIZADO' ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+                    )}>
+                      {project.status || 'EM ANDAMENTO'}
+                    </span>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={() => handleEdit(project)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(project.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-slate-500 line-clamp-3 mb-4">{project.description}</p>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                  <Users className="w-4 h-4" />
+                  <span>{project.studentIds.length} Alunos • {project.teacherIds.length} Professores</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                  <Calendar className="w-4 h-4" />
+                  <span>Início: {format(new Date(project.startDate), 'dd/MM/yyyy')}</span>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <div className="flex -space-x-2">
+                {project.studentIds.slice(0, 4).map(sid => (
+                  <div key={sid} className="w-8 h-8 rounded-full bg-white border-2 border-slate-50 flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                    {students.find(s => s.id === sid)?.name.charAt(0)}
+                  </div>
+                ))}
+                {project.studentIds.length > 4 && (
+                  <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-50 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                    +{project.studentIds.length - 4}
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setViewingProject(project)}
+                className="text-indigo-600 hover:text-indigo-700 font-bold text-sm flex items-center gap-1"
+              >
+                Ver Detalhes
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* View Project Modal */}
+      <AnimatePresence>
+        {viewingProject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">{viewingProject.title}</h3>
+                <button onClick={() => setViewingProject(null)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <span className={cn(
+                    "text-xs font-bold px-2 py-1 rounded uppercase",
+                    viewingProject.status === 'FINALIZADO' ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+                  )}>
+                    {viewingProject.status || 'EM ANDAMENTO'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold text-slate-500 uppercase">Descrição</h4>
+                  <p className="text-slate-700 whitespace-pre-wrap">{viewingProject.description}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase">Professores</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {viewingProject.teacherIds.map(tid => (
+                        <span key={tid} className="text-xs bg-slate-100 px-2 py-1 rounded-lg text-slate-600">
+                          {teachers.find(t => t.id === tid)?.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase">Alunos</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {viewingProject.studentIds.map(sid => (
+                        <span key={sid} className="text-xs bg-slate-100 px-2 py-1 rounded-lg text-slate-600">
+                          {students.find(s => s.id === sid)?.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase">Data de Início</h4>
+                    <p className="text-slate-700">{format(new Date(viewingProject.startDate), 'dd/MM/yyyy')}</p>
+                  </div>
+                  {viewingProject.endDate && (
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-500 uppercase">Data de Término</h4>
+                      <p className="text-slate-700">{format(new Date(viewingProject.endDate), 'dd/MM/yyyy')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Project Form Modal */}
+      <AnimatePresence>
+        {showForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</h3>
+                <button onClick={() => { setShowForm(false); setEditingProject(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Título do Projeto</label>
+                  <input
+                    required
+                    type="text"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Descrição</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                    <select
+                      value={form.status}
+                      onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="EM ANDAMENTO">EM ANDAMENTO</option>
+                      <option value="FINALIZADO">FINALIZADO</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Data de Início</label>
+                    <input
+                      required
+                      type="date"
+                      value={form.startDate}
+                      onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Data de Término (Opcional)</label>
+                    <input
+                      type="date"
+                      value={form.endDate}
+                      onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Professores Envolvidos</label>
+                    <div className="max-h-32 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50">
+                      {teachers.map(t => (
+                        <label key={t.id} className="flex items-center gap-2 text-sm text-slate-600 p-1 hover:bg-white rounded transition-colors">
+                          <input 
+                            type="checkbox"
+                            checked={form.teacherIds.includes(t.id)}
+                            onChange={(e) => {
+                              const ids = e.target.checked 
+                                ? [...form.teacherIds, t.id]
+                                : form.teacherIds.filter(id => id !== t.id);
+                              setForm({ ...form, teacherIds: ids });
+                            }}
+                          />
+                          {t.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Alunos Participantes</label>
+                    <div className="max-h-32 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50">
+                      {students.map(s => (
+                        <label key={s.id} className="flex items-center gap-2 text-sm text-slate-600 p-1 hover:bg-white rounded transition-colors">
+                          <input 
+                            type="checkbox"
+                            checked={form.studentIds.includes(s.id)}
+                            onChange={(e) => {
+                              const ids = e.target.checked 
+                                ? [...form.studentIds, s.id]
+                                : form.studentIds.filter(id => id !== s.id);
+                              setForm({ ...form, studentIds: ids });
+                            }}
+                          />
+                          {s.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  {editingProject ? 'Salvar Alterações' : 'Criar Projeto'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
