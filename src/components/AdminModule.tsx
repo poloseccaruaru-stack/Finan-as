@@ -153,7 +153,7 @@ export default function AdminModule({ user, subTab }: Props) {
     if (subTab === 'calendar') {
       const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snap) => {
         setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
-      });
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'calendarEvents'));
       return () => unsubEvents();
     }
     if (subTab === 'system') {
@@ -163,7 +163,7 @@ export default function AdminModule({ user, subTab }: Props) {
           setSchoolYear(data);
           setSchoolYearForm({ startDate: data.startDate, endDate: data.endDate });
         }
-      });
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
       return () => unsubYear();
     }
   }, [subTab]);

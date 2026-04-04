@@ -38,6 +38,7 @@ export default function ProjectModule({ user }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -61,7 +62,11 @@ export default function ProjectModule({ user }: Props) {
 
     const unsub = onSnapshot(q, (snap) => {
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
+      setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'projects');
+      setLoading(false);
+    });
 
     const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
@@ -125,7 +130,14 @@ export default function ProjectModule({ user }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+      {loading ? (
+        <div className="p-12 flex flex-col items-center justify-center gap-4 bg-white rounded-2xl border border-slate-100">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+          <p className="text-slate-500 font-medium">Carregando projetos...</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
@@ -420,6 +432,8 @@ export default function ProjectModule({ user }: Props) {
           </div>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

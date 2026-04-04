@@ -66,39 +66,80 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        testConnection();
-        try {
+      try {
+        if (user) {
+          setUser(user);
+          testConnection();
           const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            setUserData(userDoc.data() as Teacher);
-          } else {
-            // Default for new Google users
-            const newData: Teacher = {
+          
+          // Add a timeout for the doc fetch to prevent infinite loading
+          const fetchPromise = getDoc(userDocRef);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout fetching user data')), 5000)
+          );
+
+          try {
+            const userDoc = await Promise.race([fetchPromise, timeoutPromise]) as any;
+            if (userDoc.exists()) {
+              setUserData(userDoc.data() as Teacher);
+            } else {
+              // Default for new Google users
+              const newData: Teacher = {
+                id: user.uid,
+                name: user.displayName || '',
+                email: user.email || '',
+                contact: '',
+                classIds: [],
+                role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
+                firstLogin: false,
+                createdAt: new Date().toISOString(),
+                allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
+              };
+              await setDoc(userDocRef, newData);
+              setUserData(newData);
+            }
+          } catch (fetchErr) {
+            console.error('Error fetching user doc:', fetchErr);
+            // Fallback to basic user data if doc fetch fails
+            setUserData({
               id: user.uid,
-              name: user.displayName || '',
+              name: user.displayName || 'Usuário',
               email: user.email || '',
-              contact: '',
-              classIds: [],
               role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
-              firstLogin: false,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userDocRef, newData);
-            setUserData(newData);
+              classIds: [],
+              allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
+            } as any);
           }
-        } catch (err) {
-          handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+        } else {
+          // If not Firebase Auth, check if we have a manual session in localStorage
+          const manualUser = localStorage.getItem('ebd_manual_user');
+          if (manualUser) {
+            setUserData(JSON.parse(manualUser));
+          } else {
+            setUser(null);
+            setUserData(null);
+          }
         }
-      } else {
-        setUserData(null);
+      } catch (err) {
+        console.error('Auth state change error:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  const handleManualLogin = (manualUser: any) => {
+    setUserData(manualUser);
+    localStorage.setItem('ebd_manual_user', JSON.stringify(manualUser));
+  };
+
+  const handleLogout = () => {
+    signOut(auth);
+    localStorage.removeItem('ebd_manual_user');
+    setUserData(null);
+    setUser(null);
+  };
 
   async function testConnection() {
     try {
@@ -109,17 +150,6 @@ export default function App() {
       }
     }
   }
-
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      setError("Falha ao entrar com Google.");
-    }
-  };
-
-  const handleLogout = () => signOut(auth);
 
   const toggleModule = (module: string) => {
     setExpandedModules(prev => 
@@ -135,8 +165,8 @@ export default function App() {
     );
   }
 
-  if (!user || !userData) {
-    return <LoginForm onLoginSuccess={() => {}} />;
+  if (!userData) {
+    return <LoginForm onLoginSuccess={handleManualLogin} />;
   }
 
   const isAdmin = userData.role === 'admin';
@@ -149,13 +179,18 @@ export default function App() {
       icon: GraduationCap,
       subItems: [
         { id: 'students', label: 'Alunos', icon: Users },
-        ...(isAdmin ? [{ id: 'teachers', label: 'Professores', icon: BookOpen }] : []),
-        ...(isAdmin ? [{ id: 'classes', label: 'Turmas', icon: LayoutDashboard }] : []),
+        { id: 'teachers', label: 'Professores', icon: BookOpen },
+        { id: 'classes', label: 'Turmas', icon: LayoutDashboard },
         { id: 'attendance', label: 'Chamada', icon: CheckSquare },
         { id: 'planning', label: 'Planejamento', icon: BookOpen },
-      ]
+      ].filter(sub => {
+        if (isAdmin) return true;
+        // Teachers can only see sub-items they are allowed to
+        if (sub.id === 'teachers' || sub.id === 'classes') return false; // Usually admin only
+        return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
+      })
     },
-    ...(isAdmin ? [{ 
+    { 
       id: 'admin', 
       label: 'Administrativo', 
       icon: Briefcase,
@@ -164,11 +199,15 @@ export default function App() {
         { id: 'calendar', label: 'Calendário', icon: Calendar },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ]
-    }] : []),
+    },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
-    ...(isAdmin ? [{ id: 'finance', label: 'Financeiro', icon: DollarSign }] : []),
+    { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'reports', label: 'Relatórios', icon: Printer },
-  ];
+  ].filter(item => {
+    if (isAdmin) return true;
+    // For non-admins, check allowedTabs
+    return userData.allowedTabs?.includes(item.id);
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -244,7 +283,7 @@ export default function App() {
 
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center gap-3 mb-4">
-            <img src={user.photoURL || `https://ui-avatars.com/api/?name=${userData.name}`} className="w-8 h-8 rounded-full" alt="" />
+            <img src={user?.photoURL || `https://ui-avatars.com/api/?name=${userData.name}`} className="w-8 h-8 rounded-full" alt="" />
             {isSidebarOpen && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{userData.name}</p>

@@ -67,22 +67,33 @@ export default function ReportModule({ user }: Props) {
     date: format(new Date(), 'yyyy-MM-dd')
   });
 
+  const [loading, setLoading] = useState(true);
+
   const isAdmin = user.role === 'admin';
 
   useEffect(() => {
-    const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
+    const classIds = (user.classIds && user.classIds.length > 0) ? user.classIds : ['none'];
+
+    const studentsQuery = isAdmin ? collection(db, 'students') : query(collection(db, 'students'), where('classId', 'in', classIds));
+    const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+      setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'students');
+      setLoading(false);
     });
 
     const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     });
 
-    const unsubAttendance = onSnapshot(collection(db, 'attendance'), (snap) => {
+    const attendanceQuery = isAdmin ? collection(db, 'attendance') : query(collection(db, 'attendance'), where('classId', 'in', classIds));
+    const unsubAttendance = onSnapshot(attendanceQuery, (snap) => {
       setAttendances(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
     });
 
-    const unsubPlanning = onSnapshot(collection(db, 'planning'), (snap) => {
+    const planningQuery = isAdmin ? collection(db, 'planning') : query(collection(db, 'planning'), where('classId', 'in', classIds));
+    const unsubPlanning = onSnapshot(planningQuery, (snap) => {
       setPlannings(snap.docs.map(d => ({ id: d.id, ...d.data() } as Planning)));
     });
 
@@ -94,7 +105,8 @@ export default function ReportModule({ user }: Props) {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
     });
 
-    const unsubClasses = onSnapshot(collection(db, 'classes'), (snap) => {
+    const classesQuery = isAdmin ? collection(db, 'classes') : query(collection(db, 'classes'), where('id', 'in', classIds));
+    const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
     });
 
@@ -189,7 +201,14 @@ export default function ReportModule({ user }: Props) {
 
   return (
     <div className="space-y-6 print:p-0">
-      {/* Header - Hidden on print */}
+      {loading ? (
+        <div className="p-12 flex flex-col items-center justify-center gap-4 bg-white rounded-2xl border border-slate-100">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+          <p className="text-slate-500 font-medium">Carregando relatórios...</p>
+        </div>
+      ) : (
+        <>
+          {/* Header - Hidden on print */}
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 print:hidden">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
           <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -607,6 +626,8 @@ export default function ReportModule({ user }: Props) {
           </div>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

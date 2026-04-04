@@ -91,12 +91,12 @@ export default function FinanceModule({ user }: Props) {
     const bQ = query(collection(db, 'budgets'), orderBy('month', 'desc'));
     const unsubBudgets = onSnapshot(bQ, (snap) => {
       setBudgets(snap.docs.map(d => ({ id: d.id, ...d.data() } as Budget)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'budgets'));
 
     const eQ = query(collection(db, 'estimated_expenses'), orderBy('createdAt', 'desc'));
     const unsubEstimates = onSnapshot(eQ, (snap) => {
       setEstimatedExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() } as EstimatedExpense)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'estimated_expenses'));
 
     return () => {
       unsub();

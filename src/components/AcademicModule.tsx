@@ -94,11 +94,11 @@ export default function AcademicModule({ user, subTab }: Props) {
 
     const unsubJustifications = onSnapshot(collection(db, 'justificationOptions'), (snap) => {
       setJustificationOptions(snap.docs.map(d => ({ id: d.id, ...d.data() } as JustificationOption)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'justificationOptions'));
 
     const unsubAttendances = onSnapshot(collection(db, 'attendance'), (snap) => {
       setAttendances(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'attendance'));
 
     return () => {
       unsubStudents();
@@ -228,6 +228,11 @@ export default function AcademicModule({ user, subTab }: Props) {
     
     if (!teacherForm.name || !teacherForm.email || (!editingTeacher && !teacherForm.password)) {
       alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    if (!editingTeacher && teacherForm.password.length < 6) {
+      alert('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 

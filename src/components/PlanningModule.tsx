@@ -60,6 +60,7 @@ const PREDEFINED_METHODOLOGIES = [
 export default function PlanningModule({ user }: Props) {
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
@@ -85,7 +86,11 @@ export default function PlanningModule({ user }: Props) {
       if (classesData.length > 0 && !selectedClassId) {
         setSelectedClassId(classesData[0].id);
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
+      setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'classes');
+      setLoading(false);
+    });
 
     const planningQuery = isAdmin 
       ? collection(db, 'planning')
@@ -96,7 +101,11 @@ export default function PlanningModule({ user }: Props) {
 
     const unsubPlanning = onSnapshot(planningQuery, (snap) => {
       setPlannings(snap.docs.map(d => ({ id: d.id, ...d.data() } as Planning)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'planning'));
+      setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'planning');
+      setLoading(false);
+    });
 
     return () => {
       unsubClasses();
@@ -153,7 +162,14 @@ export default function PlanningModule({ user }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+      {loading ? (
+        <div className="p-12 flex flex-col items-center justify-center gap-4 bg-white rounded-2xl border border-slate-100">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+          <p className="text-slate-500 font-medium">Carregando planejamentos...</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="flex gap-2">
           <button 
             onClick={() => setShowReportModal(true)}
@@ -545,6 +561,8 @@ export default function PlanningModule({ user }: Props) {
           </div>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

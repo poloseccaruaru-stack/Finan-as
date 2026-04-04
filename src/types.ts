@@ -23,6 +23,9 @@ export interface Teacher {
   role: 'admin' | 'teacher';
   firstLogin: boolean;
   createdAt: string;
+  login?: string;
+  password?: string;
+  allowedTabs?: string[];
 }
 
 export interface Class {

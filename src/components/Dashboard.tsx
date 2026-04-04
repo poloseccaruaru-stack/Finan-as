@@ -68,7 +68,7 @@ export default function Dashboard({ user }: Props) {
       if (snap.exists()) {
         setConfig(snap.data() as DashboardConfig);
       }
-    });
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard'));
 
     const isAdmin = user.role === 'admin';
     
