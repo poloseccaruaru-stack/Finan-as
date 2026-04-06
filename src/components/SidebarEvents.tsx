@@ -14,7 +14,7 @@ import { Calendar, Bell, Plus, X, Info, Clock } from 'lucide-react';
 import { format, isToday, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarEvent, Teacher } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -104,8 +104,8 @@ export default function SidebarEvents({ user, compact }: Props) {
                   "w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 font-bold",
                   isToday(new Date(event.date)) ? "bg-indigo-600 text-white" : "bg-slate-50 text-slate-500"
                 )}>
-                  <span className="text-[8px] uppercase leading-none">{format(new Date(event.date), 'MMM', { locale: ptBR })}</span>
-                  <span className="text-sm leading-none">{format(new Date(event.date), 'dd')}</span>
+                  <span className="text-[8px] uppercase leading-none">{safeFormat(event.date, 'MMM', { locale: ptBR })}</span>
+                  <span className="text-sm leading-none">{safeFormat(event.date, 'dd')}</span>
                 </div>
                 <div className="min-w-0">
                   <h4 className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
@@ -212,7 +212,7 @@ export default function SidebarEvents({ user, compact }: Props) {
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
                       <p className="text-sm font-medium text-slate-700">
-                        {format(new Date(selectedEvent.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                        {safeFormat(selectedEvent.date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                       </p>
                     </div>
                     <div>
@@ -303,7 +303,7 @@ export default function SidebarEvents({ user, compact }: Props) {
                     {event.type}
                   </span>
                   <span className="text-[10px] font-bold text-slate-400">
-                    {format(new Date(event.date), "dd 'de' MMM", { locale: ptBR })}
+                    {safeFormat(event.date, "dd 'de' MMM", { locale: ptBR })}
                   </span>
                 </div>
                 <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
@@ -416,7 +416,7 @@ export default function SidebarEvents({ user, compact }: Props) {
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
                     <p className="text-sm font-medium text-slate-700">
-                      {format(new Date(selectedEvent.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      {safeFormat(selectedEvent.date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     </p>
                   </div>
                   <div>

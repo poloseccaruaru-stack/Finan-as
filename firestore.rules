@@ -136,6 +136,21 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    match /student_reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /teacher_reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /organogram/{entryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     match /test/{docId} {
       allow read: if isAuthenticated();
     }

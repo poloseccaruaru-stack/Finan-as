@@ -23,10 +23,11 @@ import {
   Search,
   ChevronRight,
   Printer,
-  Eye
+  Eye,
+  FileText
 } from 'lucide-react';
 import { Project, Teacher, Student } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -50,7 +51,9 @@ export default function ProjectModule({ user }: Props) {
     studentIds: [] as string[],
     startDate: format(new Date(), 'yyyy-MM-dd'),
     endDate: '',
-    status: 'EM ANDAMENTO' as 'EM ANDAMENTO' | 'FINALIZADO'
+    status: 'EM ANDAMENTO' as 'EM ANDAMENTO' | 'FINALIZADO',
+    evaluation: '',
+    results: ''
   });
 
   const isAdmin = user.role === 'admin';
@@ -101,7 +104,9 @@ export default function ProjectModule({ user }: Props) {
       studentIds: project.studentIds,
       startDate: project.startDate,
       endDate: project.endDate || '',
-      status: project.status || 'EM ANDAMENTO'
+      status: project.status || 'EM ANDAMENTO',
+      evaluation: project.evaluation || '',
+      results: project.results || ''
     });
     setShowForm(true);
   };
@@ -116,7 +121,9 @@ export default function ProjectModule({ user }: Props) {
         studentIds: form.studentIds || [],
         startDate: form.startDate || format(new Date(), 'yyyy-MM-dd'),
         endDate: form.endDate || "",
-        status: form.status || 'EM ANDAMENTO'
+        status: form.status || 'EM ANDAMENTO',
+        evaluation: form.evaluation || "",
+        results: form.results || ""
       };
 
       if (editingProject) {
@@ -132,7 +139,7 @@ export default function ProjectModule({ user }: Props) {
       }
       setShowForm(false);
       setEditingProject(null);
-      setForm({ title: '', description: '', teacherIds: [], studentIds: [], startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', status: 'EM ANDAMENTO' });
+      setForm({ title: '', description: '', teacherIds: [], studentIds: [], startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', status: 'EM ANDAMENTO', evaluation: '', results: '' });
     } catch (err) {
       handleFirestoreError(err, editingProject ? OperationType.UPDATE : OperationType.CREATE, 'projects');
     }
@@ -179,7 +186,10 @@ export default function ProjectModule({ user }: Props) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())).map((project) => (
+        {projects
+          .filter(p => p.status !== 'FINALIZADO')
+          .filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase()))
+          .map((project) => (
           <div key={project.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
             <div className="p-6 flex-1">
               <div className="flex items-center justify-between mb-3">
@@ -223,7 +233,7 @@ export default function ProjectModule({ user }: Props) {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                   <Calendar className="w-4 h-4" />
-                  <span>Início: {format(new Date(project.startDate), 'dd/MM/yyyy')}</span>
+                  <span>Início: {safeFormat(project.startDate, 'dd/MM/yyyy')}</span>
                 </div>
               </div>
             </div>
@@ -306,15 +316,27 @@ export default function ProjectModule({ user }: Props) {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-1">
                     <h4 className="text-sm font-bold text-slate-500 uppercase">Data de Início</h4>
-                    <p className="text-slate-700">{format(new Date(viewingProject.startDate), 'dd/MM/yyyy')}</p>
+                    <p className="text-slate-700">{safeFormat(viewingProject.startDate, 'dd/MM/yyyy')}</p>
                   </div>
                   {viewingProject.endDate && (
                     <div className="space-y-1">
                       <h4 className="text-sm font-bold text-slate-500 uppercase">Data de Término</h4>
-                      <p className="text-slate-700">{format(new Date(viewingProject.endDate), 'dd/MM/yyyy')}</p>
+                      <p className="text-slate-700">{safeFormat(viewingProject.endDate, 'dd/MM/yyyy')}</p>
                     </div>
                   )}
                 </div>
+                {viewingProject.evaluation && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase">Avaliação do Projeto</h4>
+                    <p className="text-slate-700 whitespace-pre-wrap">{viewingProject.evaluation}</p>
+                  </div>
+                )}
+                {viewingProject.results && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase">Resultados Alcançados</h4>
+                    <p className="text-slate-700 whitespace-pre-wrap">{viewingProject.results}</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
@@ -392,6 +414,30 @@ export default function ProjectModule({ user }: Props) {
                     />
                   </div>
                 </div>
+                {form.status === 'FINALIZADO' && (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Avaliação do Projeto</label>
+                      <textarea
+                        rows={3}
+                        value={form.evaluation}
+                        onChange={(e) => setForm({ ...form, evaluation: e.target.value })}
+                        placeholder="Como foi a execução do projeto?"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Resultados Alcançados</label>
+                      <textarea
+                        rows={3}
+                        value={form.results}
+                        onChange={(e) => setForm({ ...form, results: e.target.value })}
+                        placeholder="Quais foram os principais resultados?"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Professores Envolvidos</label>
@@ -442,7 +488,73 @@ export default function ProjectModule({ user }: Props) {
           </div>
         )}
       </AnimatePresence>
-        </>
+
+      {/* Reports Section for Finished Projects */}
+      <div className="mt-12 space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
+            <FileText className="w-6 h-6" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900">Relatórios de Projetos Finalizados</h3>
+        </div>
+        
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50/50">
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Projeto</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Período</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Resultados</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {projects.filter(p => p.status === 'FINALIZADO').map((project) => (
+                <tr key={project.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <td className="px-6 py-4">
+                    <p className="text-sm font-semibold text-slate-900">{project.title}</p>
+                    <p className="text-xs text-slate-500 line-clamp-1">{project.description}</p>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {safeFormat(project.startDate, 'dd/MM/yyyy')} - {project.endDate ? safeFormat(project.endDate, 'dd/MM/yyyy') : 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    <p className="line-clamp-1 italic">{project.results || 'Sem resultados registrados'}</p>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={() => setViewingProject(project)}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Ver Detalhes"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => handleEdit(project)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Editar"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {projects.filter(p => p.status === 'FINALIZADO').length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                    Nenhum projeto finalizado até o momento.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
       )}
     </div>
   );

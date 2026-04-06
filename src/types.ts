@@ -34,6 +34,7 @@ export interface Class {
   ageRange: string;
   teacherId?: string;
   studentIds: string[];
+  schoolYear?: string;
   createdAt: string;
 }
 
@@ -47,6 +48,10 @@ export interface Attendance {
   contentGiven?: string;
   methodology?: string;
   observation?: string;
+  aulaObjetivos?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
+  alunosParticiparam?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
+  versiculoCitado?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
+  houveOferta?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
   createdAt: string;
 }
 
@@ -70,6 +75,8 @@ export interface Project {
   startDate: string;
   endDate?: string;
   status: 'EM ANDAMENTO' | 'FINALIZADO';
+  evaluation?: string;
+  results?: string;
   createdAt: string;
 }
 
@@ -151,6 +158,15 @@ export interface DashboardConfig {
 export interface JustificationOption {
   id: string;
   text: string;
+  createdAt: string;
+}
+
+export interface OrganogramEntry {
+  id: string;
+  name: string;
+  role: string;
+  level: number; // 0: Top, 1: Sub, etc.
+  parentId?: string;
   createdAt: string;
 }
 

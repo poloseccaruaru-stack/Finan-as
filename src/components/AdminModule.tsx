@@ -29,9 +29,13 @@ import {
   Calendar as CalendarIcon,
   Printer,
   Lock,
-  Unlock
+  Unlock,
+  ShieldAlert,
+  CheckSquare,
+  Square
 } from 'lucide-react';
-import { Regimento, Teacher, CalendarEvent, SchoolYearConfig } from '../types';
+import { Regimento, OrganogramEntry, Teacher, CalendarEvent, SchoolYearConfig } from '../types';
+import OrganogramModule from './OrganogramModule';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '../lib/utils';
@@ -39,7 +43,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
-  subTab: 'regimento' | 'calendar' | 'system';
+  subTab: 'regimento' | 'calendar' | 'system' | 'organogram';
 }
 
 export default function AdminModule({ user, subTab }: Props) {
@@ -56,6 +60,21 @@ export default function AdminModule({ user, subTab }: Props) {
   const [schoolYearForm, setSchoolYearForm] = useState({ startDate: '', endDate: '' });
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetType, setResetType] = useState<'total' | 'partial' | 'selective'>('partial');
+  const [selectiveOptions, setSelectiveOptions] = useState({
+    teachers: false,
+    calendar: false,
+    regimento: false,
+    organogram: false,
+    projects: false,
+    planning: false,
+    studentReports: false,
+    teacherReports: false,
+    justifications: false,
+    manualReports: false,
+    finance: false
+  });
 
   const isAdmin = user.role === 'admin';
 
@@ -256,12 +275,62 @@ export default function AdminModule({ user, subTab }: Props) {
     }
   };
 
+  const handleReset = async () => {
+    if (resetPassword !== 'SISTEMA') {
+      alert('Senha incorreta!');
+      return;
+    }
+
+    const collectionsToDelete: string[] = [];
+
+    if (resetType === 'total') {
+      collectionsToDelete.push(
+        'students', 'users', 'classes', 'attendance', 'planning', 
+        'projects', 'calendarEvents', 'regimento', 'organogram', 
+        'student_reports', 'teacher_reports', 'justificationOptions', 
+        'manual_reports', 'transactions', 'budgets'
+      );
+    } else if (resetType === 'partial') {
+      collectionsToDelete.push('attendance');
+    } else if (resetType === 'selective') {
+      if (selectiveOptions.teachers) collectionsToDelete.push('users');
+      if (selectiveOptions.calendar) collectionsToDelete.push('calendarEvents');
+      if (selectiveOptions.regimento) collectionsToDelete.push('regimento');
+      if (selectiveOptions.organogram) collectionsToDelete.push('organogram');
+      if (selectiveOptions.projects) collectionsToDelete.push('projects');
+      if (selectiveOptions.planning) collectionsToDelete.push('planning');
+      if (selectiveOptions.studentReports) collectionsToDelete.push('student_reports');
+      if (selectiveOptions.teacherReports) collectionsToDelete.push('teacher_reports');
+      if (selectiveOptions.justifications) collectionsToDelete.push('justificationOptions');
+      if (selectiveOptions.manualReports) collectionsToDelete.push('manual_reports');
+      if (selectiveOptions.finance) collectionsToDelete.push('transactions', 'budgets');
+    }
+
+    if (!confirm(`Tem certeza que deseja realizar o reset ${resetType}? Esta ação é irreversível.`)) return;
+
+    try {
+      for (const coll of collectionsToDelete) {
+        const snap = await getDocs(collection(db, coll));
+        for (const d of snap.docs) {
+          // Don't delete the current admin user
+          if (coll === 'users' && d.id === user.id) continue;
+          await deleteDoc(doc(db, coll, d.id));
+        }
+      }
+      alert('Reset concluído com sucesso!');
+      setResetPassword('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'multiple');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-900">
           {subTab === 'regimento' ? 'Regimento Interno EBD' : 
-           subTab === 'calendar' ? 'Calendário Escolar' : 'Configurações do Sistema'}
+           subTab === 'calendar' ? 'Calendário Escolar' : 
+           subTab === 'organogram' ? 'Organograma' : 'Configurações do Sistema'}
         </h2>
         {isAdmin && subTab === 'regimento' && (
           <button
@@ -277,6 +346,8 @@ export default function AdminModule({ user, subTab }: Props) {
           </button>
         )}
       </div>
+
+      {subTab === 'organogram' && <OrganogramModule user={user} />}
 
       {subTab === 'system' && isAdmin && (
         <div className="space-y-6">
@@ -321,7 +392,82 @@ export default function AdminModule({ user, subTab }: Props) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
+            {/* Reset Section */}
+            <div className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Reset do Sistema</h3>
+                  <p className="text-sm text-slate-500">Limpeza de dados do banco de dados.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  {(['total', 'partial', 'selective'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setResetType(type)}
+                      className={cn(
+                        "flex-1 py-2 px-4 rounded-xl text-xs font-bold border transition-all",
+                        resetType === type
+                          ? "bg-red-600 border-red-600 text-white shadow-md"
+                          : "bg-white border-slate-200 text-slate-600 hover:border-red-300"
+                      )}
+                    >
+                      {type === 'total' ? 'Total' : type === 'partial' ? 'Parcial' : 'Seletivo'}
+                    </button>
+                  ))}
+                </div>
+
+                {resetType === 'selective' && (
+                  <div className="grid grid-cols-2 gap-2 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    {Object.entries(selectiveOptions).map(([key, value]) => (
+                      <button
+                        key={key}
+                        onClick={() => setSelectiveOptions(prev => ({ ...prev, [key]: !value }))}
+                        className="flex items-center gap-2 text-xs text-slate-600 hover:text-red-600 transition-colors"
+                      >
+                        {value ? <CheckSquare className="w-4 h-4 text-red-600" /> : <Square className="w-4 h-4" />}
+                        {key === 'teachers' ? 'Professores' :
+                         key === 'calendar' ? 'Calendário' :
+                         key === 'regimento' ? 'Regimento' :
+                         key === 'organogram' ? 'Organograma' :
+                         key === 'projects' ? 'Projetos' :
+                         key === 'planning' ? 'Planejamento' :
+                         key === 'studentReports' ? 'Relat. Alunos' :
+                         key === 'teacherReports' ? 'Relat. Prof.' :
+                         key === 'justifications' ? 'Justificativas' :
+                         key === 'manualReports' ? 'Relat. Manuais' : 'Financeiro'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Senha de Segurança</label>
+                  <input
+                    type="password"
+                    placeholder="Digite a senha para resetar"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                <button
+                  onClick={handleReset}
+                  className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-red-100"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Executar Reset {resetType === 'total' ? 'Total' : resetType === 'partial' ? 'Parcial' : 'Seletivo'}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
                 <Download className="w-6 h-6" />

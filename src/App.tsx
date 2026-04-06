@@ -48,12 +48,14 @@ import ProjectModule from './components/ProjectModule';
 import FinanceModule from './components/FinanceModule';
 import ReportModule from './components/ReportModule';
 import PlanningModule from './components/PlanningModule';
+import OrganogramModule from './components/OrganogramModule';
 import LoginForm from './components/LoginForm';
 import AISidebarSearch from './components/AISidebarSearch';
+import BirthdayBanner from './components/BirthdayBanner';
 import { cn } from './lib/utils';
 import { Teacher } from './types';
 
-type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning';
+type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -113,12 +115,16 @@ export default function App() {
         } else {
           // If not Firebase Auth, check if we have a manual session in localStorage
           const manualUser = localStorage.getItem('ebd_manual_user');
-          if (manualUser) {
-            const parsed = JSON.parse(manualUser);
-            if (!parsed.id && user) {
-              parsed.id = user.uid;
+          if (manualUser && manualUser !== 'undefined') {
+            try {
+              const parsed = JSON.parse(manualUser);
+              setUserData(parsed);
+            } catch (e) {
+              console.error('Error parsing manual user:', e);
+              localStorage.removeItem('ebd_manual_user');
+              setUser(null);
+              setUserData(null);
             }
-            setUserData(parsed);
           } else {
             setUser(null);
             setUserData(null);
@@ -201,6 +207,7 @@ export default function App() {
       subItems: [
         { id: 'regimento', label: 'Regimento', icon: FileText },
         { id: 'calendar', label: 'Calendário', icon: Calendar },
+        { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ]
     },
@@ -316,6 +323,8 @@ export default function App() {
           </div>
         </header>
 
+        <BirthdayBanner />
+
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <AnimatePresence mode="wait">
             <motion.div
@@ -329,7 +338,7 @@ export default function App() {
               {(['students', 'teachers', 'classes', 'attendance'].includes(activeTab)) && (
                 <AcademicModule user={userData} subTab={activeTab as any} />
               )}
-              {(['regimento', 'calendar', 'system'].includes(activeTab)) && (
+              {(['regimento', 'calendar', 'system', 'organogram'].includes(activeTab)) && (
                 <AdminModule user={userData} subTab={activeTab as any} />
               )}
               {activeTab === 'projects' && <ProjectModule user={userData} />}

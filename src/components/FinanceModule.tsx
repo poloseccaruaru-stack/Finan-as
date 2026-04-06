@@ -107,7 +107,7 @@ export default function FinanceModule({ user }: Props) {
 
   const currentMonthTransactions = useMemo(() => {
     return transactions.filter(t => {
-      const matchesMonth = t.date.startsWith(filterMonth);
+      const matchesMonth = t.date && t.date.startsWith(filterMonth);
       const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
       const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             t.category.toLowerCase().includes(searchTerm.toLowerCase());

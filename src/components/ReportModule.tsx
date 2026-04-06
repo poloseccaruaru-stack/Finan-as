@@ -20,7 +20,8 @@ import {
   Download,
   PlusCircle,
   X,
-  Trash2
+  Trash2,
+  Cake
 } from 'lucide-react';
 import { 
   Student, 
@@ -35,7 +36,7 @@ import {
   TeacherReport
 } from '../types';
 import { cn } from '../lib/utils';
-import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { format, isWithinInterval, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { addDoc, deleteDoc, doc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -44,7 +45,7 @@ interface Props {
   user: Teacher;
 }
 
-type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers';
+type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays';
 
 export default function ReportModule({ user }: Props) {
   const [activeTab, setActiveTab] = useState<ReportType>('students');
@@ -142,12 +143,16 @@ export default function ReportModule({ user }: Props) {
 
   const filteredData = useMemo(() => {
     const filterByDate = (dateStr: string) => {
-      if (!dateRange.start || !dateRange.end) return true;
-      const date = parseISO(dateStr);
-      return isWithinInterval(date, {
-        start: startOfDay(parseISO(dateRange.start)),
-        end: endOfDay(parseISO(dateRange.end))
-      });
+      if (!dateRange.start || !dateRange.end || !dateStr) return true;
+      try {
+        const date = parseISO(dateStr);
+        const start = startOfDay(parseISO(dateRange.start));
+        const end = endOfDay(parseISO(dateRange.end));
+        if (!isValid(date) || !isValid(start) || !isValid(end)) return true;
+        return isWithinInterval(date, { start, end });
+      } catch (e) {
+        return true;
+      }
     };
 
     switch (activeTab) {
@@ -183,6 +188,17 @@ export default function ReportModule({ user }: Props) {
           const teacher = teachers.find(t => t.id === r.targetTeacherId);
           const matchesSearch = teacher?.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.content.toLowerCase().includes(searchTerm.toLowerCase());
           return filterByDate(r.date) && matchesSearch;
+        });
+      case 'birthdays':
+        const allPeople = [
+          ...students.map(s => ({ ...s, type: 'Aluno', className: classes.find(c => c.id === s.classId)?.name || 'Sem Turma' })),
+          ...teachers.map(t => ({ ...t, type: 'Professor', className: 'Administração/Docente', birthDate: (t as any).birthDate || '' }))
+        ].filter(p => p.birthDate);
+        return allPeople.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => {
+          const dateA = parseISO(a.birthDate);
+          const dateB = parseISO(b.birthDate);
+          if (dateA.getMonth() !== dateB.getMonth()) return dateA.getMonth() - dateB.getMonth();
+          return dateA.getDate() - dateB.getDate();
         });
       default:
         return [];
@@ -224,6 +240,7 @@ export default function ReportModule({ user }: Props) {
     { id: 'teachers', label: 'Professores', icon: User },
     { id: 'individual_teachers', label: 'Relatórios Prof.', icon: FileText },
     { id: 'attendance', label: 'Frequência', icon: Calendar },
+    { id: 'birthdays', label: 'Aniversariantes', icon: Cake },
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
@@ -593,6 +610,31 @@ export default function ReportModule({ user }: Props) {
                 );
               })}
             </div>
+          )}
+
+          {activeTab === 'birthdays' && (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b-2 border-slate-100">
+                  <th className="py-4 text-xs font-black text-slate-400 uppercase">Nome</th>
+                  <th className="py-4 text-xs font-black text-slate-400 uppercase">Tipo</th>
+                  <th className="py-4 text-xs font-black text-slate-400 uppercase">Turma</th>
+                  <th className="py-4 text-xs font-black text-slate-400 uppercase">Data Nasc.</th>
+                  <th className="py-4 text-xs font-black text-slate-400 uppercase">Telefone</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {(filteredData as any[]).map(p => (
+                  <tr key={p.id}>
+                    <td className="py-4 text-sm font-bold text-slate-900">{p.name}</td>
+                    <td className="py-4 text-sm text-slate-500">{p.type}</td>
+                    <td className="py-4 text-sm text-slate-500">{p.className}</td>
+                    <td className="py-4 text-sm text-slate-500">{format(parseISO(p.birthDate), 'dd/MM')}</td>
+                    <td className="py-4 text-sm text-slate-500">{p.phone || p.contact || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
 
           {filteredData.length === 0 && (

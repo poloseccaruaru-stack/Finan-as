@@ -5,12 +5,15 @@ import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { GoogleGenAI } from "@google/genai";
 
 interface Props {
   isSidebarOpen: boolean;
 }
 
 type AIModel = 'gemini' | 'openai' | 'claude';
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyDkOWhx47psb_nRQPoMNg6nz1S_Zkid5RM";
 
 export default function AISidebarSearch({ isSidebarOpen }: Props) {
   const [query, setQuery] = useState('');
@@ -45,24 +48,18 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
       Responda de forma profissional, gere relatórios se solicitado, e forneça insights baseados nos dados. 
       Use Markdown para formatar a resposta.`;
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: selectedModel,
-          message: systemPrompt,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao processar solicitação');
+      if (selectedModel === 'gemini') {
+        const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+        const model = genAI.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: systemPrompt,
+        });
+        const response = await model;
+        setResult(response.text || 'Não foi possível gerar uma resposta.');
+      } else {
+        // Fallback for other models if not implemented
+        setResult(`A integração com ${selectedModel} ainda não está disponível no cliente. Use o Gemini por enquanto.`);
       }
-
-      const data = await response.json();
-      setResult(data.text || 'Não foi possível gerar uma resposta.');
     } catch (err: any) {
       console.error(err);
       setResult(`Erro ao processar sua solicitação com a IA (${selectedModel}). ${err.message}`);
