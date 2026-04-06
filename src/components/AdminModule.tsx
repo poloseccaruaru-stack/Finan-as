@@ -92,7 +92,11 @@ export default function AdminModule({ user, subTab }: Props) {
       for (const collName of COLLECTIONS) {
         try {
           const snap = await getDocs(collection(db, collName));
-          backupData[collName] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          // Store each record as a stringified JSON to ensure data integrity during backup/restore
+          backupData[collName] = snap.docs.map(d => ({ 
+            id: d.id, 
+            record: JSON.stringify(d.data()) 
+          }));
         } catch (e) {
           console.warn(`Could not backup collection ${collName}:`, e);
         }
@@ -141,8 +145,15 @@ export default function AdminModule({ user, subTab }: Props) {
 
               // Restore from backup
               for (const item of data[collName]) {
-                const { id, ...docData } = item;
-                await setDoc(doc(db, collName, id), docData);
+                try {
+                  const { id, record } = item;
+                  // If record is stored as a string (new format), parse it. 
+                  // Otherwise use the item directly (old format compatibility).
+                  const docData = typeof record === 'string' ? JSON.parse(record) : (({ id: _, ...rest }) => rest)(item);
+                  await setDoc(doc(db, collName, id), docData);
+                } catch (docErr) {
+                  console.error(`Error restoring document in ${collName}:`, docErr);
+                }
               }
             }
           }
