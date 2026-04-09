@@ -39,6 +39,7 @@ import {
   Calendar,
   Copy,
   Eye,
+  Pin,
   X
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
@@ -722,12 +723,45 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [attendanceDate, setAttendanceDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [startTime, setStartTime] = useState('15:50');
   const [endTime, setEndTime] = useState('16:40');
+  const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
+  const [defaultTimes, setDefaultTimes] = useState({ start: '15:50', end: '16:40' });
+
+  const handleFixTimes = async () => {
+    try {
+      await setDoc(doc(db, 'config', 'attendance_times'), {
+        startTime,
+        endTime,
+        updatedAt: new Date().toISOString()
+      });
+      showAlert('Sucesso', 'Horários de aula fixados como padrão!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'config/attendance_times');
+    }
+  };
+
+  useEffect(() => {
+    const unsubTimes = onSnapshot(doc(db, 'config', 'attendance_times'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const times = { 
+          start: data.startTime || '15:50', 
+          end: data.endTime || '16:40' 
+        };
+        setDefaultTimes(times);
+        if (!editingAttendance) {
+          setStartTime(times.start);
+          setEndTime(times.end);
+        }
+      }
+    });
+    return () => unsubTimes();
+  }, [editingAttendance]);
+
   const [contentGiven, setContentGiven] = useState('');
   const [attendanceMethodology, setAttendanceMethodology] = useState<string[]>([]);
   const [observation, setObservation] = useState('');
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
 
   useEffect(() => {
     const unsubPlanning = onSnapshot(collection(db, 'planning'), (snap) => {
@@ -842,8 +876,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setContentGiven('');
-      setStartTime('15:50');
-      setEndTime('16:40');
+      setStartTime(defaultTimes.start);
+      setEndTime(defaultTimes.end);
       setAttendanceMethodology([]);
       setObservation('');
       setEditingAttendance(null);
@@ -894,8 +928,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setEditingAttendance(att);
     setSelectedClass(att.classId);
     setAttendanceDate(att.date);
-    setStartTime(att.startTime || '15:50');
-    setEndTime(att.endTime || '16:40');
+    setStartTime(att.startTime || defaultTimes.start);
+    setEndTime(att.endTime || defaultTimes.end);
     setContentGiven(att.contentGiven || '');
     setAttendanceMethodology(att.methodology ? att.methodology.split(', ').filter(m => m.length > 0) : []);
     setObservation(att.observation || '');
@@ -1359,6 +1393,18 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
+              <div className="flex items-center gap-2 pb-0.5">
+                <button
+                  onClick={handleFixTimes}
+                  className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-all shadow-sm group relative"
+                  title="Fixar horários como padrão"
+                >
+                  <Pin className="w-5 h-5" />
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                    Fixar Padrão
+                  </span>
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -1789,7 +1835,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                                     {safeFormat(att.date, 'dd/MM/yyyy')}
                                   </div>
                                   <div className="text-[11px] font-black text-slate-500 uppercase mt-1">
-                                    {safeFormat(att.date, 'EEEE', { locale: ptBR }).toUpperCase()} - {att.startTime || '15:50'} às {att.endTime || '16:40'}
+                                    {safeFormat(att.date, 'EEEE', { locale: ptBR }).toUpperCase()} - {att.startTime || defaultTimes.start} às {att.endTime || defaultTimes.end}
                                   </div>
                                 </td>
                                 <td className="px-4 py-6 text-sm font-bold text-slate-900 align-top">
