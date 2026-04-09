@@ -41,13 +41,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { addDoc, deleteDoc, doc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 
+const safeFormat = (dateStr: string | undefined | null, formatStr: string) => {
+  if (!dateStr) return '-';
+  try {
+    const date = parseISO(dateStr);
+    if (!isValid(date)) return '-';
+    return format(date, formatStr);
+  } catch (e) {
+    return '-';
+  }
+};
+
 interface Props {
   user: Teacher;
+  selectedSchoolYear: string;
 }
 
 type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays';
 
-export default function ReportModule({ user }: Props) {
+export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [activeTab, setActiveTab] = useState<ReportType>('students');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -139,7 +151,7 @@ export default function ReportModule({ user }: Props) {
       unsubStudentReports();
       unsubTeacherReports();
     };
-  }, []);
+  }, [user, isAdmin, selectedSchoolYear]);
 
   const filteredData = useMemo(() => {
     const filterByDate = (dateStr: string) => {
@@ -157,20 +169,26 @@ export default function ReportModule({ user }: Props) {
 
     switch (activeTab) {
       case 'students':
-        return students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        return students.filter(s => s.schoolYear === selectedSchoolYear && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
       case 'teachers':
         return teachers.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
       case 'attendance':
         return attendances.filter(a => {
+          const cls = classes.find(c => c.id === a.classId);
+          const matchesYear = cls?.schoolYear === selectedSchoolYear;
           const matchesDate = filterByDate(a.date);
           const matchesStatus = attendanceStatusFilter === 'all' || 
                                 (attendanceStatusFilter === 'with-absences' ? a.absentStudentIds.length > 0 : a.absentStudentIds.length === 0);
-          return matchesDate && matchesStatus;
+          return matchesYear && matchesDate && matchesStatus;
         });
       case 'planning':
-        return plannings.filter(p => filterByDate(p.date));
+        return plannings.filter(p => {
+          const cls = classes.find(c => c.id === p.classId);
+          const matchesYear = cls?.schoolYear === selectedSchoolYear;
+          return matchesYear && filterByDate(p.date);
+        });
       case 'projects':
-        return projects.filter(p => filterByDate(p.startDate) && (projectStatusFilter === 'ALL' || p.status === projectStatusFilter));
+        return projects.filter(p => p.schoolYear === selectedSchoolYear && filterByDate(p.startDate) && (projectStatusFilter === 'ALL' || p.status === projectStatusFilter));
       case 'finance':
         return transactions.filter(t => {
           const matchesDate = filterByDate(t.date);
@@ -345,7 +363,7 @@ export default function ReportModule({ user }: Props) {
             <h1 className="text-2xl font-black uppercase">Relatório do Sistema - EBD</h1>
             <p className="text-sm font-bold text-slate-500">
               Tipo: {tabs.find(t => t.id === activeTab)?.label} | 
-              Período: {dateRange.start ? format(parseISO(dateRange.start), 'dd/MM/yyyy') : 'Início'} - {dateRange.end ? format(parseISO(dateRange.end), 'dd/MM/yyyy') : 'Fim'}
+              Período: {dateRange.start ? safeFormat(dateRange.start, 'dd/MM/yyyy') : 'Início'} - {dateRange.end ? safeFormat(dateRange.end, 'dd/MM/yyyy') : 'Fim'}
             </p>
           </div>
 
@@ -363,7 +381,7 @@ export default function ReportModule({ user }: Props) {
                 {(filteredData as Student[]).map(s => (
                   <tr key={s.id}>
                     <td className="py-4 text-sm font-bold text-slate-900">{s.name}</td>
-                    <td className="py-4 text-sm text-slate-500">{format(parseISO(s.birthDate), 'dd/MM/yyyy')}</td>
+                    <td className="py-4 text-sm text-slate-500">{safeFormat(s.birthDate, 'dd/MM/yyyy')}</td>
                     <td className="py-4 text-sm text-slate-500">{s.phone || '-'}</td>
                     <td className="py-4 text-sm font-black text-right text-indigo-600">{s.attendancePercentage?.toFixed(1)}%</td>
                   </tr>
@@ -432,7 +450,7 @@ export default function ReportModule({ user }: Props) {
                   <div key={a.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50">
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-bold text-slate-900">{cls?.name || 'Classe Removida'}</h4>
-                      <span className="text-xs font-black text-slate-400">{format(parseISO(a.date), 'dd/MM/yyyy')}</span>
+                      <span className="text-xs font-black text-slate-400">{safeFormat(a.date, 'dd/MM/yyyy')}</span>
                     </div>
                     <p className="text-xs text-slate-600 mb-2"><strong>Conteúdo:</strong> {a.contentGiven || 'Não informado'}</p>
                     <div className="flex gap-4 text-[10px] font-bold uppercase">
@@ -488,7 +506,7 @@ export default function ReportModule({ user }: Props) {
                 <tbody className="divide-y divide-slate-50">
                   {(filteredData as Transaction[]).map(t => (
                     <tr key={t.id}>
-                      <td className="py-4 text-sm text-slate-500">{format(parseISO(t.date), 'dd/MM/yyyy')}</td>
+                      <td className="py-4 text-sm text-slate-500">{safeFormat(t.date, 'dd/MM/yyyy')}</td>
                       <td className="py-4 text-sm font-bold text-slate-900">
                         {t.description}
                         <span className={cn(
@@ -557,7 +575,7 @@ export default function ReportModule({ user }: Props) {
                   </div>
                   <p className="text-xs text-slate-500 mb-4 line-clamp-2">{p.description}</p>
                   <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                    <span>Início: {format(parseISO(p.startDate), 'dd/MM/yyyy')}</span>
+                    <span>Início: {safeFormat(p.startDate, 'dd/MM/yyyy')}</span>
                     <span>Alunos: {p.studentIds.length}</span>
                   </div>
                 </div>
@@ -578,7 +596,7 @@ export default function ReportModule({ user }: Props) {
                         <h4 className="font-bold text-slate-900">Aluno: {student?.name || 'Removido'}</h4>
                         <p className="text-xs text-slate-500 font-medium">Professor: {teacher?.name || 'Removido'}</p>
                       </div>
-                      <span className="text-xs font-black text-slate-400">{format(parseISO(r.date), 'dd/MM/yyyy')}</span>
+                      <span className="text-xs font-black text-slate-400">{safeFormat(r.date, 'dd/MM/yyyy')}</span>
                     </div>
                     <div className="prose prose-sm prose-slate max-w-none bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                       <ReactMarkdown>{r.content}</ReactMarkdown>
@@ -601,7 +619,7 @@ export default function ReportModule({ user }: Props) {
                         <h4 className="font-bold text-slate-900">Professor: {targetTeacher?.name || 'Removido'}</h4>
                         <p className="text-xs text-slate-500 font-medium">Administrador: {admin?.name || 'Removido'}</p>
                       </div>
-                      <span className="text-xs font-black text-slate-400">{format(parseISO(r.date), 'dd/MM/yyyy')}</span>
+                      <span className="text-xs font-black text-slate-400">{safeFormat(r.date, 'dd/MM/yyyy')}</span>
                     </div>
                     <div className="prose prose-sm prose-slate max-w-none bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                       <ReactMarkdown>{r.content}</ReactMarkdown>
@@ -629,7 +647,7 @@ export default function ReportModule({ user }: Props) {
                     <td className="py-4 text-sm font-bold text-slate-900">{p.name}</td>
                     <td className="py-4 text-sm text-slate-500">{p.type}</td>
                     <td className="py-4 text-sm text-slate-500">{p.className}</td>
-                    <td className="py-4 text-sm text-slate-500">{format(parseISO(p.birthDate), 'dd/MM')}</td>
+                    <td className="py-4 text-sm text-slate-500">{safeFormat(p.birthDate, 'dd/MM')}</td>
                     <td className="py-4 text-sm text-slate-500">{p.phone || p.contact || '-'}</td>
                   </tr>
                 ))}
@@ -667,7 +685,7 @@ export default function ReportModule({ user }: Props) {
                     <div>
                       <h4 className="font-bold text-slate-900">{report.title}</h4>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        {format(parseISO(report.date), 'dd/MM/yyyy')}
+                        {safeFormat(report.date, 'dd/MM/yyyy')}
                       </p>
                     </div>
                     <button 

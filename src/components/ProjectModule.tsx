@@ -33,9 +33,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
+  selectedSchoolYear: string;
 }
 
-export default function ProjectModule({ user }: Props) {
+export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -64,7 +65,8 @@ export default function ProjectModule({ user }: Props) {
       : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
 
     const unsub = onSnapshot(q, (snap) => {
-      setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
+      const allProjects = snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
+      setProjects(allProjects.filter(p => p.schoolYear === selectedSchoolYear));
       setLoading(false);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'projects');
@@ -72,7 +74,8 @@ export default function ProjectModule({ user }: Props) {
     });
 
     const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
-      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+      const allStudents = snap.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+      setStudents(allStudents.filter(s => s.schoolYear === selectedSchoolYear));
     });
 
     const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
@@ -123,7 +126,8 @@ export default function ProjectModule({ user }: Props) {
         endDate: form.endDate || "",
         status: form.status || 'EM ANDAMENTO',
         evaluation: form.evaluation || "",
-        results: form.results || ""
+        results: form.results || "",
+        schoolYear: selectedSchoolYear
       };
 
       if (editingProject) {
@@ -270,9 +274,9 @@ export default function ProjectModule({ user }: Props) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <h3 className="text-xl font-bold text-slate-900">{viewingProject.title}</h3>
                 <button onClick={() => setViewingProject(null)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <X className="w-5 h-5 text-slate-500" />
@@ -351,9 +355,9 @@ export default function ProjectModule({ user }: Props) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <h3 className="text-xl font-bold text-slate-900">{editingProject ? 'Editar Projeto' : 'Novo Projeto'}</h3>
                 <button onClick={() => { setShowForm(false); setEditingProject(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
                   <X className="w-5 h-5 text-slate-500" />

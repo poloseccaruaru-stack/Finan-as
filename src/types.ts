@@ -1,17 +1,21 @@
 export interface Student {
   id: string;
   name: string;
-  birthDate: string;
+  birthDate?: string;
   guardians: string;
   emergencyContact: string;
   phone?: string;
   history: string;
   photoURL?: string;
   classId?: string;
+  schoolYear?: string;
   createdAt: string;
   consecutiveAbsences: number;
   lastAbsenceDate?: string;
   attendancePercentage?: number;
+  registrationNumber?: string;
+  doNotRenew?: boolean;
+  status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
 }
 
 export interface Teacher {
@@ -21,11 +25,15 @@ export interface Teacher {
   contact: string;
   classIds: string[];
   role: 'admin' | 'teacher';
+  profession?: string;
+  startDateEBD?: string;
+  generalProfile?: string;
   firstLogin: boolean;
   createdAt: string;
   login?: string;
   password?: string;
   allowedTabs?: string[];
+  registrationNumber?: string;
 }
 
 export interface Class {
@@ -36,6 +44,20 @@ export interface Class {
   studentIds: string[];
   schoolYear?: string;
   createdAt: string;
+  status?: 'ATIVA' | 'ENCERRADA';
+  gradeLevel?: number;
+  isFinalGrade?: boolean;
+  originalClassId?: string;
+}
+
+export interface Enrollment {
+  id: string;
+  studentId: string;
+  classId: string;
+  schoolYear: string;
+  status: string;
+  registrationNumber?: string;
+  createdAt: string;
 }
 
 export interface Attendance {
@@ -44,6 +66,8 @@ export interface Attendance {
   date: string;
   presentStudentIds: string[];
   absentStudentIds: string[];
+  startTime?: string;
+  endTime?: string;
   justifications?: Record<string, string>;
   contentGiven?: string;
   methodology?: string;
@@ -77,6 +101,7 @@ export interface Project {
   status: 'EM ANDAMENTO' | 'FINALIZADO';
   evaluation?: string;
   results?: string;
+  schoolYear?: string;
   createdAt: string;
 }
 

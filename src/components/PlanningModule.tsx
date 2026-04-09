@@ -46,6 +46,7 @@ import { suggestPlanning } from '../services/geminiService';
 
 interface Props {
   user: Teacher;
+  selectedSchoolYear: string;
 }
 
 const PREDEFINED_METHODOLOGIES = [
@@ -61,7 +62,7 @@ const PREDEFINED_METHODOLOGIES = [
   'Trabalho Manual'
 ];
 
-export default function PlanningModule({ user }: Props) {
+export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,9 +88,10 @@ export default function PlanningModule({ user }: Props) {
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       const classesData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Class));
-      setClasses(classesData);
-      if (classesData.length > 0 && !selectedClassId) {
-        setSelectedClassId(classesData[0].id);
+      const filteredClasses = classesData.filter(c => c.schoolYear === selectedSchoolYear);
+      setClasses(filteredClasses);
+      if (filteredClasses.length > 0 && !selectedClassId) {
+        setSelectedClassId(filteredClasses[0].id);
       }
       setLoading(false);
     }, (err) => {

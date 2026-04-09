@@ -37,7 +37,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dashboard from './components/Dashboard';
@@ -55,16 +56,34 @@ import BirthdayBanner from './components/BirthdayBanner';
 import { cn } from './lib/utils';
 import { Teacher } from './types';
 
-type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram';
+type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<Teacher | null>(null);
+  const [originalAdminData, setOriginalAdminData] = useState<Teacher | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [expandedModules, setExpandedModules] = useState<string[]>(['academic']);
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(new Date().getFullYear().toString());
+
+  const handleImpersonate = (teacher: Teacher) => {
+    if (userData?.role === 'admin') {
+      setOriginalAdminData(userData);
+      setUserData(teacher);
+      setActiveTab('dashboard');
+    }
+  };
+
+  const handleStopImpersonation = () => {
+    if (originalAdminData) {
+      setUserData(originalAdminData);
+      setOriginalAdminData(null);
+      setActiveTab('teachers');
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -193,6 +212,7 @@ export default function App() {
         { id: 'classes', label: 'Turmas', icon: LayoutDashboard },
         { id: 'attendance', label: 'Chamada', icon: CheckSquare },
         { id: 'planning', label: 'Planejamento', icon: BookOpen },
+        { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
         if (isAdmin) return true;
         // Teachers can only see sub-items they are allowed to
@@ -240,6 +260,25 @@ export default function App() {
         </div>
 
         <AISidebarSearch isSidebarOpen={isSidebarOpen} />
+
+        {isSidebarOpen && (
+          <div className="px-6 py-4 border-b border-slate-800">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Ano Letivo Ativo</label>
+            <div className="relative group">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
+              <select 
+                value={selectedSchoolYear}
+                onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white text-sm font-bold rounded-xl pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none cursor-pointer transition-all hover:bg-slate-700/50"
+              >
+                {Array.from({ length: 11 }, (_, i) => (new Date().getFullYear() - 5 + i).toString()).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            </div>
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-2">
           {navItems.map((item) => (
@@ -319,6 +358,15 @@ export default function App() {
             <Menu className="w-6 h-6 text-slate-600" />
           </button>
           <div className="flex items-center gap-4">
+            {originalAdminData && (
+              <button
+                onClick={handleStopImpersonation}
+                className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-xl font-bold hover:bg-amber-200 transition-all"
+              >
+                <X className="w-4 h-4" />
+                Sair do Modo Professor
+              </button>
+            )}
             <span className="text-sm text-slate-500 hidden md:block">{new Date().toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span>
           </div>
         </header>
@@ -334,17 +382,22 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <Dashboard user={userData} />}
-              {(['students', 'teachers', 'classes', 'attendance'].includes(activeTab)) && (
-                <AcademicModule user={userData} subTab={activeTab as any} />
+              {activeTab === 'dashboard' && <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />}
+              {(['students', 'teachers', 'classes', 'attendance', 'schoolYear'].includes(activeTab)) && (
+                <AcademicModule 
+                  user={userData} 
+                  subTab={activeTab as any} 
+                  selectedSchoolYear={selectedSchoolYear} 
+                  onImpersonate={handleImpersonate}
+                />
               )}
               {(['regimento', 'calendar', 'system', 'organogram'].includes(activeTab)) && (
                 <AdminModule user={userData} subTab={activeTab as any} />
               )}
-              {activeTab === 'projects' && <ProjectModule user={userData} />}
+              {activeTab === 'projects' && <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
               {activeTab === 'finance' && <FinanceModule user={userData} />}
-              {activeTab === 'reports' && <ReportModule user={userData} />}
-              {activeTab === 'planning' && <PlanningModule user={userData} />}
+              {activeTab === 'reports' && <ReportModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
+              {activeTab === 'planning' && <PlanningModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -354,6 +407,34 @@ export default function App() {
           <div className="px-4 md:px-8 pb-4">
             <SidebarEvents user={userData} compact />
           </div>
+        )}
+
+        {/* Impersonation Indicator Box */}
+        {originalAdminData && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: 50 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            className="fixed bottom-6 right-6 z-[100] bg-white border-2 border-amber-500 rounded-2xl shadow-2xl p-4 flex items-center gap-4 min-w-[300px]"
+          >
+            <div className="bg-amber-100 p-3 rounded-xl">
+              <Eye className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Modo Visualização</p>
+              <p className="text-sm font-bold text-slate-900">{userData.name}</p>
+              <p className="text-xs text-slate-500">{userData.email}</p>
+            </div>
+            <button
+              onClick={handleStopImpersonation}
+              className="group flex flex-col items-center gap-1 p-2 hover:bg-red-50 rounded-xl transition-all"
+              title="Fechar e retornar ao Admin"
+            >
+              <div className="bg-red-100 p-1.5 rounded-lg group-hover:bg-red-200 transition-all">
+                <X className="w-4 h-4 text-red-600" />
+              </div>
+              <span className="text-[10px] font-bold text-red-600 uppercase">Fechar</span>
+            </button>
+          </motion.div>
         )}
       </div>
     </div>

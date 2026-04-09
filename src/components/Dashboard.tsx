@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { 
   collection, 
@@ -27,7 +27,8 @@ import {
   Target,
   AlertCircle,
   Settings,
-  Trophy
+  Trophy,
+  Printer
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -43,15 +44,16 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Student, Teacher, Class, Transaction, Project, DashboardConfig } from '../types';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfWeek, endOfWeek, getMonth, getDate, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
 interface Props {
   user: Teacher;
+  selectedSchoolYear: string;
 }
 
-export default function Dashboard({ user }: Props) {
+export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -120,18 +122,26 @@ export default function Dashboard({ user }: Props) {
     }
   };
 
+  const filteredStudents = useMemo(() => {
+    return students.filter(s => s.schoolYear === selectedSchoolYear);
+  }, [students, selectedSchoolYear]);
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter(c => c.schoolYear === selectedSchoolYear);
+  }, [classes, selectedSchoolYear]);
+
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
 
   const stats = [
-    { label: 'Total Alunos', value: students.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
+    { label: 'Total Alunos', value: filteredStudents.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
     { label: 'Professores', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
-    { label: 'Turmas Ativas', value: classes.length, icon: GraduationCap, color: 'bg-green-50 text-green-600' },
+    { label: 'Turmas Ativas', value: filteredClasses.length, icon: GraduationCap, color: 'bg-green-50 text-green-600' },
     { label: 'Projetos', value: projects.length, icon: Briefcase, color: 'bg-amber-50 text-amber-600' },
   ];
 
-  const classAttendanceData = classes.map(c => {
-    const classStudents = students.filter(s => s.classId === c.id);
+  const classAttendanceData = filteredClasses.map(c => {
+    const classStudents = filteredStudents.filter(s => s.classId === c.id);
     const avgAttendance = classStudents.length > 0 
       ? classStudents.reduce((acc, s) => acc + (s.attendancePercentage || 0), 0) / classStudents.length
       : 0;
@@ -144,9 +154,9 @@ export default function Dashboard({ user }: Props) {
   }).sort((a, b) => b.attendance - a.attendance);
 
   const frequencyClassification = {
-    high: students.filter(s => (s.attendancePercentage || 0) >= config.highFrequencyLimit).length,
-    intermediate: students.filter(s => (s.attendancePercentage || 0) < config.highFrequencyLimit && (s.attendancePercentage || 0) >= config.intermediateFrequencyLimit).length,
-    low: students.filter(s => (s.attendancePercentage || 0) < config.intermediateFrequencyLimit).length,
+    high: filteredStudents.filter(s => (s.attendancePercentage || 0) >= config.highFrequencyLimit).length,
+    intermediate: filteredStudents.filter(s => (s.attendancePercentage || 0) < config.highFrequencyLimit && (s.attendancePercentage || 0) >= config.intermediateFrequencyLimit).length,
+    low: filteredStudents.filter(s => (s.attendancePercentage || 0) < config.intermediateFrequencyLimit).length,
   };
 
   const pieData = [
@@ -154,6 +164,90 @@ export default function Dashboard({ user }: Props) {
     { name: 'Intermediária', value: frequencyClassification.intermediate, color: '#f59e0b' },
     { name: 'Baixa', value: frequencyClassification.low, color: '#ef4444' },
   ];
+
+  const [birthdayStart, setBirthdayStart] = useState(format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [birthdayEnd, setBirthdayEnd] = useState(format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+
+  const weeklyBirthdays = useMemo(() => {
+    const start = parseISO(birthdayStart);
+    const end = parseISO(birthdayEnd);
+    
+    const allPeople: any[] = [
+      ...filteredStudents.map(s => ({ ...s, type: 'Aluno' })),
+      ...teachers.map(t => ({ ...t, tEmail: t.email, type: 'Professor' }))
+    ];
+
+    return allPeople.filter(person => {
+      const bDateStr = person.birthDate;
+      if (!bDateStr) return false;
+      const bDate = parseISO(bDateStr);
+      if (!isValid(bDate)) return false;
+
+      // Check if birthday falls within the range (ignoring year)
+      const currentYear = new Date().getFullYear();
+      const bDateThisYear = new Date(currentYear, getMonth(bDate), getDate(bDate));
+      
+      return isWithinInterval(bDateThisYear, { start, end });
+    }).sort((a, b) => {
+      const dateA = parseISO(a.birthDate!);
+      const dateB = parseISO(b.birthDate!);
+      return getDate(dateA) - getDate(dateB);
+    });
+  }, [students, teachers, birthdayStart, birthdayEnd]);
+
+  const handlePrintBirthdays = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const content = `
+      <html>
+        <head>
+          <title>Aniversariantes - EBD IGBAPI</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #1e293b; }
+            h1 { color: #4f46e5; text-align: center; margin-bottom: 30px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+            th { bg-color: #f8fafc; font-weight: bold; }
+            .header-info { text-align: center; margin-bottom: 20px; color: #64748b; }
+          </style>
+        </head>
+        <body>
+          <h1>Relatório de Aniversariantes</h1>
+          <div class="header-info">
+            Período: ${format(parseISO(birthdayStart), 'dd/MM/yyyy')} até ${format(parseISO(birthdayEnd), 'dd/MM/yyyy')}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Data</th>
+                <th>Turma</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${weeklyBirthdays.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>${p.type}</td>
+                  <td>${format(parseISO(p.birthDate!), 'dd/MM')}</td>
+                  <td>${classes.find(c => c.id === (p as any).classId)?.name || 'N/A'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8;">
+            Gerado em ${format(new Date(), 'dd/MM/yyyy HH:mm')}
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.print();
+  };
 
   return (
     <div className="space-y-6">
@@ -300,6 +394,75 @@ export default function Dashboard({ user }: Props) {
           </div>
         </div>
 
+        {/* Birthdays of the Week */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-pink-500" />
+              <h3 className="text-lg font-bold text-slate-900">Aniversariantes da Semana</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                <input 
+                  type="date" 
+                  value={birthdayStart}
+                  onChange={(e) => setBirthdayStart(e.target.value)}
+                  className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1"
+                />
+                <span className="text-slate-300">|</span>
+                <input 
+                  type="date" 
+                  value={birthdayEnd}
+                  onChange={(e) => setBirthdayEnd(e.target.value)}
+                  className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1"
+                />
+              </div>
+              <button 
+                onClick={handlePrintBirthdays}
+                className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
+                title="Imprimir Aniversariantes"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            {weeklyBirthdays.length > 0 ? (
+              weeklyBirthdays.map((person) => (
+                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-pink-200 hover:bg-pink-50/30 transition-all">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-lg shadow-sm">
+                      {person.type === 'Aluno' ? '👶' : '👨‍🏫'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{person.name}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500">
+                          {person.type}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {classes.find(c => c.id === (person as any).classId)?.name || 'Sem Turma'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-pink-600">
+                      {format(parseISO(person.birthDate!), 'dd/MM')}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Aniversário</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 text-slate-400 italic text-sm">
+                Nenhum aniversariante neste período.
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Critical Alerts */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-2 mb-6">
@@ -307,7 +470,7 @@ export default function Dashboard({ user }: Props) {
             <h3 className="text-lg font-bold text-slate-900">Alertas de Frequência</h3>
           </div>
           <div className="space-y-4">
-            {students.filter(s => s.consecutiveAbsences >= 2).map(student => (
+            {filteredStudents.filter(s => s.consecutiveAbsences >= 2).map(student => (
               <div key={student.id} className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold text-red-900">{student.name}</p>
@@ -327,7 +490,7 @@ export default function Dashboard({ user }: Props) {
                 </button>
               </div>
             ))}
-            {students.filter(s => s.consecutiveAbsences >= 2).length === 0 && (
+            {filteredStudents.filter(s => s.consecutiveAbsences >= 2).length === 0 && (
               <div className="text-center py-8 text-slate-400 italic text-sm">
                 Nenhum alerta crítico no momento.
               </div>

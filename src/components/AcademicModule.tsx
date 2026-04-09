@@ -11,7 +11,9 @@ import {
   deleteDoc,
   orderBy,
   getDocs,
-  setDoc
+  getDoc,
+  setDoc,
+  limit
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { 
@@ -33,17 +35,34 @@ import {
   ChevronDown,
   ArrowUpDown,
   Filter,
-  Printer
+  Printer,
+  Calendar,
+  Copy,
+  Eye,
+  X
 } from 'lucide-react';
-import { format, differenceInYears, parseISO } from 'date-fns';
+import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport } from '../types';
+import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const safeFormat = (dateStr: string | undefined | null, formatStr: string, options?: any) => {
+  if (!dateStr) return '-';
+  try {
+    const date = parseISO(dateStr);
+    if (!isValid(date)) return '-';
+    return format(date, formatStr, options);
+  } catch (e) {
+    return '-';
+  }
+};
+
 interface Props {
   user: Teacher;
-  subTab: 'students' | 'teachers' | 'classes' | 'attendance';
+  subTab: 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear';
+  selectedSchoolYear: string;
+  onImpersonate?: (teacher: Teacher) => void;
 }
 
 type SortField = 'name' | 'age' | 'class';
@@ -61,7 +80,7 @@ const PREDEFINED_METHODOLOGIES = [
   'Trabalho Manual'
 ];
 
-export default function AcademicModule({ user, subTab }: Props) {
+export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -91,15 +110,78 @@ export default function AcademicModule({ user, subTab }: Props) {
   const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportType, setReportType] = useState<'student' | 'teacher'>('student');
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [viewingAttendance, setViewingAttendance] = useState<Attendance | null>(null);
+  const [reportFilterClass, setReportFilterClass] = useState<string>('all');
   const [reportContent, setReportContent] = useState('');
   const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [aulaObjetivos, setAulaObjetivos] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
   const [alunosParticiparam, setAlunosParticiparam] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloningClass, setCloningClass] = useState<Class | null>(null);
+  const [resetAttendanceOnClone, setResetAttendanceOnClone] = useState(true);
+
+  const generateRegistrationNumber = async (collectionName: 'students' | 'users') => {
+    const currentYear = new Date().getFullYear().toString();
+    const q = query(
+      collection(db, collectionName),
+      where('registrationNumber', '>=', currentYear),
+      where('registrationNumber', '<=', currentYear + '\uf8ff'),
+      orderBy('registrationNumber', 'desc'),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    let nextSeq = 1;
+    if (!snap.empty) {
+      const lastNum = snap.docs[0].data().registrationNumber;
+      if (lastNum && lastNum.startsWith(currentYear)) {
+        const lastSeq = parseInt(lastNum.substring(4));
+        nextSeq = lastSeq + 1;
+      }
+    }
+    return `${currentYear}${nextSeq.toString().padStart(3, '0')}`;
+  };
   const [versiculoCitado, setVersiculoCitado] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
   const [houveOferta, setHouveOferta] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
   const [schoolYear, setSchoolYear] = useState<string>('');
+  const [schoolYearConfig, setSchoolYearConfig] = useState<any>(null);
+  const [showReenrollmentSummary, setShowReenrollmentSummary] = useState(false);
+  const [reenrollmentSummary, setReenrollmentSummary] = useState({
+    studentsReenrolled: 0,
+    studentsCompleted: 0,
+    classesCreated: 0
+  });
+
+  const [modalConfig, setModalConfig] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'alert';
+    onConfirm?: (inputValue?: string) => void;
+    isPassword?: boolean;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    type: 'alert'
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setModalConfig({ show: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
+  };
 
   const isAdmin = user.role === 'admin';
+
+  const isClassFinalized = (classId: string) => {
+    const cls = classes.find(c => c.id === classId);
+    if (!cls) return false;
+    if (cls.status !== 'ENCERRADA') return false;
+    const hasNextYearClass = classes.some(c => c.originalClassId === cls.id);
+    return hasNextYearClass;
+  };
 
   // Fetch Data
   useEffect(() => {
@@ -143,6 +225,7 @@ export default function AcademicModule({ user, subTab }: Props) {
     const unsubSchoolYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        setSchoolYearConfig(data);
         if (data.startDate) {
           setSchoolYear(data.startDate.split('-')[0]);
         }
@@ -165,7 +248,8 @@ export default function AcademicModule({ user, subTab }: Props) {
   const filteredStudents = useMemo(() => {
     let result = students.filter(s => 
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (filterClass === 'all' || s.classId === filterClass)
+      (filterClass === 'all' || s.classId === filterClass) &&
+      (s.schoolYear === selectedSchoolYear)
     );
 
     result.sort((a, b) => {
@@ -186,9 +270,31 @@ export default function AcademicModule({ user, subTab }: Props) {
     });
 
     return result;
-  }, [students, searchTerm, filterClass, sortField, sortOrder, classes]);
+  }, [students, searchTerm, filterClass, sortField, sortOrder, classes, selectedSchoolYear]);
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter(c => c.schoolYear === selectedSchoolYear);
+  }, [classes, selectedSchoolYear]);
 
   // Forms State
+  const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
+  const [attendanceFilterClasses, setAttendanceFilterClasses] = useState<string[]>(['all']);
+  const [attendanceStartDate, setAttendanceStartDate] = useState('');
+  const [attendanceEndDate, setAttendanceEndDate] = useState('');
+
+  const [viewingStudentHistory, setViewingStudentHistory] = useState<Student | null>(null);
+  const [studentHistory, setStudentHistory] = useState<Enrollment[]>([]);
+
+  useEffect(() => {
+    if (viewingStudentHistory) {
+      const q = query(collection(db, 'enrollments'), where('studentId', '==', viewingStudentHistory.id));
+      const unsub = onSnapshot(q, (snap) => {
+        setStudentHistory(snap.docs.map(d => ({ id: d.id, ...d.data() } as Enrollment)));
+      });
+      return () => unsub();
+    }
+  }, [viewingStudentHistory]);
+
   const [studentForm, setStudentForm] = useState({
     name: '',
     birthDate: '',
@@ -196,7 +302,10 @@ export default function AcademicModule({ user, subTab }: Props) {
     emergencyContact: '',
     phone: '',
     history: '',
-    classId: ''
+    classId: '',
+    schoolYear: selectedSchoolYear,
+    doNotRenew: false,
+    status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido'
   });
 
   const [teacherForm, setTeacherForm] = useState({
@@ -204,41 +313,58 @@ export default function AcademicModule({ user, subTab }: Props) {
     email: '',
     password: '',
     contact: '',
+    profession: '',
+    startDateEBD: '',
+    generalProfile: '',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[]
   });
 
+  // Sync forms with selectedSchoolYear
+  useEffect(() => {
+    setStudentForm(prev => ({ ...prev, schoolYear: selectedSchoolYear }));
+    setClassForm(prev => ({ ...prev, schoolYear: selectedSchoolYear }));
+  }, [selectedSchoolYear]);
+
   const [classForm, setClassForm] = useState({
     name: '',
     ageRange: '',
-    teacherId: ''
+    teacherId: '',
+    schoolYear: selectedSchoolYear,
+    gradeLevel: 0,
+    isFinalGrade: false
   });
 
+  const [editingClass, setEditingClass] = useState<Class | null>(null);
+
   const handleDeleteStudent = async (id: string) => {
-    if (!confirm('Deseja excluir este aluno?')) return;
-    try {
-      await deleteDoc(doc(db, 'students', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `students/${id}`);
-    }
+    showConfirm('Excluir Aluno', 'Deseja realmente excluir este aluno?', async () => {
+      try {
+        await deleteDoc(doc(db, 'students', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `students/${id}`);
+      }
+    });
   };
 
   const handleDeleteTeacher = async (id: string) => {
-    if (!confirm('Deseja excluir este professor?')) return;
-    try {
-      await deleteDoc(doc(db, 'users', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `users/${id}`);
-    }
+    showConfirm('Excluir Professor', 'Deseja realmente excluir este professor?', async () => {
+      try {
+        await deleteDoc(doc(db, 'users', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `users/${id}`);
+      }
+    });
   };
 
   const handleDeleteClass = async (id: string) => {
-    if (!confirm('Deseja excluir esta turma?')) return;
-    try {
-      await deleteDoc(doc(db, 'classes', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `classes/${id}`);
-    }
+    showConfirm('Excluir Turma', 'Deseja realmente excluir esta turma?', async () => {
+      try {
+        await deleteDoc(doc(db, 'classes', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `classes/${id}`);
+      }
+    });
   };
 
   const handleAddStudent = async (e: React.FormEvent) => {
@@ -251,14 +377,19 @@ export default function AcademicModule({ user, subTab }: Props) {
         emergencyContact: studentForm.emergencyContact || "",
         phone: studentForm.phone || "",
         history: studentForm.history || "",
-        classId: studentForm.classId || ""
+        classId: studentForm.classId || "",
+        schoolYear: studentForm.schoolYear || selectedSchoolYear,
+        doNotRenew: studentForm.doNotRenew || false,
+        status: studentForm.status || 'ativo'
       };
 
       if (editingStudent) {
         await updateDoc(doc(db, 'students', editingStudent.id), sanitizedForm);
       } else {
+        const registrationNumber = await generateRegistrationNumber('students');
         await addDoc(collection(db, 'students'), {
           ...sanitizedForm,
+          registrationNumber,
           consecutiveAbsences: 0,
           attendancePercentage: 100,
           createdAt: new Date().toISOString()
@@ -266,13 +397,17 @@ export default function AcademicModule({ user, subTab }: Props) {
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '' });
+      setStudentForm({ name: '', birthDate: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
   };
 
   const handleEditStudent = (student: Student) => {
+    if (student.classId && isClassFinalized(student.classId)) {
+      showAlert('Turma Finalizada', 'Esta turma já foi encerrada e não permite alterações nos registros.');
+      return;
+    }
     setEditingStudent(student);
     setStudentForm({
       name: student.name,
@@ -281,7 +416,10 @@ export default function AcademicModule({ user, subTab }: Props) {
       emergencyContact: student.emergencyContact,
       phone: student.phone || '',
       history: student.history,
-      classId: student.classId || ''
+      classId: student.classId || '',
+      schoolYear: student.schoolYear || selectedSchoolYear,
+      doNotRenew: student.doNotRenew || false,
+      status: student.status || 'ativo'
     });
     setShowForm(true);
   };
@@ -290,12 +428,12 @@ export default function AcademicModule({ user, subTab }: Props) {
     e.preventDefault();
     
     if (!teacherForm.name || !teacherForm.email || (!editingTeacher && !teacherForm.password)) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      showAlert('Campos Obrigatórios', 'Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
     if (!editingTeacher && teacherForm.password.length < 6) {
-      alert('A senha deve ter pelo menos 6 caracteres.');
+      showAlert('Senha Curta', 'A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 
@@ -305,6 +443,9 @@ export default function AcademicModule({ user, subTab }: Props) {
           name: teacherForm.name || "",
           email: teacherForm.email || "",
           contact: teacherForm.contact || "",
+          profession: teacherForm.profession || "",
+          startDateEBD: teacherForm.startDateEBD || "",
+          generalProfile: teacherForm.generalProfile || "",
           classIds: teacherForm.classIds || [],
           allowedTabs: teacherForm.allowedTabs || [],
           updatedAt: new Date().toISOString()
@@ -314,13 +455,18 @@ export default function AcademicModule({ user, subTab }: Props) {
         const userCredential = await createUserWithEmailAndPassword(auth, teacherForm.email, teacherForm.password);
         const newUser = userCredential.user;
 
+        const registrationNumber = await generateRegistrationNumber('users');
         // Create User Doc
         await setDoc(doc(db, 'users', newUser.uid), {
           name: teacherForm.name || "",
           email: teacherForm.email || "",
           contact: teacherForm.contact || "",
+          profession: teacherForm.profession || "",
+          startDateEBD: teacherForm.startDateEBD || "",
+          generalProfile: teacherForm.generalProfile || "",
           classIds: teacherForm.classIds || [],
           allowedTabs: teacherForm.allowedTabs || [],
+          registrationNumber,
           role: 'teacher',
           firstLogin: true,
           createdAt: new Date().toISOString()
@@ -329,7 +475,7 @@ export default function AcademicModule({ user, subTab }: Props) {
 
       setShowForm(false);
       setEditingTeacher(null);
-      setTeacherForm({ name: '', email: '', password: '', contact: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+      setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
     } catch (err) {
       handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
     }
@@ -342,6 +488,9 @@ export default function AcademicModule({ user, subTab }: Props) {
       email: teacher.email,
       password: '', // Don't load password
       contact: teacher.contact,
+      profession: teacher.profession || '',
+      startDateEBD: teacher.startDateEBD || '',
+      generalProfile: teacher.generalProfile || '',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports']
     });
@@ -351,18 +500,230 @@ export default function AcademicModule({ user, subTab }: Props) {
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'classes'), {
+      const sanitizedForm = {
         name: classForm.name || "",
         ageRange: classForm.ageRange || "",
         teacherId: classForm.teacherId || "",
-        studentIds: [],
-        schoolYear: schoolYear || new Date().getFullYear().toString(),
+        schoolYear: classForm.schoolYear || selectedSchoolYear,
+        gradeLevel: Number(classForm.gradeLevel) || 0,
+        isFinalGrade: classForm.isFinalGrade || false,
+        status: 'ATIVA' as const
+      };
+
+      if (editingClass) {
+        await updateDoc(doc(db, 'classes', editingClass.id), sanitizedForm);
+      } else {
+        await addDoc(collection(db, 'classes'), {
+          ...sanitizedForm,
+          studentIds: [],
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowForm(false);
+      setEditingClass(null);
+      setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+    } catch (err) {
+      handleFirestoreError(err, editingClass ? OperationType.UPDATE : OperationType.CREATE, 'classes');
+    }
+  };
+
+  const handleEditClass = (cls: Class) => {
+    if (isClassFinalized(cls.id)) {
+      showAlert('Turma Finalizada', 'Esta turma já foi encerrada e não permite alterações nos registros.');
+      return;
+    }
+    setEditingClass(cls);
+    setClassForm({
+      name: cls.name,
+      ageRange: cls.ageRange,
+      teacherId: cls.teacherId || '',
+      schoolYear: cls.schoolYear || selectedSchoolYear,
+      gradeLevel: cls.gradeLevel || 0,
+      isFinalGrade: cls.isFinalGrade || false
+    });
+    setShowForm(true);
+  };
+
+  const handleCloneClass = (cls: Class) => {
+    setCloningClass(cls);
+    setShowCloneModal(true);
+  };
+
+  const executeCloneClass = async () => {
+    if (!cloningClass) return;
+    try {
+      const newClassRef = await addDoc(collection(db, 'classes'), {
+        name: `${cloningClass.name} (Cópia)`,
+        ageRange: cloningClass.ageRange,
+        teacherId: cloningClass.teacherId || "",
+        studentIds: cloningClass.studentIds || [],
+        schoolYear: selectedSchoolYear,
+        status: 'ATIVA',
+        gradeLevel: cloningClass.gradeLevel || 0,
+        isFinalGrade: cloningClass.isFinalGrade || false,
         createdAt: new Date().toISOString()
       });
-      setShowForm(false);
-      setClassForm({ name: '', ageRange: '', teacherId: '' });
+
+      // Update students to point to the new class and school year
+      const studentUpdatePromises = (cloningClass.studentIds || []).map(studentId => 
+        updateDoc(doc(db, 'students', studentId), {
+          classId: newClassRef.id,
+          schoolYear: selectedSchoolYear
+        })
+      );
+      await Promise.all(studentUpdatePromises);
+
+      if (!resetAttendanceOnClone) {
+        // Copy attendance records
+        const q = query(collection(db, 'attendance'), where('classId', '==', cloningClass.id));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          const data = d.data();
+          await addDoc(collection(db, 'attendance'), {
+            ...data,
+            classId: newClassRef.id,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      setShowCloneModal(false);
+      setCloningClass(null);
+      showAlert('Sucesso', 'Turma clonada com sucesso!');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'classes');
+    }
+  };
+
+  const [showReenrollmentModal, setShowReenrollmentModal] = useState(false);
+  const [selectedClassesForReenroll, setSelectedClassesForReenroll] = useState<string[]>([]);
+
+  const handleCloseSchoolYear = async () => {
+    if (!schoolYearConfig?.startDate) {
+      showAlert('Configuração Pendente', 'Por favor, defina o ano letivo nas configurações.');
+      return;
+    }
+
+    setShowReenrollmentModal(true);
+    setSelectedClassesForReenroll(classes.filter(c => c.schoolYear === schoolYear && c.status !== 'ENCERRADA').map(c => c.id));
+  };
+
+  const handleAutoReenrollment = async () => {
+    if (selectedClassesForReenroll.length === 0) {
+      showAlert('Atenção', 'Selecione pelo menos uma turma para processar.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let reenrollCount = 0;
+      let completedCount = 0;
+      let classesCreatedCount = 0;
+
+      const currentYear = parseInt(schoolYear);
+      const nextYear = currentYear + 1;
+
+      // 1. Get selected active classes for current year
+      const activeClasses = classes.filter(c => selectedClassesForReenroll.includes(c.id));
+
+      for (const cls of activeClasses) {
+        // a) Create new class if not final grade
+        let nextClassId = '';
+        if (!cls.isFinalGrade) {
+          const nextGradeLevel = (cls.gradeLevel || 0) + 1;
+          const newClassName = cls.name.replace(currentYear.toString(), nextYear.toString());
+          const finalNewName = newClassName.includes(nextYear.toString()) ? newClassName : `${newClassName} - ${nextYear}`;
+
+          const newClassRef = await addDoc(collection(db, 'classes'), {
+            name: finalNewName,
+            ageRange: cls.ageRange,
+            teacherId: cls.teacherId || "",
+            studentIds: [], 
+            schoolYear: nextYear.toString(),
+            status: 'ATIVA',
+            gradeLevel: nextGradeLevel,
+            isFinalGrade: false, 
+            createdAt: new Date().toISOString(),
+            originalClassId: cls.id // Reference to track rematriculation
+          });
+          nextClassId = newClassRef.id;
+          classesCreatedCount++;
+        }
+
+        // b) Process students in the class
+        const classStudents = students.filter(s => s.classId === cls.id);
+        for (const student of classStudents) {
+          // Save historical enrollment
+          await addDoc(collection(db, 'enrollments'), {
+            studentId: student.id,
+            classId: cls.id,
+            schoolYear: schoolYear,
+            status: student.status || 'ativo',
+            registrationNumber: student.registrationNumber || '',
+            createdAt: new Date().toISOString()
+          });
+
+          if (student.doNotRenew) {
+            await updateDoc(doc(db, 'students', student.id), {
+              status: 'transferido',
+              classId: '',
+              schoolYear: ''
+            });
+            continue;
+          }
+
+          if (cls.isFinalGrade) {
+            await updateDoc(doc(db, 'students', student.id), {
+              status: 'concluído',
+              classId: '',
+              schoolYear: ''
+            });
+            completedCount++;
+          } else {
+            // Re-enroll in next class
+            if (nextClassId) {
+              await updateDoc(doc(db, 'students', student.id), {
+                classId: nextClassId,
+                schoolYear: nextYear.toString(),
+                status: 'ativo'
+              });
+              
+              // Add student to new class studentIds
+              const nextClassDoc = await getDoc(doc(db, 'classes', nextClassId));
+              if (nextClassDoc.exists()) {
+                const currentIds = nextClassDoc.data().studentIds || [];
+                await updateDoc(doc(db, 'classes', nextClassId), {
+                  studentIds: [...currentIds, student.id]
+                });
+              }
+            }
+            reenrollCount++;
+          }
+        }
+
+        // c) Close old class
+        await updateDoc(doc(db, 'classes', cls.id), {
+          status: 'ENCERRADA'
+        });
+      }
+
+      // 2. Update global school year config
+      await updateDoc(doc(db, 'config', 'schoolYear'), {
+        startDate: `${nextYear}-01-01`,
+        updatedAt: new Date().toISOString()
+      });
+
+      setShowReenrollmentModal(false);
+      showAlert('Processo Concluído', 
+        `Ano letivo ${currentYear} encerrado.\n` +
+        `- ${classesCreatedCount} novas turmas criadas para ${nextYear}.\n` +
+        `- ${reenrollCount} alunos rematriculados.\n` +
+        `- ${completedCount} alunos concluíram seus estudos.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'reenrollment');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -370,6 +731,8 @@ export default function AcademicModule({ user, subTab }: Props) {
   const [attendanceList, setAttendanceList] = useState<{ [key: string]: boolean }>({});
   const [justifications, setJustifications] = useState<{ [key: string]: string }>({});
   const [attendanceDate, setAttendanceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startTime, setStartTime] = useState('15:50');
+  const [endTime, setEndTime] = useState('16:40');
   const [contentGiven, setContentGiven] = useState('');
   const [attendanceMethodology, setAttendanceMethodology] = useState<string[]>([]);
   const [observation, setObservation] = useState('');
@@ -418,8 +781,14 @@ export default function AcademicModule({ user, subTab }: Props) {
 
   const saveAttendance = async () => {
     if (!selectedClass) return;
+
+    if (isClassFinalized(selectedClass)) {
+      showAlert('Turma Finalizada', 'Esta turma já foi encerrada e não permite alterações nos registros.');
+      return;
+    }
+
     if (existingAttendance && !editingAttendance) {
-      alert('Já existe uma chamada para esta data e turma.');
+      showAlert('Aviso', 'Já existe uma chamada para esta data e turma.');
       return;
     }
 
@@ -428,13 +797,19 @@ export default function AcademicModule({ user, subTab }: Props) {
     
     try {
       if (currentPlanning && contentGiven !== currentPlanning.content && !observation.trim()) {
-        const confirmChange = confirm('O conteúdo ministrado é diferente do planejado. Deseja adicionar uma justificativa nas observações?');
-        if (confirmChange) return; // Allow user to add justification
+        showConfirm(
+          'Conteúdo Diferente',
+          'O conteúdo ministrado é diferente do planejado. Deseja adicionar uma justificativa nas observações antes de salvar?',
+          () => {} // Just close and let them edit
+        );
+        return;
       }
 
       const attendanceData = {
         classId: selectedClass || "",
         date: attendanceDate || "",
+        startTime: startTime || "",
+        endTime: endTime || "",
         presentStudentIds: present || [],
         absentStudentIds: absent || [],
         justifications: justifications || {},
@@ -478,6 +853,8 @@ export default function AcademicModule({ user, subTab }: Props) {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setContentGiven('');
+      setStartTime('15:50');
+      setEndTime('16:40');
       setAttendanceMethodology([]);
       setObservation('');
       setEditingAttendance(null);
@@ -504,18 +881,32 @@ export default function AcademicModule({ user, subTab }: Props) {
   };
 
   const handleDeleteAttendance = async (id: string) => {
-    if (!confirm('Deseja excluir este registro de chamada?')) return;
-    try {
-      await deleteDoc(doc(db, 'attendance', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `attendance/${id}`);
+    const att = attendances.find(a => a.id === id);
+    if (att && isClassFinalized(att.classId)) {
+      showAlert('Turma Finalizada', 'Esta turma já foi encerrada e não permite alterações nos registros.');
+      return;
     }
+
+    showConfirm('Excluir Chamada', 'Deseja realmente excluir este registro de chamada?', async () => {
+      try {
+        await deleteDoc(doc(db, 'attendance', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `attendance/${id}`);
+      }
+    });
   };
 
   const handleEditAttendance = (att: Attendance) => {
+    if (isClassFinalized(att.classId)) {
+      showAlert('Turma Finalizada', 'Esta turma já foi encerrada e não permite alterações nos registros.');
+      return;
+    }
+
     setEditingAttendance(att);
     setSelectedClass(att.classId);
     setAttendanceDate(att.date);
+    setStartTime(att.startTime || '15:50');
+    setEndTime(att.endTime || '16:40');
     setContentGiven(att.contentGiven || '');
     setAttendanceMethodology(att.methodology ? att.methodology.split(', ').filter(m => m.length > 0) : []);
     setObservation(att.observation || '');
@@ -538,7 +929,7 @@ export default function AcademicModule({ user, subTab }: Props) {
     try {
       const currentUserId = user.id || auth.currentUser?.uid || "";
       if (!currentUserId) {
-        alert("Erro: Usuário não identificado. Por favor, faça login novamente.");
+        showAlert('Erro', "Erro: Usuário não identificado. Por favor, faça login novamente.");
         return;
       }
 
@@ -561,7 +952,7 @@ export default function AcademicModule({ user, subTab }: Props) {
       setShowReportModal(false);
       setReportContent('');
       setReportTargetId(null);
-      alert('Relatório salvo com sucesso!');
+      showAlert('Sucesso', 'Relatório salvo com sucesso!');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, reportType === 'student' ? 'student_reports' : 'teacher_reports');
     }
@@ -600,7 +991,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                 className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 outline-none"
               >
                 <option value="all">Todas as Turmas</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <button 
                 onClick={() => {
@@ -670,6 +1061,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                   >
                     Turma
                   </th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Frequência</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Telefone</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
@@ -697,6 +1089,9 @@ export default function AcademicModule({ user, subTab }: Props) {
                         {classes.find(c => c.id === student.classId)?.name || 'Sem Turma'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-sm font-mono text-slate-500">
+                      {student.registrationNumber || '-'}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -716,6 +1111,13 @@ export default function AcademicModule({ user, subTab }: Props) {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={() => setViewingStudentHistory(student)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Ver Histórico de Trajetória"
+                        >
+                          <CheckCircle2 className="w-5 h-5" />
+                        </button>
                         <button 
                           onClick={() => {
                             setReportType('student');
@@ -766,6 +1168,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                 <tr className="bg-slate-50/50">
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Professor</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turmas</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
@@ -785,6 +1188,9 @@ export default function AcademicModule({ user, subTab }: Props) {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">{teacher.email}</td>
+                    <td className="px-6 py-4 text-sm font-mono text-slate-500">
+                      {teacher.registrationNumber || '-'}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
                         {teacher.classIds?.map(cid => (
@@ -796,6 +1202,28 @@ export default function AcademicModule({ user, subTab }: Props) {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        {isAdmin && teacher.role !== 'admin' && (
+                          <button 
+                            onClick={() => {
+                              showConfirm(
+                                'Entrar como Professor',
+                                `Para visualizar a plataforma como "${teacher.name}", digite a senha do sistema:`,
+                                (pass) => {
+                                  if (pass === 'SISTEMA') {
+                                    onImpersonate?.(teacher);
+                                  } else {
+                                    showAlert('Erro', 'Senha do sistema incorreta!');
+                                  }
+                                },
+                                true // isPassword
+                              );
+                            }}
+                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                            title="Visualizar como Professor"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </button>
+                        )}
                         {isAdmin && (
                           <>
                             <button 
@@ -857,7 +1285,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {classes.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map((c) => (
+                {filteredClasses.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 font-semibold text-slate-900">{c.name}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{c.schoolYear || '-'}</td>
@@ -869,12 +1297,29 @@ export default function AcademicModule({ user, subTab }: Props) {
                       {students.filter(s => s.classId === c.id).length} alunos
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => handleDeleteClass(c.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={() => handleCloneClass(c)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Clonar Turma"
+                        >
+                          <Copy className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => handleEditClass(c)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Editar Turma"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteClass(c.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir Turma"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -894,7 +1339,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
                   <option value="">Selecione uma turma...</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="flex-1 space-y-1">
@@ -905,6 +1350,24 @@ export default function AcademicModule({ user, subTab }: Props) {
                   onChange={(e) => setAttendanceDate(e.target.value)}
                   disabled={!!existingAttendance && !editingAttendance}
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Horário Início</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Horário Fim</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
               <div className="flex gap-2">
@@ -966,7 +1429,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                             : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
                         )}
                       >
-                        {format(parseISO(p.date), 'dd/MM/yyyy')}
+                        {safeFormat(p.date, 'dd/MM/yyyy')}
                       </button>
                     ))}
                   {plannings.filter(p => p.classId === selectedClass).length === 0 && (
@@ -1178,6 +1641,39 @@ export default function AcademicModule({ user, subTab }: Props) {
                   <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                     <h3 className="text-lg font-bold text-slate-900">Relatório de Chamadas Realizadas</h3>
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                      <div className="flex bg-slate-100 p-1 rounded-xl">
+                        <button 
+                          onClick={() => setAttendanceViewMode('list')}
+                          className={cn(
+                            "p-2 rounded-lg transition-all",
+                            attendanceViewMode === 'list' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
+                          )}
+                          title="Lista"
+                        >
+                          <LayoutDashboard className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => setAttendanceViewMode('months')}
+                          className={cn(
+                            "p-2 rounded-lg transition-all",
+                            attendanceViewMode === 'months' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
+                          )}
+                          title="Por Meses"
+                        >
+                          <Calendar className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => setAttendanceViewMode('icons')}
+                          className={cn(
+                            "p-2 rounded-lg transition-all",
+                            attendanceViewMode === 'icons' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500 hover:text-slate-700"
+                          )}
+                          title="Ícones Pequenos"
+                        >
+                          <CheckSquare className="w-4 h-4" />
+                        </button>
+                      </div>
+
                       <button 
                         onClick={() => setShowRangeReportModal(true)}
                         className="px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all flex items-center gap-2"
@@ -1185,81 +1681,270 @@ export default function AcademicModule({ user, subTab }: Props) {
                         <FileText className="w-4 h-4" />
                         Relatório por Período
                       </button>
-                      <select
-                        value={attendanceFilterClass}
-                        onChange={(e) => setAttendanceFilterClass(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+
+                      {isAdmin ? (
+                        <div className="relative group">
+                          <button className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2">
+                            {attendanceFilterClasses.includes('all') ? 'Todas as Turmas' : `${attendanceFilterClasses.length} Turmas`}
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                          <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-100 rounded-2xl shadow-xl p-4 z-50 hidden group-hover:block">
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              <label className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  checked={attendanceFilterClasses.includes('all')}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setAttendanceFilterClasses(['all']);
+                                    else setAttendanceFilterClasses([]);
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-sm font-medium text-slate-700">Todas as Turmas</span>
+                              </label>
+                              {filteredClasses.map(c => (
+                                <label key={c.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                  <input 
+                                    type="checkbox"
+                                    checked={attendanceFilterClasses.includes(c.id)}
+                                    onChange={(e) => {
+                                      let newClasses = attendanceFilterClasses.filter(id => id !== 'all');
+                                      if (e.target.checked) {
+                                        newClasses = [...newClasses, c.id];
+                                      } else {
+                                        newClasses = newClasses.filter(id => id !== c.id);
+                                      }
+                                      if (newClasses.length === 0) newClasses = ['all'];
+                                      setAttendanceFilterClasses(newClasses);
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                  />
+                                  <span className="text-sm font-medium text-slate-700">{c.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <select
+                          value={attendanceFilterClass}
+                          onChange={(e) => setAttendanceFilterClass(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="all">Todas as Turmas</option>
+                          {filteredClasses.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="date"
+                          value={attendanceStartDate}
+                          onChange={(e) => setAttendanceStartDate(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+                          title="Data Início"
+                        />
+                        <span className="text-slate-400">até</span>
+                        <input 
+                          type="date"
+                          value={attendanceEndDate}
+                          onChange={(e) => setAttendanceEndDate(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
+                          title="Data Fim"
+                        />
+                      </div>
+                      <button
+                        onClick={() => window.print()}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-xs font-bold text-slate-600 flex items-center gap-2 print:hidden"
                       >
-                        <option value="all">Todas as Turmas</option>
-                        {classes.map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                      <input 
-                        type="month"
-                        value={attendanceFilterMonth}
-                        onChange={(e) => setAttendanceFilterMonth(e.target.value)}
-                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
+                        <Printer className="w-4 h-4" />
+                        Imprimir Lista
+                      </button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="bg-slate-50/50">
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Presenças/Faltas</th>
-                          <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
+
+                  <div className="space-y-8">
+                    {attendanceViewMode === 'list' && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50/50 border-b border-slate-200">
+                              <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center w-12">°</th>
+                              <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">DIA/HORÁRIO</th>
+                              <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">DATA MINISTRADA</th>
+                              <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">RESUMO CONTEÚDO</th>
+                              <th className="px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">AÇÕES</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {attendances
+                              .filter(a => {
+                                const matchesClass = isAdmin 
+                                  ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
+                                  : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
+                                
+                                const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
+                                                   (!attendanceEndDate || a.date <= attendanceEndDate);
+                                
+                                const matchesAccess = isAdmin || user.classIds.includes(a.classId);
+                                return matchesClass && matchesDate && matchesAccess;
+                              })
+                              .sort((a, b) => a.date.localeCompare(b.date)) // Sort ascending for sequence
+                              .map((att, idx) => (
+                              <tr key={att.id} className="hover:bg-slate-50/50 transition-colors group border-b border-slate-100 last:border-0">
+                                <td className="px-4 py-6 text-sm font-bold text-slate-900 text-center align-top">{idx + 1}</td>
+                                <td className="px-4 py-6 align-top">
+                                  <div className="text-sm font-bold text-slate-900">
+                                    {safeFormat(att.date, 'dd/MM/yyyy')}
+                                  </div>
+                                  <div className="text-[11px] font-black text-slate-500 uppercase mt-1">
+                                    {safeFormat(att.date, 'EEEE', { locale: ptBR }).toUpperCase()} - {att.startTime || '15:50'} às {att.endTime || '16:40'}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-6 text-sm font-bold text-slate-900 align-top">
+                                  {safeFormat(att.date, 'dd/MM/yyyy')}
+                                </td>
+                                <td className="px-4 py-6 align-top">
+                                  <div className="text-xs text-slate-700 max-w-2xl leading-relaxed whitespace-pre-wrap">
+                                    <span className="font-black text-slate-900 uppercase">
+                                      ({classes.find(c => c.id === att.classId)?.name})
+                                    </span> - {att.contentGiven || 'Sem resumo de conteúdo.'}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-6 text-right align-top">
+                                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all print:hidden">
+                                    <button 
+                                      onClick={() => setViewingAttendance(att)}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                      title="Ver Detalhes"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setViewingAttendance(att);
+                                        setTimeout(() => window.print(), 500);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                      title="Imprimir"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleEditAttendance(att)}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                      title="Editar"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteAttendance(att.id)}
+                                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {attendanceViewMode === 'months' && (
+                      <div className="space-y-8">
+                        {Array.from(new Set(attendances.map(a => a.date.substring(0, 7))))
+                          .sort((a, b) => b.localeCompare(a))
+                          .map(month => {
+                            const monthAttendances = attendances.filter(a => {
+                              const matchesMonth = a.date.startsWith(month);
+                              const matchesClass = isAdmin 
+                                ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
+                                : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
+                              const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
+                                                 (!attendanceEndDate || a.date <= attendanceEndDate);
+                              const matchesAccess = isAdmin || user.classIds.includes(a.classId);
+                              return matchesMonth && matchesClass && matchesDate && matchesAccess;
+                            });
+
+                            if (monthAttendances.length === 0) return null;
+
+                            return (
+                              <div key={month} className="space-y-4">
+                                <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Calendar className="w-4 h-4" />
+                                  {safeFormat(`${month}-01`, 'MMMM yyyy', { locale: ptBR })}
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {monthAttendances.sort((a, b) => b.date.localeCompare(a.date)).map(att => (
+                                    <div key={att.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:shadow-md transition-all group">
+                                      <div className="flex items-center justify-between mb-3">
+                                        <span className="text-sm font-bold text-slate-900">
+                                          {safeFormat(att.date, 'dd/MM/yyyy')}
+                                        </span>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                          <button onClick={() => setViewingAttendance(att)} className="p-1 text-slate-400 hover:text-indigo-600"><Eye className="w-4 h-4" /></button>
+                                          <button onClick={() => { setViewingAttendance(att); setTimeout(() => window.print(), 500); }} className="p-1 text-slate-400 hover:text-indigo-600"><Printer className="w-4 h-4" /></button>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs font-medium text-slate-500 mb-2">
+                                        {classes.find(c => c.id === att.classId)?.name}
+                                      </p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-green-600 bg-green-100/50 px-2 py-0.5 rounded-full">
+                                          {att.presentStudentIds.length} P
+                                        </span>
+                                        <span className="text-[10px] font-bold text-red-600 bg-red-100/50 px-2 py-0.5 rounded-full">
+                                          {att.absentStudentIds.length} F
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+
+                    {attendanceViewMode === 'icons' && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                         {attendances
                           .filter(a => {
-                            const matchesClass = attendanceFilterClass === 'all' || a.classId === attendanceFilterClass;
-                            const matchesMonth = a.date.startsWith(attendanceFilterMonth);
+                            const matchesClass = isAdmin 
+                              ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
+                              : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
+                            const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
+                                               (!attendanceEndDate || a.date <= attendanceEndDate);
                             const matchesAccess = isAdmin || user.classIds.includes(a.classId);
-                            return matchesClass && matchesMonth && matchesAccess;
+                            return matchesClass && matchesDate && matchesAccess;
                           })
                           .sort((a, b) => b.date.localeCompare(a.date))
-                          .map((att) => (
-                          <tr key={att.id} className="hover:bg-slate-50/50 transition-colors group">
-                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                              {format(parseISO(att.date), 'dd/MM/yyyy')}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-slate-600">
-                              {classes.find(c => c.id === att.classId)?.name}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg">
-                                  {att.presentStudentIds.length} P
-                                </span>
-                                <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-lg">
-                                  {att.absentStudentIds.length} F
-                                </span>
+                          .map(att => (
+                            <button 
+                              key={att.id}
+                              onClick={() => setViewingAttendance(att)}
+                              className="p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-500 hover:shadow-sm transition-all text-center group relative"
+                            >
+                              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mx-auto mb-2 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                <CheckSquare className="w-4 h-4" />
                               </div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                <button 
-                                  onClick={() => handleEditAttendance(att)}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                >
-                                  <Edit className="w-5 h-5" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteAttendance(att.id)}
-                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </button>
+                              <p className="text-[10px] font-bold text-slate-900">{safeFormat(att.date, 'dd/MM')}</p>
+                              <p className="text-[9px] text-slate-500 truncate">{classes.find(c => c.id === att.classId)?.name}</p>
+                              
+                              <div className="absolute -top-1 -right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                <div className="p-1 bg-white shadow-md rounded-full text-indigo-600" onClick={(e) => { e.stopPropagation(); setViewingAttendance(att); setTimeout(() => window.print(), 500); }}>
+                                  <Printer className="w-3 h-3" />
+                                </div>
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </button>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1268,6 +1953,103 @@ export default function AcademicModule({ user, subTab }: Props) {
                 Selecione uma turma para realizar a chamada.
               </div>
             )}
+          </div>
+        )}
+
+        {subTab === 'schoolYear' && (
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 max-w-2xl mx-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Configuração do Ano Letivo</h3>
+                <p className="text-sm text-slate-500">Defina o ano letivo atual para o sistema</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  O ano letivo definido aqui será automaticamente vinculado a todas as <strong>novas turmas</strong> criadas.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Ano Letivo Atual</label>
+                  <div className="flex gap-4">
+                    <input 
+                      type="number" 
+                      min="2000"
+                      max="2100"
+                      value={schoolYear}
+                      onChange={(e) => setSchoolYear(e.target.value)}
+                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold"
+                      placeholder="Ex: 2024"
+                    />
+                    <button
+                      onClick={async () => {
+                        try {
+                          await setDoc(doc(db, 'config', 'schoolYear'), { 
+                            startDate: `${schoolYear}-01-01`,
+                            endDate: `${schoolYear}-12-31`,
+                            updatedAt: new Date().toISOString()
+                          });
+                          showAlert('Sucesso', 'Ano letivo atualizado com sucesso!');
+                        } catch (err) {
+                          handleFirestoreError(err, OperationType.UPDATE, 'config/schoolYear');
+                        }
+                      }}
+                      className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
+                    >
+                      <Save className="w-5 h-5" />
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Data de Início</label>
+                    <input
+                      type="date"
+                      value={schoolYearConfig?.startDate || ''}
+                      onChange={async (e) => {
+                        await updateDoc(doc(db, 'config', 'schoolYear'), { startDate: e.target.value });
+                      }}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Data de Término</label>
+                    <input
+                      type="date"
+                      value={schoolYearConfig?.endDate || ''}
+                      onChange={async (e) => {
+                        await updateDoc(doc(db, 'config', 'schoolYear'), { endDate: e.target.value });
+                      }}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-100">
+                  <button
+                    onClick={handleCloseSchoolYear}
+                    disabled={loading}
+                    className="w-full py-4 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-all flex items-center justify-center gap-3 border border-red-100"
+                  >
+                    <XCircle className="w-6 h-6" />
+                    {loading ? 'Processando Rematrícula...' : 'ENCERRAR ANO LETIVO E REMATRICULAR'}
+                  </button>
+                  <p className="text-center text-xs text-slate-400 mt-2">
+                    Atenção: Esta ação é irreversível e automatiza a progressão de todos os alunos.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1280,7 +2062,7 @@ export default function AcademicModule({ user, subTab }: Props) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+              className={`bg-white rounded-2xl shadow-2xl w-full overflow-y-auto ${subTab === 'teachers' ? 'max-w-4xl max-h-[90vh]' : 'max-w-lg max-h-[90vh]'}`}
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
@@ -1307,9 +2089,8 @@ export default function AcademicModule({ user, subTab }: Props) {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Data de Nascimento</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase">Data de Nascimento (Opcional)</label>
                       <input
-                        required
                         type="date"
                         value={studentForm.birthDate}
                         onChange={(e) => setStudentForm({ ...studentForm, birthDate: e.target.value })}
@@ -1348,6 +2129,45 @@ export default function AcademicModule({ user, subTab }: Props) {
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Ano Letivo</label>
+                      <select
+                        required
+                        value={studentForm.schoolYear}
+                        onChange={(e) => setStudentForm({ ...studentForm, schoolYear: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        {Array.from({ length: 11 }, (_, i) => (new Date().getFullYear() - 5 + i).toString()).map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                      <select
+                        value={studentForm.status}
+                        onChange={(e) => setStudentForm({ ...studentForm, status: e.target.value as any })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="ativo">Ativo</option>
+                        <option value="concluído">Concluído</option>
+                        <option value="transferido">Transferido</option>
+                        <option value="evadido">Evadido</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <input
+                        type="checkbox"
+                        id="doNotRenew"
+                        checked={studentForm.doNotRenew}
+                        onChange={(e) => setStudentForm({ ...studentForm, doNotRenew: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                      />
+                      <label htmlFor="doNotRenew" className="text-sm font-medium text-slate-700">Não renovar matrícula automaticamente</label>
+                    </div>
                   </div>
                   <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
                     {editingStudent ? 'Atualizar Aluno' : 'Salvar Aluno'}
@@ -1356,99 +2176,169 @@ export default function AcademicModule({ user, subTab }: Props) {
               )}
 
               {subTab === 'teachers' && (
-                <form onSubmit={handleAddTeacher} className="p-6 space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
-                    <input
-                      required
-                      type="text"
-                      value={teacherForm.name}
-                      onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Email (Login)</label>
-                      <input
-                        required
-                        type="email"
-                        value={teacherForm.email}
-                        onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Senha Provisória</label>
-                      <input
-                        required={!editingTeacher}
-                        type="password"
-                        value={teacherForm.password}
-                        onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
-                        placeholder={editingTeacher ? 'Deixe em branco para manter' : ''}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Contato (Telefone)</label>
-                    <input
-                      type="text"
-                      value={teacherForm.contact}
-                      onChange={(e) => setTeacherForm({ ...teacherForm, contact: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Vincular Turmas (Múltipla Seleção)</label>
-                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50">
-                      {classes.map(c => (
-                        <label key={c.id} className="flex items-center gap-2 text-sm text-slate-600">
-                          <input 
-                            type="checkbox"
-                            checked={teacherForm.classIds.includes(c.id)}
-                            onChange={(e) => {
-                              const ids = e.target.checked 
-                                ? [...teacherForm.classIds, c.id]
-                                : teacherForm.classIds.filter(id => id !== c.id);
-                              setTeacherForm({ ...teacherForm, classIds: ids });
-                            }}
+                <form onSubmit={handleAddTeacher} className="p-8 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Left Column: Basic Info */}
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
+                        <input
+                          required
+                          type="text"
+                          value={teacherForm.name}
+                          onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Email (Login)</label>
+                          <input
+                            required
+                            type="email"
+                            value={teacherForm.email}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-                          {c.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
-                    <div className="grid grid-cols-2 gap-2 p-2 border border-slate-200 rounded-xl bg-slate-50">
-                      {[
-                        { id: 'dashboard', label: 'Dashboard' },
-                        { id: 'academic', label: 'Acadêmico' },
-                        { id: 'projects', label: 'Projetos' },
-                        { id: 'finance', label: 'Financeiro' },
-                        { id: 'reports', label: 'Relatórios' },
-                        { id: 'planning', label: 'Planejamento' },
-                        { id: 'attendance', label: 'Chamada' },
-                        { id: 'students', label: 'Alunos' },
-                      ].map(tab => (
-                        <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600">
-                          <input 
-                            type="checkbox"
-                            checked={teacherForm.allowedTabs.includes(tab.id)}
-                            onChange={(e) => {
-                              const tabs = e.target.checked 
-                                ? [...teacherForm.allowedTabs, tab.id]
-                                : teacherForm.allowedTabs.filter(id => id !== tab.id);
-                              setTeacherForm({ ...teacherForm, allowedTabs: tabs });
-                            }}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Senha Provisória</label>
+                          <input
+                            required={!editingTeacher}
+                            type="password"
+                            value={teacherForm.password}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
+                            placeholder={editingTeacher ? 'Deixe em branco' : ''}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-                          {tab.label}
-                        </label>
-                      ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Contato (Telefone)</label>
+                          <input
+                            type="text"
+                            value={teacherForm.contact}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, contact: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Profissão</label>
+                          <input
+                            type="text"
+                            value={teacherForm.profession}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, profession: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Início Exercício Docente na EBD</label>
+                        <input
+                          type="date"
+                          value={teacherForm.startDateEBD}
+                          onChange={(e) => setTeacherForm({ ...teacherForm, startDateEBD: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Professor</label>
+                        <textarea
+                          value={teacherForm.generalProfile}
+                          onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
+                          placeholder="Descreva o perfil, experiências e observações..."
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Column: Permissions & Classes */}
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Vincular Turmas</label>
+                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 border border-slate-200 rounded-xl bg-slate-50">
+                          {classes.map(c => (
+                            <label key={c.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                              <input 
+                                type="checkbox"
+                                checked={teacherForm.classIds.includes(c.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked 
+                                    ? [...teacherForm.classIds, c.id]
+                                    : teacherForm.classIds.filter(id => id !== c.id);
+                                  setTeacherForm({ ...teacherForm, classIds: ids });
+                                }}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                              />
+                              {c.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
+                        <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-64 overflow-y-auto">
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Módulos Principais</p>
+                            {[
+                              { id: 'dashboard', label: 'Dashboard' },
+                              { id: 'academic', label: 'Acadêmico' },
+                              { id: 'projects', label: 'Projetos' },
+                              { id: 'finance', label: 'Financeiro' },
+                              { id: 'reports', label: 'Relatórios' },
+                            ].map(tab => (
+                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                <input 
+                                  type="checkbox"
+                                  checked={teacherForm.allowedTabs.includes(tab.id)}
+                                  onChange={(e) => {
+                                    const tabs = e.target.checked 
+                                      ? [...teacherForm.allowedTabs, tab.id]
+                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
+                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                {tab.label}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
+                            {[
+                              { id: 'students', label: 'Alunos' },
+                              { id: 'teachers', label: 'Professores' },
+                              { id: 'classes', label: 'Turmas' },
+                              { id: 'attendance', label: 'Chamada' },
+                              { id: 'planning', label: 'Planejamento' },
+                              { id: 'schoolYear', label: 'Ano Letivo' },
+                              { id: 'regimento', label: 'Regimento' },
+                              { id: 'calendar', label: 'Calendário' },
+                              { id: 'organogram', label: 'Organograma' },
+                              { id: 'system', label: 'Sistema' },
+                            ].map(tab => (
+                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                <input 
+                                  type="checkbox"
+                                  checked={teacherForm.allowedTabs.includes(tab.id)}
+                                  onChange={(e) => {
+                                    const tabs = e.target.checked 
+                                      ? [...teacherForm.allowedTabs, tab.id]
+                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
+                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                {tab.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
                     {editingTeacher ? 'Atualizar Professor' : 'Salvar Professor'}
                   </button>
                 </form>
@@ -1466,15 +2356,30 @@ export default function AcademicModule({ user, subTab }: Props) {
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Faixa Etária</label>
-                    <input
-                      required
-                      type="text"
-                      value={classForm.ageRange}
-                      onChange={(e) => setClassForm({ ...classForm, ageRange: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Faixa Etária</label>
+                      <input
+                        required
+                        type="text"
+                        value={classForm.ageRange}
+                        onChange={(e) => setClassForm({ ...classForm, ageRange: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Ano Letivo</label>
+                      <select
+                        required
+                        value={classForm.schoolYear}
+                        onChange={(e) => setClassForm({ ...classForm, schoolYear: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        {Array.from({ length: 11 }, (_, i) => (new Date().getFullYear() - 5 + i).toString()).map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Professor Responsável</label>
@@ -1487,8 +2392,33 @@ export default function AcademicModule({ user, subTab }: Props) {
                       {teachers.filter(t => t.role === 'teacher').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Nível da Série (Ordem)</label>
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        value={classForm.gradeLevel}
+                        onChange={(e) => setClassForm({ ...classForm, gradeLevel: parseInt(e.target.value) })}
+                        placeholder="Ex: 1 para 1º ano"
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <input
+                        type="checkbox"
+                        id="isFinalGrade"
+                        checked={classForm.isFinalGrade}
+                        onChange={(e) => setClassForm({ ...classForm, isFinalGrade: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                      />
+                      <label htmlFor="isFinalGrade" className="text-sm font-medium text-slate-700">Série Final (Concluintes)</label>
+                    </div>
+                  </div>
                   <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
-                    Salvar Turma
+                    {editingClass ? 'Atualizar Turma' : 'Salvar Turma'}
                   </button>
                 </form>
               )}
@@ -1641,7 +2571,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                       {classes.find(c => c.id === att.classId)?.name}
                     </p>
                     <p className="text-lg font-black text-slate-900">
-                      {format(parseISO(att.date), "dd 'de' MMMM", { locale: ptBR })}
+                      {safeFormat(att.date, "dd 'de' MMMM", { locale: ptBR })}
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -1682,6 +2612,128 @@ export default function AcademicModule({ user, subTab }: Props) {
           </div>
         </div>
       )}
+      {/* View Attendance Modal */}
+      <AnimatePresence>
+        {viewingAttendance && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm print:p-0 print:bg-white">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto print:shadow-none print:max-h-none print:rounded-none"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10 print:border-b-2 print:border-slate-900">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Relatório de Chamada</h3>
+                  <p className="text-sm text-slate-500 font-bold">
+                    {safeFormat(viewingAttendance.date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {classes.find(c => c.id === viewingAttendance.classId)?.name}
+                  </p>
+                </div>
+                <div className="flex gap-2 print:hidden">
+                  <button 
+                    onClick={() => window.print()}
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
+                    title="Imprimir"
+                  >
+                    <Printer className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setViewingAttendance(null)} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <XCircle className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-8 space-y-8 print:p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:text-slate-900">Conteúdo Ministrado</h4>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap print:bg-white print:border-slate-200">
+                        {viewingAttendance.contentGiven || 'Nenhum conteúdo registrado.'}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:text-slate-900">Metodologia</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {viewingAttendance.methodology ? (
+                          viewingAttendance.methodology.split(', ').map(m => (
+                            <span key={m} className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold border border-indigo-100 print:bg-white print:border-slate-300 print:text-slate-900">
+                              {m}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-slate-400 italic print:text-slate-500">Nenhuma metodologia registrada.</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 print:text-slate-900">Observações</h4>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm text-slate-700 italic whitespace-pre-wrap print:bg-white print:border-slate-200">
+                        {viewingAttendance.observation || 'Sem observações.'}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-3 bg-green-50 rounded-xl border border-green-100 print:bg-white print:border-slate-200">
+                        <p className="text-[10px] font-bold text-green-600 uppercase mb-1 print:text-slate-900">Presentes</p>
+                        <p className="text-xl font-black text-green-700 print:text-slate-900">{viewingAttendance.presentStudentIds.length}</p>
+                      </div>
+                      <div className="p-3 bg-red-50 rounded-xl border border-red-100 print:bg-white print:border-slate-200">
+                        <p className="text-[10px] font-bold text-red-600 uppercase mb-1 print:text-slate-900">Faltas</p>
+                        <p className="text-xl font-black text-red-700 print:text-slate-900">{viewingAttendance.absentStudentIds.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest print:text-slate-900">Lista de Alunos</h4>
+                  <div className="border border-slate-100 rounded-2xl overflow-hidden print:border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 print:bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 font-bold text-slate-600 print:text-slate-900">Aluno</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 print:text-slate-900">Status</th>
+                          <th className="px-4 py-3 font-bold text-slate-600 print:text-slate-900">Justificativa</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 print:divide-slate-200">
+                        {students
+                          .filter(s => s.classId === viewingAttendance.classId)
+                          .map(student => {
+                            const isPresent = viewingAttendance.presentStudentIds.includes(student.id);
+                            const justification = viewingAttendance.justifications?.[student.id];
+                            return (
+                              <tr key={student.id}>
+                                <td className="px-4 py-3 font-medium text-slate-900">{student.name}</td>
+                                <td className="px-4 py-3">
+                                  {isPresent ? (
+                                    <span className="text-green-600 font-bold flex items-center gap-1 print:text-slate-900">
+                                      <CheckCircle2 className="w-4 h-4 print:hidden" /> Presente
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-600 font-bold flex items-center gap-1 print:text-slate-900">
+                                      <XCircle className="w-4 h-4 print:hidden" /> Falta
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-slate-500 italic text-xs print:text-slate-600">
+                                  {justification || '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Range Report Modal */}
       <AnimatePresence>
         {showRangeReportModal && (
@@ -1709,6 +2761,19 @@ export default function AcademicModule({ user, subTab }: Props) {
               
               <div className="p-6 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-4 items-end print:hidden">
                 <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Turma</label>
+                  <select
+                    value={reportFilterClass}
+                    onChange={(e) => setReportFilterClass(e.target.value)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
+                  >
+                    <option value="all">Todas as Turmas</option>
+                    {filteredClasses.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Data Início</label>
                   <input 
                     type="date" 
@@ -1732,7 +2797,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Relatório de Chamadas e Registros</h2>
                   <p className="text-slate-500 font-bold">
-                    Período: {format(parseISO(reportStartDate), 'dd/MM/yyyy')} até {format(parseISO(reportEndDate), 'dd/MM/yyyy')}
+                    Período: {safeFormat(reportStartDate, 'dd/MM/yyyy')} até {safeFormat(reportEndDate, 'dd/MM/yyyy')}
                   </p>
                 </div>
 
@@ -1741,8 +2806,9 @@ export default function AcademicModule({ user, subTab }: Props) {
                     .filter(a => {
                       const date = a.date;
                       const matchesRange = date >= reportStartDate && date <= reportEndDate;
+                      const matchesClass = reportFilterClass === 'all' || a.classId === reportFilterClass;
                       const matchesAccess = isAdmin || user.classIds.includes(a.classId);
-                      return matchesRange && matchesAccess;
+                      return matchesRange && matchesClass && matchesAccess;
                     })
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map(att => (
@@ -1750,7 +2816,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-sm font-bold">
-                              {format(parseISO(att.date), 'dd/MM/yyyy')}
+                              {safeFormat(att.date, 'dd/MM/yyyy')}
                             </div>
                             <span className="font-bold text-slate-900 uppercase text-sm">
                               {classes.find(c => c.id === att.classId)?.name}
@@ -1798,8 +2864,9 @@ export default function AcademicModule({ user, subTab }: Props) {
                   {attendances.filter(a => {
                     const date = a.date;
                     const matchesRange = date >= reportStartDate && date <= reportEndDate;
+                    const matchesClass = reportFilterClass === 'all' || a.classId === reportFilterClass;
                     const matchesAccess = isAdmin || user.classIds.includes(a.classId);
-                    return matchesRange && matchesAccess;
+                    return matchesRange && matchesClass && matchesAccess;
                   }).length === 0 && (
                     <div className="text-center py-20 text-slate-400">
                       Nenhum registro encontrado para o período selecionado.
@@ -1840,7 +2907,7 @@ export default function AcademicModule({ user, subTab }: Props) {
                   <div key={report.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
-                        {format(parseISO(report.date), 'dd/MM/yyyy')}
+                        {safeFormat(report.date, 'dd/MM/yyyy')}
                       </span>
                       <span className="text-[10px] text-slate-400">
                         Por: {teachers.find(t => t.id === (reportType === 'student' ? (report as StudentReport).teacherId : (report as TeacherReport).adminId))?.name || 'Sistema'}
@@ -1942,6 +3009,374 @@ export default function AcademicModule({ user, subTab }: Props) {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Clone Class Modal */}
+      <AnimatePresence>
+        {showCloneModal && cloningClass && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 mx-auto mb-6">
+                  <Copy className="w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">Clonar Turma</h3>
+                <p className="text-slate-500 font-medium mb-8">
+                  Você está clonando a turma <span className="text-indigo-600 font-bold">{cloningClass.name}</span>. 
+                  Os alunos serão vinculados automaticamente à nova turma.
+                </p>
+
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 text-left">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className="relative flex items-center mt-1">
+                      <input
+                        type="checkbox"
+                        checked={resetAttendanceOnClone}
+                        onChange={(e) => setResetAttendanceOnClone(e.target.checked)}
+                        className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-slate-300 transition-all checked:bg-indigo-600 checked:border-indigo-600"
+                      />
+                      <Check className="absolute h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">
+                        Resetar frequência dos alunos
+                      </span>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Se marcado, a nova turma começará sem registros de chamada. A frequência da turma original não será afetada.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={executeCloneClass}
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Copy className="w-5 h-5" />
+                    Confirmar Clonagem
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCloneModal(false);
+                      setCloningClass(null);
+                    }}
+                    className="w-full py-4 bg-white text-slate-500 font-bold rounded-2xl hover:bg-slate-50 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Student History Modal */}
+      <AnimatePresence>
+        {viewingStudentHistory && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-indigo-200">
+                    {viewingStudentHistory.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900">{viewingStudentHistory.name}</h3>
+                    <p className="text-slate-500 font-medium">Histórico de Trajetória Escolar</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewingStudentHistory(null)} className="p-2 hover:bg-slate-200 rounded-xl transition-all">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-8 max-h-[70vh] overflow-y-auto">
+                <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+                  {/* Current Enrollment */}
+                  <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-indigo-600 text-white shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 shadow-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <time className="font-black text-indigo-600 uppercase text-xs">Ano Atual</time>
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-600 text-white rounded-full">ATIVO</span>
+                      </div>
+                      <div className="text-slate-900 font-bold">
+                        {classes.find(c => c.id === viewingStudentHistory.classId)?.name || 'Sem Turma'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">Matrícula: {viewingStudentHistory.registrationNumber}</div>
+                    </div>
+                  </div>
+
+                  {/* Past Enrollments */}
+                  {studentHistory
+                    .sort((a, b) => b.schoolYear.localeCompare(a.schoolYear))
+                    .map((enroll, idx) => (
+                    <div key={enroll.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-100 text-slate-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+                        <div className="w-2 h-2 bg-slate-300 rounded-full"></div>
+                      </div>
+                      <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-slate-100 bg-white hover:border-slate-200 transition-all">
+                        <div className="flex items-center justify-between mb-1">
+                          <time className="font-black text-slate-400 uppercase text-xs">{enroll.schoolYear}</time>
+                          <span className={cn(
+                            "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                            enroll.status === 'concluído' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"
+                          )}>
+                            {enroll.status}
+                          </span>
+                        </div>
+                        <div className="text-slate-700 font-bold">
+                          {classes.find(c => c.id === enroll.classId)?.name || 'Turma Antiga'}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Matrícula: {enroll.registrationNumber}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {studentHistory.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-8 h-8 text-slate-200" />
+                    </div>
+                    <p className="text-slate-400 font-medium">Nenhum histórico anterior encontrado.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rematriculation Modal */}
+      <AnimatePresence>
+        {showReenrollmentModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Processar Rematrícula</h3>
+                    <p className="text-indigo-100 text-sm">Selecione as turmas para o próximo ano</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowReenrollmentModal(false)} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-bold mb-1">Atenção!</p>
+                    <p>As turmas selecionadas serão duplicadas para o ano de {parseInt(schoolYear) + 1}. Os alunos serão rematriculados automaticamente e as turmas atuais serão <strong>finalizadas</strong>.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Turmas Ativas ({schoolYear})</label>
+                    <button 
+                      onClick={() => {
+                        const allIds = classes.filter(c => c.schoolYear === schoolYear && c.status !== 'ENCERRADA').map(c => c.id);
+                        setSelectedClassesForReenroll(selectedClassesForReenroll.length === allIds.length ? [] : allIds);
+                      }}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                    >
+                      {selectedClassesForReenroll.length === classes.filter(c => c.schoolYear === schoolYear && c.status !== 'ENCERRADA').length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2">
+                    {classes
+                      .filter(c => c.schoolYear === schoolYear && c.status !== 'ENCERRADA')
+                      .map(c => (
+                        <label 
+                          key={c.id} 
+                          className={cn(
+                            "flex items-center gap-3 p-4 rounded-2xl border transition-all cursor-pointer",
+                            selectedClassesForReenroll.includes(c.id) 
+                              ? "bg-indigo-50 border-indigo-200 shadow-sm" 
+                              : "bg-slate-50 border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          <input 
+                            type="checkbox"
+                            checked={selectedClassesForReenroll.includes(c.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedClassesForReenroll([...selectedClassesForReenroll, c.id]);
+                              else setSelectedClassesForReenroll(selectedClassesForReenroll.filter(id => id !== c.id));
+                            }}
+                            className="w-5 h-5 text-indigo-600 border-slate-300 rounded-lg focus:ring-indigo-500"
+                          />
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{c.name}</p>
+                            <p className="text-[10px] text-slate-500">{students.filter(s => s.classId === c.id).length} Alunos</p>
+                          </div>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleAutoReenrollment}
+                  disabled={loading || selectedClassesForReenroll.length === 0}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-3"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-6 h-6" />
+                      Confirmar e Processar Rematrícula
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Generic Confirmation/Alert Modal */}
+      <AnimatePresence>
+        {modalConfig.show && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
+                  modalConfig.type === 'confirm' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
+                )}>
+                  {modalConfig.type === 'confirm' ? <AlertCircle className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mb-2">{modalConfig.title}</h3>
+                <p className="text-slate-500 font-medium mb-8">{modalConfig.message}</p>
+
+                {modalConfig.isPassword && (
+                  <div className="mb-6">
+                    <input
+                      id="modal-password-input"
+                      type="password"
+                      placeholder="Digite a senha..."
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget.value;
+                          if (modalConfig.onConfirm) modalConfig.onConfirm(input);
+                          setModalConfig(prev => ({ ...prev, show: false }));
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  {modalConfig.type === 'confirm' && (
+                    <button
+                      onClick={() => setModalConfig(prev => ({ ...prev, show: false }))}
+                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (modalConfig.type === 'confirm' && modalConfig.onConfirm) {
+                        const input = (document.getElementById('modal-password-input') as HTMLInputElement)?.value;
+                        modalConfig.onConfirm(input);
+                      }
+                      setModalConfig(prev => ({ ...prev, show: false }));
+                    }}
+                    className={cn(
+                      "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg",
+                      modalConfig.type === 'confirm' ? "bg-amber-600 hover:bg-amber-700 shadow-amber-100" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                    )}
+                  >
+                    {modalConfig.type === 'confirm' ? 'Confirmar' : 'Entendido'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reenrollment Summary Modal */}
+      <AnimatePresence>
+        {showReenrollmentSummary && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center text-green-600 mx-auto mb-6">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">Rematrícula Concluída!</h3>
+                <p className="text-slate-500 font-medium mb-8">
+                  O processo de encerramento do ano letivo e rematrícula automática foi finalizado com sucesso.
+                </p>
+
+                <div className="grid grid-cols-1 gap-4 mb-8">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                    <span className="text-sm font-bold text-slate-600">Alunos Rematriculados</span>
+                    <span className="text-lg font-black text-indigo-600">{reenrollmentSummary.studentsReenrolled}</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                    <span className="text-sm font-bold text-slate-600">Alunos Concluintes</span>
+                    <span className="text-lg font-black text-green-600">{reenrollmentSummary.studentsCompleted}</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                    <span className="text-sm font-bold text-slate-600">Novas Turmas Criadas</span>
+                    <span className="text-lg font-black text-amber-600">{reenrollmentSummary.classesCreated}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowReenrollmentSummary(false)}
+                  className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl transition-all"
+                >
+                  Entendido
+                </button>
               </div>
             </motion.div>
           </div>
