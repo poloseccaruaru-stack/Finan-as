@@ -50,7 +50,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
     description: '',
     teacherIds: [] as string[],
     studentIds: [] as string[],
-    startDate: format(new Date(), 'yyyy-MM-dd'),
+    startDate: safeFormat(new Date(), 'yyyy-MM-dd') || "",
     endDate: '',
     status: 'EM ANDAMENTO' as 'EM ANDAMENTO' | 'FINALIZADO',
     evaluation: '',
@@ -122,7 +122,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
         description: form.description || "",
         teacherIds: form.teacherIds || [],
         studentIds: form.studentIds || [],
-        startDate: form.startDate || format(new Date(), 'yyyy-MM-dd'),
+        startDate: form.startDate || safeFormat(new Date(), 'yyyy-MM-dd') || "",
         endDate: form.endDate || "",
         status: form.status || 'EM ANDAMENTO',
         evaluation: form.evaluation || "",
@@ -143,7 +143,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
       }
       setShowForm(false);
       setEditingProject(null);
-      setForm({ title: '', description: '', teacherIds: [], studentIds: [], startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', status: 'EM ANDAMENTO', evaluation: '', results: '' });
+      setForm({ title: '', description: '', teacherIds: [], studentIds: [], startDate: safeFormat(new Date(), 'yyyy-MM-dd') || "", endDate: '', status: 'EM ANDAMENTO', evaluation: '', results: '' });
     } catch (err) {
       handleFirestoreError(err, editingProject ? OperationType.UPDATE : OperationType.CREATE, 'projects');
     }

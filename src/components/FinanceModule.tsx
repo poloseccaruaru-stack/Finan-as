@@ -30,7 +30,7 @@ import {
   Printer
 } from 'lucide-react';
 import { Transaction, Budget, CATEGORIES, Teacher, EstimatedExpense } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -55,7 +55,7 @@ export default function FinanceModule({ user }: Props) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
-  const [filterMonth, setFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [filterMonth, setFilterMonth] = useState(safeFormat(new Date(), 'yyyy-MM'));
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState({
@@ -63,12 +63,12 @@ export default function FinanceModule({ user }: Props) {
     amount: 0,
     type: 'expense' as 'income' | 'expense',
     category: CATEGORIES[0],
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
     status: 'paid' as 'pending' | 'paid'
   });
 
   const [budgetForm, setBudgetForm] = useState({
-    month: format(new Date(), 'yyyy-MM'),
+    month: safeFormat(new Date(), 'yyyy-MM'),
     totalBudget: 0
   });
 
@@ -146,12 +146,12 @@ export default function FinanceModule({ user }: Props) {
         amount: form.amount || 0,
         type: form.type || 'expense',
         category: form.category || CATEGORIES[0],
-        date: form.date || format(new Date(), 'yyyy-MM-dd'),
+        date: form.date || safeFormat(new Date(), 'yyyy-MM-dd'),
         status: form.status || 'paid',
         createdAt: new Date().toISOString()
       });
       setShowForm(false);
-      setForm({ description: '', amount: 0, type: 'expense', category: CATEGORIES[0], date: format(new Date(), 'yyyy-MM-dd'), status: 'paid' });
+      setForm({ description: '', amount: 0, type: 'expense', category: CATEGORIES[0], date: safeFormat(new Date(), 'yyyy-MM-dd'), status: 'paid' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'transactions');
     }
@@ -184,13 +184,13 @@ export default function FinanceModule({ user }: Props) {
         });
       } else {
         await addDoc(collection(db, 'budgets'), {
-          month: budgetForm.month || format(new Date(), 'yyyy-MM'),
+          month: budgetForm.month || safeFormat(new Date(), 'yyyy-MM'),
           totalBudget: budgetForm.totalBudget || 0,
           createdAt: new Date().toISOString()
         });
       }
       setShowBudgetForm(false);
-      setBudgetForm({ month: format(new Date(), 'yyyy-MM'), totalBudget: 0 });
+      setBudgetForm({ month: safeFormat(new Date(), 'yyyy-MM'), totalBudget: 0 });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'budgets');
     }
@@ -396,7 +396,7 @@ export default function FinanceModule({ user }: Props) {
                 {currentMonthTransactions.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {format(parseISO(t.date), 'dd/MM/yyyy')}
+                      {safeFormat(t.date, 'dd/MM/yyyy')}
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-bold text-slate-900">{t.description}</p>

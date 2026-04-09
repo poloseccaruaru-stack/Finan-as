@@ -44,19 +44,8 @@ import {
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const safeFormat = (dateStr: string | undefined | null, formatStr: string, options?: any) => {
-  if (!dateStr) return '-';
-  try {
-    const date = parseISO(dateStr);
-    if (!isValid(date)) return '-';
-    return format(date, formatStr, options);
-  } catch (e) {
-    return '-';
-  }
-};
 
 interface Props {
   user: Teacher;
@@ -100,20 +89,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [showJustifyModal, setShowJustifyModal] = useState(false);
   const [currentJustifyStudent, setCurrentJustifyStudent] = useState<string | null>(null);
   const [newJustification, setNewJustification] = useState('');
-  const [attendanceFilterMonth, setAttendanceFilterMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [attendanceFilterMonth, setAttendanceFilterMonth] = useState(safeFormat(new Date(), 'yyyy-MM') || "");
   const [attendanceFilterClass, setAttendanceFilterClass] = useState<string>('all');
   const [showReportModal, setShowReportModal] = useState(false);
   const [showReportListModal, setShowReportListModal] = useState(false);
   const [showGeneralReportModal, setShowGeneralReportModal] = useState(false);
   const [showRangeReportModal, setShowRangeReportModal] = useState(false);
-  const [reportStartDate, setReportStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [reportEndDate, setReportEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportStartDate, setReportStartDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
+  const [reportEndDate, setReportEndDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [reportType, setReportType] = useState<'student' | 'teacher'>('student');
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
   const [viewingAttendance, setViewingAttendance] = useState<Attendance | null>(null);
   const [reportFilterClass, setReportFilterClass] = useState<string>('all');
   const [reportContent, setReportContent] = useState('');
-  const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [reportDate, setReportDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [aulaObjetivos, setAulaObjetivos] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
   const [alunosParticiparam, setAlunosParticiparam] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -730,7 +719,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   // Attendance Logic
   const [attendanceList, setAttendanceList] = useState<{ [key: string]: boolean }>({});
   const [justifications, setJustifications] = useState<{ [key: string]: string }>({});
-  const [attendanceDate, setAttendanceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [attendanceDate, setAttendanceDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [startTime, setStartTime] = useState('15:50');
   const [endTime, setEndTime] = useState('16:40');
   const [contentGiven, setContentGiven] = useState('');

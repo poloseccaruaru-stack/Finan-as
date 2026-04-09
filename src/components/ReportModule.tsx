@@ -35,22 +35,11 @@ import {
   StudentReport,
   TeacherReport
 } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { addDoc, deleteDoc, doc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
-
-const safeFormat = (dateStr: string | undefined | null, formatStr: string) => {
-  if (!dateStr) return '-';
-  try {
-    const date = parseISO(dateStr);
-    if (!isValid(date)) return '-';
-    return format(date, formatStr);
-  } catch (e) {
-    return '-';
-  }
-};
 
 interface Props {
   user: Teacher;
@@ -81,7 +70,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [manualReportForm, setManualReportForm] = useState({
     title: '',
     content: '',
-    date: format(new Date(), 'yyyy-MM-dd')
+    date: safeFormat(new Date(), 'yyyy-MM-dd') || ""
   });
 
   const [loading, setLoading] = useState(true);
@@ -233,11 +222,11 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
       await addDoc(collection(db, 'manual_reports'), {
         title: manualReportForm.title || "",
         content: manualReportForm.content || "",
-        date: manualReportForm.date || format(new Date(), 'yyyy-MM-dd'),
+        date: manualReportForm.date || safeFormat(new Date(), 'yyyy-MM-dd') || "",
         createdAt: new Date().toISOString()
       });
       setShowManualReportForm(false);
-      setManualReportForm({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd') });
+      setManualReportForm({ title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "" });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'manual_reports');
     }

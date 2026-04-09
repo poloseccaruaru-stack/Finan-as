@@ -40,7 +40,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Planning, Teacher, Class } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { suggestPlanning } from '../services/geminiService';
 
@@ -134,7 +134,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const handleAISuggest = async () => {
     if (!selectedDate || !selectedClassId) return;
     const className = classes.find(c => c.id === selectedClassId)?.name || "";
-    const dateStr = format(selectedDate, 'dd/MM/yyyy');
+    const dateStr = safeFormat(selectedDate, 'dd/MM/yyyy');
     
     setSuggesting(true);
     try {
@@ -160,11 +160,11 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
     }
 
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const dateStr = safeFormat(selectedDate, 'yyyy-MM-dd');
       const existing = plannings.find(p => p.date === dateStr && p.classId === selectedClassId);
       
       const planningData = {
-        month: format(currentMonth, 'yyyy-MM') || "",
+        month: safeFormat(currentMonth, 'yyyy-MM') || "",
         classId: selectedClassId || "",
         teacherId: auth.currentUser.uid,
         date: dateStr || "",
@@ -232,7 +232,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
               <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
             <h2 className="text-xl font-bold text-slate-900 capitalize">
-              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+              {safeFormat(currentMonth, 'MMMM yyyy', { locale: ptBR })}
             </h2>
             <button 
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
@@ -264,7 +264,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
           </h3>
           <div className="space-y-2">
             {monthSundays.map(sunday => {
-              const dateStr = format(sunday, 'yyyy-MM-dd');
+              const dateStr = safeFormat(sunday, 'yyyy-MM-dd');
               const hasPlanning = plannings.find(p => p.date === dateStr && p.classId === selectedClassId);
               
               return (
@@ -296,11 +296,11 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                       "w-10 h-10 rounded-xl flex flex-col items-center justify-center font-bold",
                       isSameDay(selectedDate || new Date(0), sunday) ? "bg-indigo-500" : "bg-slate-50 text-slate-500"
                     )}>
-                      <span className="text-[10px] uppercase leading-none">{format(sunday, 'MMM', { locale: ptBR })}</span>
-                      <span className="text-lg leading-none">{format(sunday, 'dd')}</span>
+                      <span className="text-[10px] uppercase leading-none">{safeFormat(sunday, 'MMM', { locale: ptBR })}</span>
+                      <span className="text-lg leading-none">{safeFormat(sunday, 'dd')}</span>
                     </div>
                     <div>
-                      <p className="font-bold">{format(sunday, 'EEEE', { locale: ptBR })}</p>
+                      <p className="font-bold">{safeFormat(sunday, 'EEEE', { locale: ptBR })}</p>
                       <p className="text-xs opacity-70">
                         {hasPlanning ? 'Planejamento concluído' : 'Aguardando planejamento'}
                       </p>
@@ -328,7 +328,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                   <div>
                     <h3 className="text-2xl font-black text-slate-900">Planejamento da Aula</h3>
                     <p className="text-slate-500 font-medium">
-                      {format(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
+                      {safeFormat(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -431,11 +431,11 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                       <Save className="w-5 h-5" />
                       Salvar Planejamento
                     </button>
-                    {plannings.find(p => p.date === format(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
+                    {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
                       <button
                         type="button"
                         onClick={() => {
-                          const p = plannings.find(p => p.date === format(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
+                          const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
                           if (p) handleDelete(p.id);
                         }}
                         className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
@@ -471,26 +471,26 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-400 uppercase">Total:</span>
                 <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold">
-                  {plannings.filter(p => p.month === format(currentMonth, 'yyyy-MM') && p.classId === selectedClassId).length}
+                  {plannings.filter(p => p.month === safeFormat(currentMonth, 'yyyy-MM') && p.classId === selectedClassId).length}
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               {plannings
-                .filter(p => p.month === format(currentMonth, 'yyyy-MM') && p.classId === selectedClassId)
+                .filter(p => p.month === safeFormat(currentMonth, 'yyyy-MM') && p.classId === selectedClassId)
                 .sort((a, b) => a.date.localeCompare(b.date))
                 .map(planning => (
                   <div key={planning.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-indigo-50 rounded-xl flex flex-col items-center justify-center font-bold text-indigo-600">
-                          <span className="text-[10px] uppercase leading-none">{format(parseISO(planning.date), 'MMM', { locale: ptBR })}</span>
-                          <span className="text-lg leading-none">{format(parseISO(planning.date), 'dd')}</span>
+                          <span className="text-[10px] uppercase leading-none">{safeFormat(planning.date, 'MMM', { locale: ptBR })}</span>
+                          <span className="text-lg leading-none">{safeFormat(planning.date, 'dd')}</span>
                         </div>
                         <div>
-                          <h4 className="font-bold text-slate-900">{format(parseISO(planning.date), 'EEEE', { locale: ptBR })}</h4>
-                          <p className="text-xs text-slate-500">Criado em {format(parseISO(planning.createdAt), 'dd/MM/yyyy HH:mm')}</p>
+                          <h4 className="font-bold text-slate-900">{safeFormat(planning.date, 'EEEE', { locale: ptBR })}</h4>
+                          <p className="text-xs text-slate-500">Criado em {safeFormat(planning.createdAt, 'dd/MM/yyyy HH:mm')}</p>
                         </div>
                       </div>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
@@ -533,7 +533,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                     </div>
                   </div>
                 ))}
-              {plannings.filter(p => p.month === format(currentMonth, 'yyyy-MM') && p.classId === selectedClassId).length === 0 && (
+              {plannings.filter(p => p.month === safeFormat(currentMonth, 'yyyy-MM') && p.classId === selectedClassId).length === 0 && (
                 <div className="text-center py-12 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
                   <p className="text-slate-400 font-medium">Nenhum planejamento encontrado para este mês.</p>
                 </div>
@@ -570,22 +570,22 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Relatório de Planejamento</h2>
                   <p className="text-slate-500 font-bold">
-                    {format(currentMonth, 'MMMM yyyy', { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
+                    {safeFormat(currentMonth, 'MMMM yyyy', { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
                   </p>
                 </div>
 
                 <div className="space-y-8">
                   {plannings
-                    .filter(p => p.month === format(currentMonth, 'yyyy-MM') && p.classId === selectedClassId)
+                    .filter(p => p.month === safeFormat(currentMonth, 'yyyy-MM') && p.classId === selectedClassId)
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map(planning => (
                       <div key={planning.id} className="border-b border-slate-100 pb-6 last:border-0">
                         <div className="flex items-center gap-2 mb-4">
                           <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-sm font-bold">
-                            {format(parseISO(planning.date), 'dd/MM/yyyy')}
+                            {safeFormat(planning.date, 'dd/MM/yyyy')}
                           </div>
                           <span className="font-bold text-slate-900 uppercase text-sm">
-                            {format(parseISO(planning.date), 'EEEE', { locale: ptBR })}
+                            {safeFormat(planning.date, 'EEEE', { locale: ptBR })}
                           </span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

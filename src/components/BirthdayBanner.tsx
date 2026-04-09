@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { Student, Teacher, Class } from '../types';
+import { cn, safeFormat } from '../lib/utils';
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval, addDays, getMonth, getDate, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Cake, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -94,7 +95,7 @@ export default function BirthdayBanner() {
             <span className="bg-white/20 px-2 py-0.5 rounded">{current.name}</span>
             <span className="text-indigo-100">({current.type} - {current.className})</span>
             <span className="text-amber-300">
-              Dia {format(parseISO(current.birthDate), 'dd/MM')}
+              Dia {safeFormat(current.birthDate, 'dd/MM')}
             </span>
           </motion.div>
         </AnimatePresence>

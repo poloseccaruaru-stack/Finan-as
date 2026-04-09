@@ -38,7 +38,7 @@ import { Regimento, OrganogramEntry, Teacher, CalendarEvent, SchoolYearConfig } 
 import OrganogramModule from './OrganogramModule';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -64,6 +64,8 @@ export default function AdminModule({ user, subTab }: Props) {
   const [resetType, setResetType] = useState<'total' | 'partial' | 'selective'>('partial');
   const [selectiveOptions, setSelectiveOptions] = useState({
     teachers: false,
+    students: false,
+    classes: false,
     calendar: false,
     regimento: false,
     organogram: false,
@@ -80,7 +82,9 @@ export default function AdminModule({ user, subTab }: Props) {
 
   const COLLECTIONS = [
     'users', 'students', 'classes', 'attendance', 'regimento', 
-    'projects', 'transactions', 'budgets', 'planning', 'justificationOptions'
+    'projects', 'transactions', 'budgets', 'planning', 'justificationOptions',
+    'calendarEvents', 'events', 'organogram', 'student_reports', 'teacher_reports',
+    'manual_reports', 'estimated_expenses', 'config', 'enrollments', 'ai_actions'
   ];
 
   const handleBackup = async () => {
@@ -107,7 +111,7 @@ export default function AdminModule({ user, subTab }: Props) {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `backup_ebd_completo_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.json`);
+      link.setAttribute('download', `backup_ebd_completo_${safeFormat(new Date(), 'yyyy-MM-dd_HH-mm')}.json`);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
@@ -295,17 +299,14 @@ export default function AdminModule({ user, subTab }: Props) {
     const collectionsToDelete: string[] = [];
 
     if (resetType === 'total') {
-      collectionsToDelete.push(
-        'students', 'users', 'classes', 'attendance', 'planning', 
-        'projects', 'calendarEvents', 'regimento', 'organogram', 
-        'student_reports', 'teacher_reports', 'justificationOptions', 
-        'manual_reports', 'transactions', 'budgets'
-      );
+      collectionsToDelete.push(...COLLECTIONS);
     } else if (resetType === 'partial') {
       collectionsToDelete.push('attendance');
     } else if (resetType === 'selective') {
       if (selectiveOptions.teachers) collectionsToDelete.push('users');
-      if (selectiveOptions.calendar) collectionsToDelete.push('calendarEvents');
+      if (selectiveOptions.students) collectionsToDelete.push('students', 'enrollments');
+      if (selectiveOptions.classes) collectionsToDelete.push('classes', 'attendance');
+      if (selectiveOptions.calendar) collectionsToDelete.push('calendarEvents', 'events');
       if (selectiveOptions.regimento) collectionsToDelete.push('regimento');
       if (selectiveOptions.organogram) collectionsToDelete.push('organogram');
       if (selectiveOptions.projects) collectionsToDelete.push('projects');
@@ -314,7 +315,7 @@ export default function AdminModule({ user, subTab }: Props) {
       if (selectiveOptions.teacherReports) collectionsToDelete.push('teacher_reports');
       if (selectiveOptions.justifications) collectionsToDelete.push('justificationOptions');
       if (selectiveOptions.manualReports) collectionsToDelete.push('manual_reports');
-      if (selectiveOptions.finance) collectionsToDelete.push('transactions', 'budgets');
+      if (selectiveOptions.finance) collectionsToDelete.push('transactions', 'budgets', 'estimated_expenses');
     }
 
     if (!confirm(`Tem certeza que deseja realizar o reset ${resetType}? Esta ação é irreversível.`)) return;
@@ -443,6 +444,8 @@ export default function AdminModule({ user, subTab }: Props) {
                       >
                         {value ? <CheckSquare className="w-4 h-4 text-red-600" /> : <Square className="w-4 h-4" />}
                         {key === 'teachers' ? 'Professores' :
+                         key === 'students' ? 'Alunos' :
+                         key === 'classes' ? 'Turmas' :
                          key === 'calendar' ? 'Calendário' :
                          key === 'regimento' ? 'Regimento' :
                          key === 'organogram' ? 'Organograma' :
@@ -597,12 +600,12 @@ export default function AdminModule({ user, subTab }: Props) {
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2">
                       <div className="w-10 h-10 bg-indigo-50 rounded-xl flex flex-col items-center justify-center font-bold text-indigo-600">
-                        <span className="text-[10px] uppercase leading-none">{format(parseISO(event.date), 'MMM', { locale: ptBR })}</span>
-                        <span className="text-lg leading-none">{format(parseISO(event.date), 'dd')}</span>
+                        <span className="text-[10px] uppercase leading-none">{safeFormat(event.date, 'MMM', { locale: ptBR })}</span>
+                        <span className="text-lg leading-none">{safeFormat(event.date, 'dd')}</span>
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-900">{event.title}</h4>
-                        <p className="text-xs text-slate-500">{format(parseISO(event.date), 'EEEE', { locale: ptBR })}</p>
+                        <p className="text-xs text-slate-500">{safeFormat(event.date, 'EEEE', { locale: ptBR })}</p>
                       </div>
                     </div>
                     {isAdmin && (

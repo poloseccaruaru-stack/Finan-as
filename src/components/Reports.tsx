@@ -13,7 +13,7 @@ import {
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Transaction } from '../types';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 interface Props {
@@ -22,8 +22,8 @@ interface Props {
 
 export default function Reports({ user }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [startDate, setStartDate] = useState(format(new Date().setDate(1), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(safeFormat(new Date().setDate(1), 'yyyy-MM-dd') || "");
+  const [endDate, setEndDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
 
   useEffect(() => {
     const q = query(

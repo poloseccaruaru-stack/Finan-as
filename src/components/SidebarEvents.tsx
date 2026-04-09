@@ -29,7 +29,7 @@ export default function SidebarEvents({ user, compact }: Props) {
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: safeFormat(new Date(), 'yyyy-MM-dd') || "",
     type: 'event' as CalendarEvent['type']
   });
 
@@ -56,12 +56,12 @@ export default function SidebarEvents({ user, compact }: Props) {
       await addDoc(collection(db, 'events'), {
         title: newEvent.title || "",
         description: newEvent.description || "",
-        date: newEvent.date || format(new Date(), 'yyyy-MM-dd'),
+        date: newEvent.date || safeFormat(new Date(), 'yyyy-MM-dd') || "",
         type: newEvent.type || 'event',
         createdAt: new Date().toISOString()
       });
       setShowAddEvent(false);
-      setNewEvent({ title: '', description: '', date: format(new Date(), 'yyyy-MM-dd'), type: 'event' });
+      setNewEvent({ title: '', description: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", type: 'event' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'events');
     }

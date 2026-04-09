@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Student, Teacher, Class, Transaction, Project, DashboardConfig } from '../types';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfWeek, endOfWeek, getMonth, getDate, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { cn } from '../lib/utils';
+import { cn, safeFormat } from '../lib/utils';
 
 interface Props {
   user: Teacher;
@@ -165,8 +165,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     { name: 'Baixa', value: frequencyClassification.low, color: '#ef4444' },
   ];
 
-  const [birthdayStart, setBirthdayStart] = useState(format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
-  const [birthdayEnd, setBirthdayEnd] = useState(format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [birthdayStart, setBirthdayStart] = useState(safeFormat(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [birthdayEnd, setBirthdayEnd] = useState(safeFormat(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
 
   const weeklyBirthdays = useMemo(() => {
     const start = parseISO(birthdayStart);
@@ -215,7 +215,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
         <body>
           <h1>Relatório de Aniversariantes</h1>
           <div class="header-info">
-            Período: ${format(parseISO(birthdayStart), 'dd/MM/yyyy')} até ${format(parseISO(birthdayEnd), 'dd/MM/yyyy')}
+            Período: ${safeFormat(birthdayStart, 'dd/MM/yyyy')} até ${safeFormat(birthdayEnd, 'dd/MM/yyyy')}
           </div>
           <table>
             <thead>
@@ -231,14 +231,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                 <tr>
                   <td>${p.name}</td>
                   <td>${p.type}</td>
-                  <td>${format(parseISO(p.birthDate!), 'dd/MM')}</td>
+                  <td>${safeFormat(p.birthDate, 'dd/MM')}</td>
                   <td>${classes.find(c => c.id === (p as any).classId)?.name || 'N/A'}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
           <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8;">
-            Gerado em ${format(new Date(), 'dd/MM/yyyy HH:mm')}
+            Gerado em ${safeFormat(new Date(), 'dd/MM/yyyy HH:mm')}
           </div>
         </body>
       </html>
@@ -449,7 +449,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-black text-pink-600">
-                      {format(parseISO(person.birthDate!), 'dd/MM')}
+                      {safeFormat(person.birthDate, 'dd/MM')}
                     </p>
                     <p className="text-[10px] text-slate-400 font-bold uppercase">Aniversário</p>
                   </div>
