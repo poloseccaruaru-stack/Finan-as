@@ -40,7 +40,10 @@ import {
   Copy,
   Eye,
   Pin,
-  X
+  X,
+  LayoutGrid,
+  List,
+  Minus
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,7 +53,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
-  subTab: 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear';
+  subTab: 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'meetings';
   selectedSchoolYear: string;
   onImpersonate?: (teacher: Teacher) => void;
 }
@@ -74,6 +77,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -104,8 +108,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [reportFilterClass, setReportFilterClass] = useState<string>('all');
   const [reportContent, setReportContent] = useState('');
   const [reportDate, setReportDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
-  const [aulaObjetivos, setAulaObjetivos] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
-  const [alunosParticiparam, setAlunosParticiparam] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
+  const [aulaObjetivos, setAulaObjetivos] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
+  const [alunosParticiparam, setAlunosParticiparam] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloningClass, setCloningClass] = useState<Class | null>(null);
   const [resetAttendanceOnClone, setResetAttendanceOnClone] = useState(true);
@@ -130,8 +134,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     }
     return `${currentYear}${nextSeq.toString().padStart(3, '0')}`;
   };
-  const [versiculoCitado, setVersiculoCitado] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
-  const [houveOferta, setHouveOferta] = useState<'SIM' | 'NÃO' | 'NÃO SE APLICA'>('SIM');
+  const [versiculoCitado, setVersiculoCitado] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
+  const [houveOferta, setHouveOferta] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
   const [schoolYear, setSchoolYear] = useState<string>('');
   const [schoolYearConfig, setSchoolYearConfig] = useState<any>(null);
   const [showReenrollmentSummary, setShowReenrollmentSummary] = useState(false);
@@ -212,6 +216,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
 
+    const unsubMeetings = onSnapshot(collection(db, 'meetings'), (snap) => {
+      setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'meetings'));
+
     const unsubSchoolYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -230,6 +238,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubAttendances();
       unsubStudentReports();
       unsubTeacherReports();
+      unsubMeetings();
       unsubSchoolYear();
     };
   }, [user, isAdmin]);
@@ -293,6 +302,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     phone: '',
     history: '',
     classId: '',
+    classIds: [] as string[],
     schoolYear: selectedSchoolYear,
     doNotRenew: false,
     status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido'
@@ -327,6 +337,16 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const [editingClass, setEditingClass] = useState<Class | null>(null);
 
+  const [meetingForm, setMeetingForm] = useState({
+    type: 'ADMINISTRATIVA' as any,
+    title: '',
+    content: '',
+    date: safeFormat(new Date(), 'yyyy-MM-dd') || "",
+    participants: ''
+  });
+  const [editingMeeting, setEditingMeeting] = useState<any | null>(null);
+  const [viewingMeeting, setViewingMeeting] = useState<any | null>(null);
+
   const handleDeleteStudent = async (id: string) => {
     showConfirm('Excluir Aluno', 'Deseja realmente excluir este aluno?', async () => {
       try {
@@ -337,6 +357,38 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
 
+  const handleAddMeeting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const data = {
+        ...meetingForm,
+        updatedAt: new Date().toISOString()
+      };
+      if (editingMeeting) {
+        await updateDoc(doc(db, 'meetings', editingMeeting.id), data);
+      } else {
+        await addDoc(collection(db, 'meetings'), {
+          ...data,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowForm(false);
+      setEditingMeeting(null);
+      setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+    } catch (err) {
+      handleFirestoreError(err, editingMeeting ? OperationType.UPDATE : OperationType.CREATE, 'meetings');
+    }
+  };
+
+  const handleDeleteMeeting = async (id: string) => {
+    showConfirm('Excluir Reunião', 'Deseja realmente excluir esta ata de reunião?', async () => {
+      try {
+        await deleteDoc(doc(db, 'meetings', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `meetings/${id}`);
+      }
+    });
+  };
   const handleDeleteTeacher = async (id: string) => {
     showConfirm('Excluir Professor', 'Deseja realmente excluir este professor?', async () => {
       try {
@@ -367,7 +419,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         emergencyContact: studentForm.emergencyContact || "",
         phone: studentForm.phone || "",
         history: studentForm.history || "",
-        classId: studentForm.classId || "",
+        classId: studentForm.classIds[0] || "",
+        classIds: studentForm.classIds.filter(id => id !== ""),
         schoolYear: studentForm.schoolYear || selectedSchoolYear,
         doNotRenew: studentForm.doNotRenew || false,
         status: studentForm.status || 'ativo'
@@ -387,7 +440,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+      setStudentForm({ name: '', birthDate: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
@@ -407,6 +460,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       phone: student.phone || '',
       history: student.history,
       classId: student.classId || '',
+      classIds: student.classIds || (student.classId ? [student.classId] : []),
       schoolYear: student.schoolYear || selectedSchoolYear,
       doNotRenew: student.doNotRenew || false,
       status: student.status || 'ativo'
@@ -725,6 +779,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [endTime, setEndTime] = useState('16:40');
   const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
   const [defaultTimes, setDefaultTimes] = useState({ start: '15:50', end: '16:40' });
+  const [markingViewMode, setMarkingViewMode] = useState<'grid' | 'list'>('grid');
+  const [markingZoom, setMarkingZoom] = useState<number>(1);
 
   const handleFixTimes = async () => {
     try {
@@ -880,6 +936,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setEndTime(defaultTimes.end);
       setAttendanceMethodology([]);
       setObservation('');
+      setAulaObjetivos('SIM');
+      setAlunosParticiparam('SIM');
+      setVersiculoCitado('SIM');
+      setHouveOferta('SIM');
       setEditingAttendance(null);
     } catch (err) {
       handleFirestoreError(err, editingAttendance ? OperationType.UPDATE : OperationType.CREATE, 'attendance');
@@ -1108,9 +1168,21 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       {differenceInYears(new Date(), parseISO(student.birthDate))} anos
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
-                        {classes.find(c => c.id === student.classId)?.name || 'Sem Turma'}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {student.classIds?.length > 0 ? (
+                          student.classIds.map(cid => (
+                            <span key={cid} className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded uppercase">
+                              {classes.find(c => c.id === cid)?.name}
+                            </span>
+                          ))
+                        ) : student.classId ? (
+                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded uppercase">
+                            {classes.find(c => c.id === student.classId)?.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium text-slate-400 italic">Sem Turma</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-mono text-slate-500">
                       {student.registrationNumber || '-'}
@@ -1406,6 +1478,45 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 </button>
               </div>
               <div className="flex gap-2">
+                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setMarkingViewMode('grid')}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      markingViewMode === 'grid' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                    title="Visualização em Grade"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setMarkingViewMode('list')}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      markingViewMode === 'list' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                    title="Visualização em Lista"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setMarkingZoom(Math.max(1, markingZoom - 1))}
+                    className="p-1.5 text-slate-500 hover:text-slate-700 rounded-lg"
+                    title="Diminuir"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-[10px] font-bold text-slate-500 w-4 text-center">{markingZoom}</span>
+                  <button
+                    onClick={() => setMarkingZoom(Math.min(3, markingZoom + 1))}
+                    className="p-1.5 text-slate-500 hover:text-slate-700 rounded-lg"
+                    title="Aumentar"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <button
                   onClick={() => {
                     const allPresent = students.filter(s => s.classId === selectedClass).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
@@ -1427,8 +1538,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               </div>
             </div>
 
-            {selectedClass && (
-              <div className="space-y-3">
+            {selectedClass ? (
+              <div className="space-y-6">
+                <div className="space-y-3">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Planejamentos Disponíveis</label>
                 <div className="flex flex-wrap gap-2">
                   {plannings
@@ -1472,9 +1584,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   )}
                 </div>
               </div>
-            )}
 
-            {currentPlanning && (
+                {currentPlanning && (
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 space-y-3">
                 <div className="flex items-center gap-2 text-indigo-600">
                   <BookOpen className="w-5 h-5" />
@@ -1491,15 +1602,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               </div>
             )}
 
-            {selectedClass ? (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={cn(
+                  "grid gap-4",
+                  markingViewMode === 'grid' 
+                    ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
+                    : "grid-cols-1"
+                )}>
                   {students.filter(s => s.classId === selectedClass).map(student => (
                     <button
                       key={student.id}
                       onClick={() => setAttendanceList(prev => ({ ...prev, [student.id]: !prev[student.id] }))}
                       className={cn(
-                        "flex items-center justify-between p-4 rounded-xl border transition-all",
+                        "flex items-center justify-between transition-all rounded-xl border",
+                        markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
                         attendanceList[student.id] 
                           ? "bg-green-50 border-green-200 text-green-700" 
                           : "bg-red-50 border-red-200 text-red-700"
@@ -1507,13 +1623,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     >
                       <div className="flex items-center gap-3">
                         <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center font-bold",
+                          "rounded-full flex items-center justify-center font-bold",
+                          markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
                           attendanceList[student.id] ? "bg-green-200" : "bg-red-200"
                         )}>
                           {student.name.charAt(0)}
                         </div>
                         <div className="text-left">
-                          <span className="font-medium text-sm block">{student.name}</span>
+                          <span className={cn(
+                            "font-medium block",
+                            markingZoom === 1 ? "text-[11px]" : markingZoom === 2 ? "text-sm" : "text-base"
+                          )}>{student.name}</span>
                           {justifications[student.id] && (
                             <span className="text-[10px] text-slate-500 italic">J: {justifications[student.id]}</span>
                           )}
@@ -1521,14 +1641,15 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       </div>
                       <div className="flex items-center gap-2">
                         {!attendanceList[student.id] && (
-                          <button
+                          <button 
                             onClick={(e) => {
                               e.stopPropagation();
                               setCurrentJustifyStudent(student.id);
                               setShowJustifyModal(true);
                             }}
                             className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center font-bold transition-all",
+                              "rounded-lg flex items-center justify-center font-bold transition-all",
+                              markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
                               justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
                             )}
                             title="Justificar falta"
@@ -1536,13 +1657,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             J
                           </button>
                         )}
-                        {attendanceList[student.id] ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                        {attendanceList[student.id] ? <CheckCircle2 className={cn(markingZoom === 1 ? "w-4 h-4" : "w-5 h-5")} /> : <XCircle className={cn(markingZoom === 1 ? "w-4 h-4" : "w-5 h-5")} />}
                       </div>
                     </button>
                   ))}
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Conteúdo Ministrado</label>
@@ -1621,7 +1743,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       <div key={q.id} className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{q.label}</label>
                         <div className="flex gap-2">
-                          {['SIM', 'NÃO', 'NÃO SE APLICA'].map((opt) => (
+                          {(q.id === 'houveOferta' ? ['SIM', 'NÃO', 'NÃO SE APLICA'] : ['SIM', 'NÃO', 'PARCIALMENTE', 'NÃO SE APLICA']).map((opt) => (
                             <button
                               key={opt}
                               type="button"
@@ -2087,6 +2209,84 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             </div>
           </div>
         )}
+
+        {subTab === 'meetings' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Atas de Reuniões</h3>
+                <p className="text-sm text-slate-500">Registro e gestão de reuniões administrativas e pedagógicas</p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+                    setEditingMeeting(null);
+                    setShowForm(true);
+                  }}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nova Ata
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {['ADMINISTRATIVA', 'PEDAGÓGICA', 'PAIS', 'GERAL'].map(type => (
+                <div key={type} className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                    {type}
+                  </h4>
+                  <div className="space-y-3">
+                    {meetings
+                      .filter(m => m.type === type)
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map(meeting => (
+                        <div key={meeting.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase">
+                              {safeFormat(meeting.date, 'dd/MM/yyyy')}
+                            </span>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => setViewingMeeting(meeting)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => { setEditingMeeting(meeting); setMeetingForm({ ...meeting }); setShowForm(true); }} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteMeeting(meeting.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <h5 className="font-bold text-slate-900 text-sm mb-1 line-clamp-1">{meeting.title}</h5>
+                          <p className="text-xs text-slate-500 line-clamp-2 mb-3">{meeting.content}</p>
+                          <button 
+                            onClick={() => { setViewingMeeting(meeting); setTimeout(() => window.print(), 500); }}
+                            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            IMPRIMIR ATA
+                          </button>
+                        </div>
+                      ))}
+                    {meetings.filter(m => m.type === type).length === 0 && (
+                      <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nenhuma ata</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -2103,6 +2303,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 <h3 className="text-xl font-bold text-slate-900">
                   {subTab === 'students' ? (editingStudent ? 'Editar Aluno' : 'Cadastrar Aluno') : 
                    subTab === 'teachers' ? (editingTeacher ? 'Editar Professor' : 'Cadastrar Professor') : 
+                   subTab === 'meetings' ? (editingMeeting ? 'Editar Ata' : 'Nova Ata de Reunião') :
                    'Cadastrar Turma'}
                 </h3>
                 <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
@@ -2143,17 +2344,44 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Turma</label>
-                      <select
-                        value={studentForm.classId}
-                        onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Selecione...</option>
-                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+                      <label className="text-xs font-bold text-slate-500 uppercase">Turmas Vinculadas</label>
+                      <div className="space-y-2">
+                        {studentForm.classIds.map((cid, index) => (
+                          <div key={index} className="flex gap-2">
+                            <select
+                              value={cid}
+                              onChange={(e) => {
+                                const newIds = [...studentForm.classIds];
+                                newIds[index] = e.target.value;
+                                setStudentForm({ ...studentForm, classIds: newIds });
+                              }}
+                              className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">Selecione...</option>
+                              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newIds = studentForm.classIds.filter((_, i) => i !== index);
+                                setStudentForm({ ...studentForm, classIds: newIds });
+                              }}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setStudentForm({ ...studentForm, classIds: [...studentForm.classIds, ''] })}
+                          className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all text-[10px] font-bold uppercase flex items-center justify-center gap-2"
+                        >
+                          <Plus className="w-3 h-3" /> Adicionar Outra Turma
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-500 uppercase">Responsáveis</label>
@@ -2375,6 +2603,72 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
                     {editingTeacher ? 'Atualizar Professor' : 'Salvar Professor'}
+                  </button>
+                </form>
+              )}
+
+              {subTab === 'meetings' && (
+                <form onSubmit={handleAddMeeting} className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Tipo de Reunião</label>
+                      <select
+                        required
+                        value={meetingForm.type}
+                        onChange={(e) => setMeetingForm({ ...meetingForm, type: e.target.value as any })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="ADMINISTRATIVA">Administrativa</option>
+                        <option value="PEDAGÓGICA">Pedagógica</option>
+                        <option value="PAIS">Reunião de Pais</option>
+                        <option value="GERAL">Geral</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
+                      <input
+                        required
+                        type="date"
+                        value={meetingForm.date}
+                        onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Título da Reunião</label>
+                    <input
+                      required
+                      type="text"
+                      value={meetingForm.title}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })}
+                      placeholder="Ex: Planejamento Trimestral"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Participantes</label>
+                    <input
+                      type="text"
+                      value={meetingForm.participants}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, participants: e.target.value })}
+                      placeholder="Nomes dos presentes..."
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Conteúdo / Pauta / Decisões</label>
+                    <textarea
+                      required
+                      rows={8}
+                      value={meetingForm.content}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, content: e.target.value })}
+                      placeholder="Descreva o que foi discutido e decidido..."
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                    {editingMeeting ? 'Atualizar Ata' : 'Salvar Ata'}
                   </button>
                 </form>
               )}
@@ -2722,6 +3016,26 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   </div>
                 </div>
 
+                {/* Attendance Questions in Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100 print:grid-cols-2 print:gap-4">
+                  {[
+                    { label: '1) A aula atingiu os objetivos desejados?', value: viewingAttendance.aulaObjetivos },
+                    { label: '2) Os alunos participaram e interagiram durante a aula?', value: viewingAttendance.alunosParticiparam },
+                    { label: '3) O versículo bíblico da semana foi citado em sala?', value: viewingAttendance.versiculoCitado },
+                    { label: '4) Houve oferta em sala?', value: viewingAttendance.houveOferta },
+                  ].map((q, i) => (
+                    <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100 print:bg-white print:border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1 print:text-slate-900">{q.label}</p>
+                      <p className={cn(
+                        "text-xs font-black uppercase",
+                        q.value === 'SIM' ? "text-green-600" : q.value === 'NÃO' ? "text-red-600" : q.value === 'PARCIALMENTE' ? "text-amber-600" : "text-slate-600"
+                      )}>
+                        {q.value || 'NÃO INFORMADO'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest print:text-slate-900">Lista de Alunos</h4>
                   <div className="border border-slate-100 rounded-2xl overflow-hidden print:border-slate-200">
@@ -2915,6 +3229,86 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       </AnimatePresence>
       
       {/* Report List Modal */}
+      {/* Meeting View Modal */}
+      <AnimatePresence>
+        {viewingMeeting && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-white print:static print:block">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto print:shadow-none print:max-w-none print:max-h-none print:rounded-none"
+            >
+              <div className="p-8 space-y-8 print:p-12">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-6 print:border-slate-300">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 print:hidden">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Ata de Reunião</h2>
+                      <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">{viewingMeeting.type}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-slate-900">{safeFormat(viewingMeeting.date, 'dd/MM/yyyy')}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data da Reunião</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Título / Assunto</label>
+                    <h3 className="text-xl font-bold text-slate-900">{viewingMeeting.title}</h3>
+                  </div>
+
+                  {viewingMeeting.participants && (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Participantes</label>
+                      <p className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-xl border border-slate-100 print:bg-transparent print:border-slate-200">
+                        {viewingMeeting.participants}
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Conteúdo e Decisões</label>
+                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-6 rounded-2xl border border-slate-100 min-h-[200px] print:bg-transparent print:border-slate-200">
+                      {viewingMeeting.content}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-12 grid grid-cols-2 gap-12 print:pt-24">
+                  <div className="border-t border-slate-200 pt-2 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assinatura do Responsável</p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Assinatura do Secretário</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-6 print:hidden">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                  >
+                    <Printer className="w-5 h-5" />
+                    Imprimir Ata
+                  </button>
+                  <button
+                    onClick={() => setViewingMeeting(null)}
+                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showReportListModal && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">

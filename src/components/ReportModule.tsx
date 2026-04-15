@@ -55,6 +55,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [projectStatusFilter, setProjectStatusFilter] = useState<'ALL' | 'EM ANDAMENTO' | 'FINALIZADO'>('ALL');
   const [financeStatusFilter, setFinanceStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<'all' | 'with-absences' | 'no-absences'>('all');
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -165,10 +166,11 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
         return attendances.filter(a => {
           const cls = classes.find(c => c.id === a.classId);
           const matchesYear = cls?.schoolYear === selectedSchoolYear;
+          const matchesClass = selectedClassIds.length === 0 || selectedClassIds.includes(a.classId);
           const matchesDate = filterByDate(a.date);
           const matchesStatus = attendanceStatusFilter === 'all' || 
                                 (attendanceStatusFilter === 'with-absences' ? a.absentStudentIds.length > 0 : a.absentStudentIds.length === 0);
-          return matchesYear && matchesDate && matchesStatus;
+          return matchesYear && matchesClass && matchesDate && matchesStatus;
         });
       case 'planning':
         return plannings.filter(p => {
@@ -202,10 +204,15 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
           ...teachers.map(t => ({ ...t, type: 'Professor', className: 'Administração/Docente', birthDate: (t as any).birthDate || '' }))
         ].filter(p => p.birthDate);
         return allPeople.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => {
-          const dateA = parseISO(a.birthDate);
-          const dateB = parseISO(b.birthDate);
-          if (dateA.getMonth() !== dateB.getMonth()) return dateA.getMonth() - dateB.getMonth();
-          return dateA.getDate() - dateB.getDate();
+          try {
+            const dateA = parseISO(a.birthDate);
+            const dateB = parseISO(b.birthDate);
+            if (!isValid(dateA) || !isValid(dateB)) return 0;
+            if (dateA.getMonth() !== dateB.getMonth()) return dateA.getMonth() - dateB.getMonth();
+            return dateA.getDate() - dateB.getDate();
+          } catch (e) {
+            return 0;
+          }
         });
       default:
         return [];
@@ -342,6 +349,47 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Class Selection */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar por Turmas</label>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setSelectedClassIds(classes.map(c => c.id))}
+                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                Selecionar Todas
+              </button>
+              <button 
+                onClick={() => setSelectedClassIds([])}
+                className="text-[10px] font-bold text-slate-400 hover:text-slate-500"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
+            {classes.filter(c => c.schoolYear === selectedSchoolYear).map(c => (
+              <button
+                key={c.id}
+                onClick={() => {
+                  setSelectedClassIds(prev => 
+                    prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                  );
+                }}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all border",
+                  selectedClassIds.includes(c.id)
+                    ? "bg-indigo-600 border-indigo-600 text-white"
+                    : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
+                )}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Report Content */}
@@ -433,22 +481,38 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
                   100% Presença
                 </button>
               </div>
-              {(filteredData as Attendance[]).map(a => {
-                const cls = classes.find(c => c.id === a.classId);
-                return (
-                  <div key={a.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-900">{cls?.name || 'Classe Removida'}</h4>
-                      <span className="text-xs font-black text-slate-400">{safeFormat(a.date, 'dd/MM/yyyy')}</span>
-                    </div>
-                    <p className="text-xs text-slate-600 mb-2"><strong>Conteúdo:</strong> {a.contentGiven || 'Não informado'}</p>
-                    <div className="flex gap-4 text-[10px] font-bold uppercase">
-                      <span className="text-green-600">Presentes: {a.presentStudentIds.length}</span>
-                      <span className="text-red-600">Ausentes: {a.absentStudentIds.length}</span>
-                    </div>
-                  </div>
-                );
-              })}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-slate-100">
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase">Data</th>
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase">Turma</th>
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase">Conteúdo</th>
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase text-center">Pres.</th>
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase text-center">Aus.</th>
+                      <th className="py-3 text-[10px] font-black text-slate-400 uppercase text-right">%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {(filteredData as Attendance[]).map(a => {
+                      const cls = classes.find(c => c.id === a.classId);
+                      const total = a.presentStudentIds.length + a.absentStudentIds.length;
+                      const percentage = total > 0 ? (a.presentStudentIds.length / total) * 100 : 0;
+                      return (
+                        <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 text-xs font-bold text-slate-900">{safeFormat(a.date, 'dd/MM/yyyy')}</td>
+                          <td className="py-3 text-xs text-slate-600 font-medium">{cls?.name || '---'}</td>
+                          <td className="py-3 text-xs text-slate-500 max-w-xs truncate" title={a.contentGiven}>{a.contentGiven || '---'}</td>
+                          <td className="py-3 text-xs text-center font-bold text-green-600">{a.presentStudentIds.length}</td>
+                          <td className="py-3 text-xs text-center font-bold text-red-600">{a.absentStudentIds.length}</td>
+                          <td className="py-3 text-xs text-right font-black text-indigo-600">{percentage.toFixed(0)}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -8,6 +8,7 @@ export interface Student {
   history: string;
   photoURL?: string;
   classId?: string;
+  classIds?: string[];
   schoolYear?: string;
   createdAt: string;
   consecutiveAbsences: number;
@@ -72,10 +73,10 @@ export interface Attendance {
   contentGiven?: string;
   methodology?: string;
   observation?: string;
-  aulaObjetivos?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
-  alunosParticiparam?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
-  versiculoCitado?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
-  houveOferta?: 'SIM' | 'NÃO' | 'NÃO SE APLICA';
+  aulaObjetivos?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
+  alunosParticiparam?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
+  versiculoCitado?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
+  houveOferta?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
   createdAt: string;
 }
 
@@ -200,6 +201,16 @@ export interface ManualReport {
   title: string;
   content: string;
   date: string;
+  createdAt: string;
+}
+
+export interface Meeting {
+  id: string;
+  type: 'ADMINISTRATIVA' | 'PEDAGÓGICA' | 'PAIS' | 'ALUNOS' | 'OUTRAS';
+  title: string;
+  content: string;
+  date: string;
+  participants?: string[];
   createdAt: string;
 }
 

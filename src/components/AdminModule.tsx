@@ -71,6 +71,7 @@ export default function AdminModule({ user, subTab }: Props) {
     organogram: false,
     projects: false,
     planning: false,
+    meetings: false,
     studentReports: false,
     teacherReports: false,
     justifications: false,
@@ -84,7 +85,8 @@ export default function AdminModule({ user, subTab }: Props) {
     'users', 'students', 'classes', 'attendance', 'regimento', 
     'projects', 'transactions', 'budgets', 'planning', 'justificationOptions',
     'calendarEvents', 'events', 'organogram', 'student_reports', 'teacher_reports',
-    'manual_reports', 'estimated_expenses', 'config', 'enrollments', 'ai_actions'
+    'manual_reports', 'estimated_expenses', 'config', 'enrollments', 'ai_actions',
+    'meetings'
   ];
 
   const handleBackup = async () => {
@@ -311,6 +313,7 @@ export default function AdminModule({ user, subTab }: Props) {
       if (selectiveOptions.organogram) collectionsToDelete.push('organogram');
       if (selectiveOptions.projects) collectionsToDelete.push('projects');
       if (selectiveOptions.planning) collectionsToDelete.push('planning');
+      if (selectiveOptions.meetings) collectionsToDelete.push('meetings');
       if (selectiveOptions.studentReports) collectionsToDelete.push('student_reports');
       if (selectiveOptions.teacherReports) collectionsToDelete.push('teacher_reports');
       if (selectiveOptions.justifications) collectionsToDelete.push('justificationOptions');
@@ -451,6 +454,7 @@ export default function AdminModule({ user, subTab }: Props) {
                          key === 'organogram' ? 'Organograma' :
                          key === 'projects' ? 'Projetos' :
                          key === 'planning' ? 'Planejamento' :
+                         key === 'meetings' ? 'Reuniões' :
                          key === 'studentReports' ? 'Relat. Alunos' :
                          key === 'teacherReports' ? 'Relat. Prof.' :
                          key === 'justifications' ? 'Justificativas' :

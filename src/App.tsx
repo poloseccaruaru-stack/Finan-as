@@ -212,6 +212,7 @@ export default function App() {
         { id: 'classes', label: 'Turmas', icon: LayoutDashboard },
         { id: 'attendance', label: 'Chamada', icon: CheckSquare },
         { id: 'planning', label: 'Planejamento', icon: BookOpen },
+        { id: 'meetings', label: 'Reuniões', icon: Users },
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
         if (isAdmin) return true;
