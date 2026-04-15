@@ -247,7 +247,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const filteredStudents = useMemo(() => {
     let result = students.filter(s => 
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (filterClass === 'all' || s.classId === filterClass) &&
+      (filterClass === 'all' || s.classId === filterClass || s.classIds?.includes(filterClass)) &&
       (s.schoolYear === selectedSchoolYear)
     );
 
@@ -297,6 +297,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [studentForm, setStudentForm] = useState({
     name: '',
     birthDate: '',
+    address: '',
     guardians: '',
     emergencyContact: '',
     phone: '',
@@ -415,6 +416,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       const sanitizedForm = {
         name: studentForm.name || "",
         birthDate: studentForm.birthDate || "",
+        address: studentForm.address || "",
         guardians: studentForm.guardians || "",
         emergencyContact: studentForm.emergencyContact || "",
         phone: studentForm.phone || "",
@@ -440,7 +442,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
@@ -455,6 +457,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setStudentForm({
       name: student.name,
       birthDate: student.birthDate,
+      address: student.address || '',
       guardians: student.guardians,
       emergencyContact: student.emergencyContact,
       phone: student.phone || '',
@@ -695,7 +698,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         }
 
         // b) Process students in the class
-        const classStudents = students.filter(s => s.classId === cls.id);
+        const classStudents = students.filter(s => s.classId === cls.id || s.classIds?.includes(cls.id));
         for (const student of classStudents) {
           // Save historical enrollment
           await addDoc(collection(db, 'enrollments'), {
@@ -851,7 +854,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   useEffect(() => {
     if (selectedClass) {
-      const classStudents = students.filter(s => s.classId === selectedClass);
+      const classStudents = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass));
       const initial = classStudents.reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
       setAttendanceList(initial);
       setJustifications({});
@@ -1389,7 +1392,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       {teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {students.filter(s => s.classId === c.id).length} alunos
+                      {students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} alunos
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
@@ -1519,7 +1522,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 </div>
                 <button
                   onClick={() => {
-                    const allPresent = students.filter(s => s.classId === selectedClass).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
+                    const allPresent = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
                     setAttendanceList(allPresent);
                   }}
                   className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-xl transition-all text-sm"
@@ -1528,7 +1531,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 </button>
                 <button
                   onClick={() => {
-                    const allAbsent = students.filter(s => s.classId === selectedClass).reduce((acc, s) => ({ ...acc, [s.id]: false }), {});
+                    const allAbsent = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: false }), {});
                     setAttendanceList(allAbsent);
                   }}
                   className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl transition-all text-sm"
@@ -1561,7 +1564,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           } else {
                             setEditingAttendance(null);
                             // Reset attendance list to all present for new date
-                            const initial = students.filter(s => s.classId === selectedClass).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
+                            const initial = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
                             setAttendanceList(initial);
                             setJustifications({});
                             setContentGiven('');
@@ -1609,7 +1612,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
                     : "grid-cols-1"
                 )}>
-                  {students.filter(s => s.classId === selectedClass).map(student => (
+                  {students
+                    .filter(s => (s.classId === selectedClass || s.classIds?.includes(selectedClass)))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(student => (
                     <button
                       key={student.id}
                       onClick={() => setAttendanceList(prev => ({ ...prev, [student.id]: !prev[student.id] }))}
@@ -2382,6 +2388,16 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <Plus className="w-3 h-3" /> Adicionar Outra Turma
                         </button>
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Endereço</label>
+                      <input
+                        type="text"
+                        value={studentForm.address}
+                        onChange={(e) => setStudentForm({ ...studentForm, address: e.target.value })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Rua, número, bairro..."
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-500 uppercase">Responsáveis</label>
@@ -3666,7 +3682,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           />
                           <div>
                             <p className="text-sm font-bold text-slate-900">{c.name}</p>
-                            <p className="text-[10px] text-slate-500">{students.filter(s => s.classId === c.id).length} Alunos</p>
+                            <p className="text-[10px] text-slate-500">{students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} Alunos</p>
                           </div>
                         </label>
                       ))}

@@ -7,6 +7,7 @@ export interface Student {
   phone?: string;
   history: string;
   photoURL?: string;
+  address?: string;
   classId?: string;
   classIds?: string[];
   schoolYear?: string;

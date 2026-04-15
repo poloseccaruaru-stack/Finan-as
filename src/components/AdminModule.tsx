@@ -52,9 +52,11 @@ export default function AdminModule({ user, subTab }: Props) {
   const [schoolYear, setSchoolYear] = useState<SchoolYearConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendarForm, setShowCalendarForm] = useState(false);
-  const [activeCalendarType, setActiveCalendarType] = useState<'ebd' | 'church' | 'convention'>('ebd');
+  const [activeCalendarType, setActiveCalendarType] = useState<'ebd' | 'church' | 'convention' | 'geral'>('ebd');
+  const [generalCalendar, setGeneralCalendar] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
+  const [expandedRegimentoId, setExpandedRegimentoId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', order: 0 });
   const [calendarForm, setCalendarForm] = useState({ title: '', date: '', type: 'event' as any, description: '' });
   const [schoolYearForm, setSchoolYearForm] = useState({ startDate: '', endDate: '' });
@@ -190,7 +192,17 @@ export default function AdminModule({ user, subTab }: Props) {
       const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snap) => {
         setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'calendarEvents'));
-      return () => unsubEvents();
+
+      const unsubGeneral = onSnapshot(doc(db, 'config', 'general_calendar'), (snap) => {
+        if (snap.exists()) {
+          setGeneralCalendar(snap.data().content || '');
+        }
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'config/general_calendar'));
+
+      return () => {
+        unsubEvents();
+        unsubGeneral();
+      };
     }
     if (subTab === 'system') {
       const unsubYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
@@ -215,6 +227,18 @@ export default function AdminModule({ user, subTab }: Props) {
       alert('Ano letivo fixado com sucesso!');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'config/schoolYear');
+    }
+  };
+
+  const handleSaveGeneralCalendar = async () => {
+    try {
+      await setDoc(doc(db, 'config', 'general_calendar'), {
+        content: generalCalendar,
+        updatedAt: new Date().toISOString()
+      });
+      alert('Calendário Geral salvo com sucesso!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'config/general_calendar');
     }
   };
 
@@ -574,9 +598,42 @@ export default function AdminModule({ user, subTab }: Props) {
             >
               Calendário Convenção
             </button>
+            <button 
+              onClick={() => setActiveCalendarType('geral')}
+              className={cn(
+                "px-6 py-2 rounded-xl font-bold transition-all border",
+                activeCalendarType === 'geral' ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
+              )}
+            >
+              Calendário Geral
+            </button>
           </div>
 
-          <div className="flex justify-between items-center">
+          {activeCalendarType === 'geral' ? (
+            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
+                {isAdmin && (
+                  <button
+                    onClick={handleSaveGeneralCalendar}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+                  >
+                    <Save className="w-5 h-5" />
+                    Salvar Calendário
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={generalCalendar}
+                onChange={(e) => setGeneralCalendar(e.target.value)}
+                placeholder="Insira aqui o calendário geral em texto corrido..."
+                className="w-full h-[500px] px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono text-sm leading-relaxed"
+                disabled={!isAdmin}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-slate-900 capitalize">
               {activeCalendarType === 'ebd' ? 'Eventos EBD' : activeCalendarType === 'church' ? 'Eventos da Igreja' : 'Eventos da Convenção'}
             </h3>
@@ -637,6 +694,8 @@ export default function AdminModule({ user, subTab }: Props) {
                 </div>
               ))}
           </div>
+            </>
+          )}
         </div>
       )}
 
@@ -712,37 +771,73 @@ export default function AdminModule({ user, subTab }: Props) {
         )}
       </AnimatePresence>
       {subTab === 'regimento' && (
-        <div className="grid grid-cols-1 gap-4">
-          {regimentos.map((reg) => (
-            <div key={reg.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group">
-              <div className="p-6 flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
-                      {reg.order}
-                    </span>
-                    <h3 className="text-lg font-bold text-slate-900">{reg.title}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {regimentos.sort((a, b) => a.order - b.order).map((reg) => (
+            <div 
+              key={reg.id} 
+              className={cn(
+                "bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group transition-all duration-300",
+                expandedRegimentoId === reg.id ? "md:col-span-2 lg:col-span-3" : "hover:shadow-md cursor-pointer"
+              )}
+              onClick={() => expandedRegimentoId !== reg.id && setExpandedRegimentoId(reg.id)}
+            >
+              <div className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
+                        {reg.order}
+                      </span>
+                      <h3 className="text-lg font-bold text-slate-900">{reg.title}</h3>
+                    </div>
+                    
+                    {expandedRegimentoId === reg.id ? (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-4"
+                      >
+                        <div className="prose prose-slate max-w-none text-slate-600 text-sm whitespace-pre-wrap border-t border-slate-50 pt-4">
+                          {reg.content}
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRegimentoId(null);
+                          }}
+                          className="mt-4 text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
+                        >
+                          Fechar Leitura
+                        </button>
+                      </motion.div>
+                    ) : (
+                      <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-2">Clique para ler o capítulo</p>
+                    )}
                   </div>
-                  <div className="prose prose-slate max-w-none text-slate-600 text-sm whitespace-pre-wrap">
-                    {reg.content}
-                  </div>
+                  
+                  {isAdmin && (
+                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(reg);
+                        }}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(reg.id);
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {isAdmin && (
-                  <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => handleEdit(reg)}
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(reg.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           ))}
