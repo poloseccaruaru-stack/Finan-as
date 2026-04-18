@@ -24,7 +24,9 @@ import {
   ChevronRight,
   Printer,
   Eye,
-  FileText
+  FileText,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Project, Teacher, Student } from '../types';
 import { cn, safeFormat } from '../lib/utils';
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export default function ProjectModule({ user, selectedSchoolYear }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -45,6 +48,37 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
+  const [modalConfig, setModalConfig] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'alert';
+    onConfirm?: (inputValue?: string) => void;
+    isPassword?: boolean;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    type: 'alert'
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setModalConfig({ show: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
+  };
+
+  const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
+    showConfirm(title, message, (password) => {
+      if (password?.toUpperCase() === 'SISTEMA') {
+        onConfirm();
+      } else {
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+      }
+    }, true);
+  };
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -90,12 +124,13 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   }, [user, isAdmin]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Deseja excluir este projeto?')) return;
-    try {
-      await deleteDoc(doc(db, 'projects', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `projects/${id}`);
-    }
+    showAdminConfirm('Excluir Projeto', 'Deseja realmente excluir este projeto?', async () => {
+      try {
+        await deleteDoc(doc(db, 'projects', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `projects/${id}`);
+      }
+    });
   };
 
   const handleEdit = (project: Project) => {
@@ -151,7 +186,36 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
 
   return (
     <div className="space-y-6">
-      {loading ? (
+      {/* Header with Title and Expand Button */}
+      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <Briefcase className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Projetos</h2>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none">Gestão de Projetos e Eventos</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+          title={isCollapsed ? "Expandir" : "Recolher"}
+        >
+          {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden space-y-6"
+          >
+            {loading ? (
         <div className="p-12 flex flex-col items-center justify-center gap-4 bg-white rounded-2xl border border-slate-100">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
           <p className="text-slate-500 font-medium">Carregando projetos...</p>
@@ -559,7 +623,10 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
         </div>
       </div>
     </>
-      )}
-    </div>
+  )}
+</motion.div>
+    )}
+  </AnimatePresence>
+</div>
   );
 }

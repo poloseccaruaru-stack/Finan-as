@@ -28,7 +28,10 @@ import {
   AlertCircle,
   Settings,
   Trophy,
-  Printer
+  Printer,
+  ChevronDown,
+  ChevronUp,
+  LayoutDashboard
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -54,6 +57,7 @@ interface Props {
 }
 
 export default function Dashboard({ user, selectedSchoolYear }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -252,20 +256,46 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   return (
     <div className="space-y-6">
       {/* Header with Config */}
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-900">Dashboard Inteligente</h2>
-        {user.role === 'admin' && (
+      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <LayoutDashboard className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Dashboard Inteligente</h2>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none">Visão Geral do Ano de {selectedSchoolYear}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {user.role === 'admin' && (
+            <button 
+              onClick={() => setShowConfig(!showConfig)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-all text-sm font-bold text-slate-600"
+            >
+              <Settings className="w-4 h-4" />
+              Configurar Limites
+            </button>
+          )}
           <button 
-            onClick={() => setShowConfig(!showConfig)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm font-semibold text-slate-600"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+            title={isCollapsed ? "Expandir" : "Recolher"}
           >
-            <Settings className="w-4 h-4" />
-            Configurar Limites
+            {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
           </button>
-        )}
+        </div>
       </div>
 
-      {showConfig && (
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden space-y-6"
+          >
+            {showConfig && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -497,7 +527,10 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</div>
+);
 }

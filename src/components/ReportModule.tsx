@@ -21,7 +21,9 @@ import {
   PlusCircle,
   X,
   Trash2,
-  Cake
+  Cake,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   Student, 
@@ -49,6 +51,7 @@ interface Props {
 type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays';
 
 export default function ReportModule({ user, selectedSchoolYear }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<ReportType>('students');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,6 +70,37 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [manualReports, setManualReports] = useState<ManualReport[]>([]);
   const [studentReports, setStudentReports] = useState<StudentReport[]>([]);
   const [teacherReports, setTeacherReports] = useState<TeacherReport[]>([]);
+  const [modalConfig, setModalConfig] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'alert';
+    onConfirm?: (inputValue?: string) => void;
+    isPassword?: boolean;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    type: 'alert'
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setModalConfig({ show: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
+  };
+
+  const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
+    showConfirm(title, message, (password) => {
+      if (password?.toUpperCase() === 'SISTEMA') {
+        onConfirm();
+      } else {
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+      }
+    }, true);
+  };
   const [showManualReportForm, setShowManualReportForm] = useState(false);
   const [manualReportForm, setManualReportForm] = useState({
     title: '',
@@ -240,12 +274,13 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   };
 
   const handleDeleteManualReport = async (id: string) => {
-    if (!confirm('Deseja excluir este relatório?')) return;
-    try {
-      await deleteDoc(doc(db, 'manual_reports', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `manual_reports/${id}`);
-    }
+    showAdminConfirm('Excluir Relatório', 'Deseja realmente excluir este relatório?', async () => {
+      try {
+        await deleteDoc(doc(db, 'manual_reports', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `manual_reports/${id}`);
+      }
+    });
   };
 
   const tabs: { id: ReportType, label: string, icon: any }[] = [
@@ -262,37 +297,60 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
 
   return (
     <div className="space-y-6 print:p-0">
-      {loading ? (
+      {/* Header with Title and Expand Button */}
+      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm print:hidden">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Central de Relatórios</h2>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none">Análise e Impressão de Dados</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowManualReportForm(true)}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all text-sm"
+          >
+            <PlusCircle className="w-5 h-5" />
+            <span className="hidden md:inline">Novo Relatório Manual</span>
+          </button>
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition-all text-sm"
+          >
+            <Printer className="w-5 h-5" />
+            <span className="hidden md:inline">Imprimir</span>
+          </button>
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+            title={isCollapsed ? "Expandir" : "Recolher"}
+          >
+            {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden space-y-6"
+          >
+            {loading ? (
         <div className="p-12 flex flex-col items-center justify-center gap-4 bg-white rounded-2xl border border-slate-100">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
           <p className="text-slate-500 font-medium">Carregando relatórios...</p>
         </div>
       ) : (
         <>
-          {/* Header - Hidden on print */}
+          {/* Filters - Hidden on print */}
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 print:hidden">
-        <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-indigo-600" />
-            Central de Relatórios
-          </h2>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setShowManualReportForm(true)}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all"
-            >
-              <PlusCircle className="w-5 h-5" />
-              Novo Relatório Manual
-            </button>
-            <button 
-              onClick={handlePrint}
-              className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold hover:bg-slate-800 transition-all"
-            >
-              <Printer className="w-5 h-5" />
-              Imprimir Relatório
-            </button>
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
@@ -757,6 +815,12 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
           )}
         </div>
       </div>
+    </>
+  )}
+
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Manual Report Form Modal */}
       <AnimatePresence>
@@ -815,8 +879,75 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
           </div>
         )}
       </AnimatePresence>
-        </>
-      )}
+      {/* Generic Confirmation/Alert Modal */}
+      <AnimatePresence>
+        {modalConfig.show && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
+                  modalConfig.type === 'confirm' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
+                )}>
+                  {modalConfig.type === 'confirm' ? <FileText className="w-8 h-8" /> : <X className="w-8 h-8" />}
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mb-2">{modalConfig.title}</h3>
+                <p className="text-slate-500 font-medium mb-8">{modalConfig.message}</p>
+
+                {modalConfig.isPassword && (
+                  <div className="mb-6">
+                    <input
+                      id="report-modal-password-input"
+                      type="password"
+                      placeholder="Digite a senha..."
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget.value;
+                          if (modalConfig.onConfirm) modalConfig.onConfirm(input);
+                          setModalConfig(prev => ({ ...prev, show: false }));
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  {modalConfig.type === 'confirm' && (
+                    <button
+                      onClick={() => setModalConfig(prev => ({ ...prev, show: false }))}
+                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (modalConfig.type === 'confirm' && modalConfig.onConfirm) {
+                        const input = (document.getElementById('report-modal-password-input') as HTMLInputElement)?.value;
+                        modalConfig.onConfirm(input);
+                      }
+                      setModalConfig(prev => ({ ...prev, show: false }));
+                    }}
+                    className={cn(
+                      "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg",
+                      modalConfig.type === 'confirm' ? "bg-amber-600 hover:bg-amber-700 shadow-amber-100" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                    )}
+                  >
+                    {modalConfig.type === 'confirm' ? 'Confirmar' : 'Entendido'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

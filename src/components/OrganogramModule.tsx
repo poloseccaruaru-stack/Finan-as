@@ -35,6 +35,37 @@ export default function OrganogramModule({ user }: Props) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<OrganogramEntry | null>(null);
+  const [modalConfig, setModalConfig] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'alert';
+    onConfirm?: (inputValue?: string) => void;
+    isPassword?: boolean;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    type: 'alert'
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setModalConfig({ show: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
+  };
+
+  const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
+    showConfirm(title, message, (password) => {
+      if (password?.toUpperCase() === 'SISTEMA') {
+        onConfirm();
+      } else {
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+      }
+    }, true);
+  };
   const [form, setForm] = useState({
     name: '',
     role: '',
@@ -84,12 +115,13 @@ export default function OrganogramModule({ user }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Deseja excluir este registro do organograma?')) return;
-    try {
-      await deleteDoc(doc(db, 'organogram', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `organogram/${id}`);
-    }
+    showAdminConfirm('Excluir Membro', 'Deseja realmente excluir este registro do organograma?', async () => {
+      try {
+        await deleteDoc(doc(db, 'organogram', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `organogram/${id}`);
+      }
+    });
   };
 
   const handleEdit = (entry: OrganogramEntry) => {
@@ -269,6 +301,75 @@ export default function OrganogramModule({ user }: Props) {
                   {editingEntry ? 'Atualizar Membro' : 'Salvar Membro'}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Generic Confirmation/Alert Modal */}
+      <AnimatePresence>
+        {modalConfig.show && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
+                  modalConfig.type === 'confirm' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
+                )}>
+                  {modalConfig.type === 'confirm' ? <Network className="w-8 h-8" /> : <X className="w-8 h-8" />}
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mb-2">{modalConfig.title}</h3>
+                <p className="text-slate-500 font-medium mb-8">{modalConfig.message}</p>
+
+                {modalConfig.isPassword && (
+                  <div className="mb-6">
+                    <input
+                      id="organogram-modal-password-input"
+                      type="password"
+                      placeholder="Digite a senha..."
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget.value;
+                          if (modalConfig.onConfirm) modalConfig.onConfirm(input);
+                          setModalConfig(prev => ({ ...prev, show: false }));
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  {modalConfig.type === 'confirm' && (
+                    <button
+                      onClick={() => setModalConfig(prev => ({ ...prev, show: false }))}
+                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (modalConfig.type === 'confirm' && modalConfig.onConfirm) {
+                        const input = (document.getElementById('organogram-modal-password-input') as HTMLInputElement)?.value;
+                        modalConfig.onConfirm(input);
+                      }
+                      setModalConfig(prev => ({ ...prev, show: false }));
+                    }}
+                    className={cn(
+                      "flex-1 py-3 text-white font-bold rounded-xl transition-all shadow-lg",
+                      modalConfig.type === 'confirm' ? "bg-amber-600 hover:bg-amber-700 shadow-amber-100" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+                    )}
+                  >
+                    {modalConfig.type === 'confirm' ? 'Confirmar' : 'Entendido'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

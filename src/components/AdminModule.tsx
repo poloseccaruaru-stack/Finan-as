@@ -32,9 +32,12 @@ import {
   Unlock,
   ShieldAlert,
   CheckSquare,
-  Square
+  Square,
+  ChevronUp,
+  ChevronDown,
+  Eye
 } from 'lucide-react';
-import { Regimento, OrganogramEntry, Teacher, CalendarEvent, SchoolYearConfig } from '../types';
+import { Regimento, OrganogramEntry, Teacher, CalendarEvent, SchoolYearConfig, GeneralCalendar } from '../types';
 import OrganogramModule from './OrganogramModule';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -47,13 +50,18 @@ interface Props {
 }
 
 export default function AdminModule({ user, subTab }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [schoolYear, setSchoolYear] = useState<SchoolYearConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendarForm, setShowCalendarForm] = useState(false);
   const [activeCalendarType, setActiveCalendarType] = useState<'ebd' | 'church' | 'convention' | 'geral'>('ebd');
-  const [generalCalendar, setGeneralCalendar] = useState('');
+  const [generalCalendars, setGeneralCalendars] = useState<GeneralCalendar[]>([]);
+  const [showGeneralCalendarForm, setShowGeneralCalendarForm] = useState(false);
+  const [editingGeneralCalendarId, setEditingGeneralCalendarId] = useState<string | null>(null);
+  const [generalCalendarForm, setGeneralCalendarForm] = useState({ title: '', content: '' });
+  const [viewingGeneralCalendar, setViewingGeneralCalendar] = useState<GeneralCalendar | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
   const [expandedRegimentoId, setExpandedRegimentoId] = useState<string | null>(null);
@@ -64,6 +72,34 @@ export default function AdminModule({ user, subTab }: Props) {
   const [isRestoring, setIsRestoring] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetType, setResetType] = useState<'total' | 'partial' | 'selective'>('partial');
+  
+  // Alert/Confirm State
+  const [alertConfig, setAlertConfig] = useState<{ show: boolean, title: string, message: string } | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{ 
+    show: boolean, 
+    title: string, 
+    message: string, 
+    onConfirm: (inputValue?: string) => void,
+    isPassword?: boolean 
+  } | null>(null);
+
+  const showAlert = (title: string, message: string) => {
+    setAlertConfig({ show: true, title, message });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setConfirmConfig({ show: true, title, message, onConfirm, isPassword });
+  };
+
+  const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
+    showConfirm(title, message, (password) => {
+      if (password?.toUpperCase() === 'SISTEMA') {
+        onConfirm();
+      } else {
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+      }
+    }, true);
+  };
   const [selectiveOptions, setSelectiveOptions] = useState({
     teachers: false,
     students: false,
@@ -88,7 +124,7 @@ export default function AdminModule({ user, subTab }: Props) {
     'projects', 'transactions', 'budgets', 'planning', 'justificationOptions',
     'calendarEvents', 'events', 'organogram', 'student_reports', 'teacher_reports',
     'manual_reports', 'estimated_expenses', 'config', 'enrollments', 'ai_actions',
-    'meetings'
+    'meetings', 'general_calendars'
   ];
 
   const handleBackup = async () => {
@@ -131,52 +167,47 @@ export default function AdminModule({ user, subTab }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm('ATENÇÃO: A restauração irá sobrescrever os dados existentes com os dados do arquivo. Deseja continuar?')) {
-      e.target.value = '';
-      return;
-    }
+    showAdminConfirm('Confirmar Restauração', 'ATENÇÃO: A restauração irá sobrescrever os dados existentes com os dados do arquivo. Deseja continuar?', async () => {
+      setIsRestoring(true);
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const data = JSON.parse(event.target?.result as string);
+            
+            for (const collName of COLLECTIONS) {
+              if (data[collName] && Array.isArray(data[collName])) {
+                // Clear existing collection
+                const existingSnap = await getDocs(collection(db, collName));
+                for (const docSnap of existingSnap.docs) {
+                  await deleteDoc(doc(db, collName, docSnap.id));
+                }
 
-    setIsRestoring(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const data = JSON.parse(event.target?.result as string);
-          
-          for (const collName of COLLECTIONS) {
-            if (data[collName] && Array.isArray(data[collName])) {
-              // Clear existing collection
-              const existingSnap = await getDocs(collection(db, collName));
-              for (const docSnap of existingSnap.docs) {
-                await deleteDoc(doc(db, collName, docSnap.id));
-              }
-
-              // Restore from backup
-              for (const item of data[collName]) {
-                try {
-                  const { id, record } = item;
-                  // If record is stored as a string (new format), parse it. 
-                  // Otherwise use the item directly (old format compatibility).
-                  const docData = typeof record === 'string' ? JSON.parse(record) : (({ id: _, ...rest }) => rest)(item);
-                  await setDoc(doc(db, collName, id), docData);
-                } catch (docErr) {
-                  console.error(`Error restoring document in ${collName}:`, docErr);
+                // Restore from backup
+                for (const item of data[collName]) {
+                  try {
+                    const { id, record } = item;
+                    const docData = typeof record === 'string' ? JSON.parse(record) : (({ id: _, ...rest }) => rest)(item);
+                    await setDoc(doc(db, collName, id), docData);
+                  } catch (docErr) {
+                    console.error(`Error restoring document in ${collName}:`, docErr);
+                  }
                 }
               }
             }
+            showAlert('Sucesso', 'Dados restaurados com sucesso!');
+          } catch (err) {
+            showAlert('Erro', 'Erro ao processar arquivo de backup.');
+          } finally {
+            setIsRestoring(false);
           }
-          alert('Dados restaurados com sucesso!');
-        } catch (err) {
-          alert('Erro ao processar arquivo de backup.');
-        } finally {
-          setIsRestoring(false);
-        }
-      };
-      reader.readAsText(file);
-    } catch (err) {
-      alert('Erro ao ler arquivo.');
-      setIsRestoring(false);
-    }
+        };
+        reader.readAsText(file);
+      } catch (err) {
+        showAlert('Erro', 'Erro ao ler arquivo.');
+        setIsRestoring(false);
+      }
+    });
     e.target.value = '';
   };
 
@@ -193,11 +224,9 @@ export default function AdminModule({ user, subTab }: Props) {
         setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'calendarEvents'));
 
-      const unsubGeneral = onSnapshot(doc(db, 'config', 'general_calendar'), (snap) => {
-        if (snap.exists()) {
-          setGeneralCalendar(snap.data().content || '');
-        }
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'config/general_calendar'));
+      const unsubGeneral = onSnapshot(collection(db, 'general_calendars'), (snap) => {
+        setGeneralCalendars(snap.docs.map(d => ({ id: d.id, ...d.data() } as GeneralCalendar)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'general_calendars'));
 
       return () => {
         unsubEvents();
@@ -230,16 +259,38 @@ export default function AdminModule({ user, subTab }: Props) {
     }
   };
 
-  const handleSaveGeneralCalendar = async () => {
+  const handleSaveGeneralCalendar = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      await setDoc(doc(db, 'config', 'general_calendar'), {
-        content: generalCalendar,
+      const data = {
+        ...generalCalendarForm,
         updatedAt: new Date().toISOString()
-      });
+      };
+      if (editingGeneralCalendarId) {
+        await updateDoc(doc(db, 'general_calendars', editingGeneralCalendarId), data);
+      } else {
+        await addDoc(collection(db, 'general_calendars'), {
+          ...data,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowGeneralCalendarForm(false);
+      setEditingGeneralCalendarId(null);
+      setGeneralCalendarForm({ title: '', content: '' });
       alert('Calendário Geral salvo com sucesso!');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'config/general_calendar');
+      handleFirestoreError(err, editingGeneralCalendarId ? OperationType.UPDATE : OperationType.CREATE, 'general_calendars');
     }
+  };
+
+  const handleDeleteGeneralCalendar = (id: string) => {
+    showAdminConfirm('Excluir Calendário', 'Deseja realmente excluir este calendário?', async () => {
+      try {
+        await deleteDoc(doc(db, 'general_calendars', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `general_calendars/${id}`);
+      }
+    });
   };
 
   const handleSaveCalendarEvent = async (e: React.FormEvent) => {
@@ -267,13 +318,14 @@ export default function AdminModule({ user, subTab }: Props) {
     }
   };
 
-  const handleDeleteCalendarEvent = async (id: string) => {
-    if (!confirm('Deseja excluir este evento?')) return;
-    try {
-      await deleteDoc(doc(db, 'calendarEvents', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'calendarEvents');
-    }
+  const handleDeleteCalendarEvent = (id: string) => {
+    showAdminConfirm('Excluir Evento', 'Deseja realmente excluir este evento?', async () => {
+      try {
+        await deleteDoc(doc(db, 'calendarEvents', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, 'calendarEvents');
+      }
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -307,21 +359,17 @@ export default function AdminModule({ user, subTab }: Props) {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este capítulo?')) return;
-    try {
-      await deleteDoc(doc(db, 'regimento', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'regimento');
-    }
+  const handleDelete = (id: string) => {
+    showAdminConfirm('Excluir Capítulo', 'Tem certeza que deseja excluir este capítulo do regimento?', async () => {
+      try {
+        await deleteDoc(doc(db, 'regimento', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, 'regimento');
+      }
+    });
   };
 
   const handleReset = async () => {
-    if (resetPassword !== 'SISTEMA') {
-      alert('Senha incorreta!');
-      return;
-    }
-
     const collectionsToDelete: string[] = [];
 
     if (resetType === 'total') {
@@ -345,22 +393,25 @@ export default function AdminModule({ user, subTab }: Props) {
       if (selectiveOptions.finance) collectionsToDelete.push('transactions', 'budgets', 'estimated_expenses');
     }
 
-    if (!confirm(`Tem certeza que deseja realizar o reset ${resetType}? Esta ação é irreversível.`)) return;
-
-    try {
-      for (const coll of collectionsToDelete) {
-        const snap = await getDocs(collection(db, coll));
-        for (const d of snap.docs) {
-          // Don't delete the current admin user
-          if (coll === 'users' && d.id === user.id) continue;
-          await deleteDoc(doc(db, coll, d.id));
+    showAdminConfirm(
+      'Confirmar Reset', 
+      `Tem certeza que deseja realizar o reset ${resetType}? Esta ação é irreversível e apagará todos os dados selecionados das coleções: ${collectionsToDelete.join(', ')}.`,
+      async () => {
+        try {
+          for (const coll of collectionsToDelete) {
+            const snap = await getDocs(collection(db, coll));
+            for (const d of snap.docs) {
+              if (coll === 'users' && d.id === user.id) continue;
+              await deleteDoc(doc(db, coll, d.id));
+            }
+          }
+          showAlert('Reset Concluído', 'O reset do sistema foi realizado com sucesso.');
+          setResetPassword('');
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, 'multiple');
         }
       }
-      alert('Reset concluído com sucesso!');
-      setResetPassword('');
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'multiple');
-    }
+    );
   };
 
   return (
@@ -384,9 +435,22 @@ export default function AdminModule({ user, subTab }: Props) {
             Novo Capítulo
           </button>
         )}
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+          title={isCollapsed ? "Expandir" : "Recolher"}
+        >
+          {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
+        </button>
       </div>
 
-      {subTab === 'organogram' && <OrganogramModule user={user} />}
+      <motion.div
+        initial={false}
+        animate={{ height: isCollapsed ? 0 : 'auto', opacity: isCollapsed ? 0 : 1 }}
+        transition={{ duration: 0.3 }}
+        className="overflow-hidden space-y-6"
+      >
+        {subTab === 'organogram' && <OrganogramModule user={user} />}
 
       {subTab === 'system' && isAdmin && (
         <div className="space-y-6">
@@ -610,26 +674,67 @@ export default function AdminModule({ user, subTab }: Props) {
           </div>
 
           {activeCalendarType === 'geral' ? (
-            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
                 {isAdmin && (
                   <button
-                    onClick={handleSaveGeneralCalendar}
+                    onClick={() => {
+                      setGeneralCalendarForm({ title: '', content: '' });
+                      setEditingGeneralCalendarId(null);
+                      setShowGeneralCalendarForm(true);
+                    }}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
                   >
-                    <Save className="w-5 h-5" />
-                    Salvar Calendário
+                    <Plus className="w-5 h-5" />
+                    Novo Calendário
                   </button>
                 )}
               </div>
-              <textarea
-                value={generalCalendar}
-                onChange={(e) => setGeneralCalendar(e.target.value)}
-                placeholder="Insira aqui o calendário geral em texto corrido..."
-                className="w-full h-[500px] px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono text-sm leading-relaxed"
-                disabled={!isAdmin}
-              />
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                {generalCalendars.map(cal => (
+                  <div key={cal.id} className="group flex flex-col items-center space-y-3 p-4 bg-white rounded-2xl border border-slate-100 hover:shadow-md transition-all cursor-pointer" onClick={() => setViewingGeneralCalendar(cal)}>
+                    <div className="relative">
+                      <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all transform group-hover:scale-110 shadow-sm">
+                        <CalendarIcon className="w-8 h-8" />
+                      </div>
+                      <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {isAdmin && (
+                          <>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setGeneralCalendarForm({ title: cal.title, content: cal.content });
+                                setEditingGeneralCalendarId(cal.id);
+                                setShowGeneralCalendarForm(true);
+                              }}
+                              className="p-1.5 bg-white text-slate-400 hover:text-amber-600 rounded-full shadow-lg border border-slate-100"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteGeneralCalendar(cal.id);
+                              }}
+                              className="p-1.5 bg-white text-slate-400 hover:text-red-600 rounded-full shadow-lg border border-slate-100"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <h4 className="font-bold text-slate-900 text-xs text-center uppercase tracking-tight line-clamp-2">{cal.title}</h4>
+                  </div>
+                ))}
+                {generalCalendars.length === 0 && (
+                  <div className="col-span-full py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 w-full">
+                    <p className="text-slate-400 text-sm">Nenhum calendário geral cadastrado.</p>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <>
@@ -770,6 +875,89 @@ export default function AdminModule({ user, subTab }: Props) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* General Calendar Form Modal */}
+      <AnimatePresence>
+        {showGeneralCalendarForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">
+                  {editingGeneralCalendarId ? 'Editar Calendário' : 'Novo Calendário Geral'}
+                </h3>
+                <button onClick={() => setShowGeneralCalendarForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveGeneralCalendar} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Título do Calendário</label>
+                  <input
+                    required
+                    type="text"
+                    value={generalCalendarForm.title}
+                    onChange={(e) => setGeneralCalendarForm({ ...generalCalendarForm, title: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Conteúdo</label>
+                  <textarea
+                    required
+                    rows={15}
+                    value={generalCalendarForm.content}
+                    onChange={(e) => setGeneralCalendarForm({ ...generalCalendarForm, content: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono text-sm"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  {editingGeneralCalendarId ? 'Atualizar Calendário' : 'Salvar Calendário'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* General Calendar View Modal */}
+      <AnimatePresence>
+        {viewingGeneralCalendar && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <h3 className="text-xl font-bold text-slate-900">{viewingGeneralCalendar.title}</h3>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => window.print()} 
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"
+                    title="Imprimir"
+                  >
+                    <Printer className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setViewingGeneralCalendar(null)} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <X className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-8 overflow-y-auto flex-1">
+                <div className="prose prose-slate max-w-none whitespace-pre-wrap font-mono text-sm leading-relaxed text-slate-700">
+                  {viewingGeneralCalendar.content}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {subTab === 'regimento' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {regimentos.sort((a, b) => a.order - b.order).map((reg) => (
@@ -843,6 +1031,7 @@ export default function AdminModule({ user, subTab }: Props) {
           ))}
         </div>
       )}
+      </motion.div>
 
       {/* Regimento Form Modal */}
       <AnimatePresence>
@@ -899,6 +1088,96 @@ export default function AdminModule({ user, subTab }: Props) {
                   {editingId ? 'Atualizar Capítulo' : 'Salvar Capítulo'}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Alert Modal */}
+      <AnimatePresence>
+        {alertConfig?.show && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto text-amber-600">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">{alertConfig.title}</h3>
+                  <p className="text-slate-600 mt-2">{alertConfig.message}</p>
+                </div>
+                <button
+                  onClick={() => setAlertConfig(null)}
+                  className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+                >
+                  Entendido
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirm Modal */}
+      <AnimatePresence>
+        {confirmConfig?.show && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-indigo-600">
+                  <AlertTriangle className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">{confirmConfig.title}</h3>
+                  <p className="text-slate-600 mt-2">{confirmConfig.message}</p>
+                </div>
+                {confirmConfig.isPassword && (
+                  <div className="mb-4">
+                    <input
+                      id="admin-modal-password-input"
+                      type="password"
+                      placeholder="Digite a senha..."
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget.value;
+                          confirmConfig.onConfirm(input);
+                          setConfirmConfig(null);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setConfirmConfig(null)}
+                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      const input = (document.getElementById('admin-modal-password-input') as HTMLInputElement)?.value;
+                      confirmConfig.onConfirm(input);
+                      setConfirmConfig(null);
+                    }}
+                    className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

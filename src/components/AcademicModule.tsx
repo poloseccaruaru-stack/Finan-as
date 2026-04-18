@@ -27,12 +27,13 @@ import {
   UserPlus,
   BookOpen,
   LayoutDashboard,
+  ChevronUp,
+  ChevronDown,
   CheckSquare,
   FileText,
   AlertCircle,
   Save,
   Check,
-  ChevronDown,
   ArrowUpDown,
   Filter,
   Printer,
@@ -41,6 +42,7 @@ import {
   Eye,
   Pin,
   X,
+  Clock,
   LayoutGrid,
   List,
   Minus
@@ -50,6 +52,7 @@ import { ptBR } from 'date-fns/locale';
 import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
 import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DiaryReportModal } from './DiaryReportModal';
 
 interface Props {
   user: Teacher;
@@ -74,6 +77,7 @@ const PREDEFINED_METHODOLOGIES = [
 ];
 
 export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -108,6 +112,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [reportFilterClass, setReportFilterClass] = useState<string>('all');
   const [reportContent, setReportContent] = useState('');
   const [reportDate, setReportDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
+  const [newReportContent, setNewReportContent] = useState('');
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [showDiaryRangeBar, setShowDiaryRangeBar] = useState(false);
+  const [diaryStartDate, setDiaryStartDate] = useState(safeFormat(new Date(), 'yyyy-MM-01') || "");
+  const [diaryEndDate, setDiaryEndDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [aulaObjetivos, setAulaObjetivos] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
   const [alunosParticiparam, setAlunosParticiparam] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -145,6 +154,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     classesCreated: 0
   });
 
+  const [workingStudentOrder, setWorkingStudentOrder] = useState<string[]>([]);
+  const [showDiaryReport, setShowDiaryReport] = useState(false);
+  const [diaryReportClass, setDiaryReportClass] = useState<string | null>(null);
+  const [diaryReportMonth, setDiaryReportMonth] = useState(safeFormat(new Date(), 'yyyy-MM') || "");
+  const [diaryReportBimestre, setDiaryReportBimestre] = useState<'1º' | '2º' | '3º' | '4º'>('1º');
+
   const [modalConfig, setModalConfig] = useState<{
     show: boolean;
     title: string;
@@ -167,6 +182,16 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
   };
 
+  const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
+    showConfirm(title, message, (password) => {
+      if (password?.toUpperCase() === 'SISTEMA') {
+        onConfirm();
+      } else {
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+      }
+    }, true);
+  };
+
   const isAdmin = user.role === 'admin';
 
   const isClassFinalized = (classId: string) => {
@@ -180,17 +205,25 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   // Fetch Data
   useEffect(() => {
     const classIds = user?.classIds || [];
+    const userId = user?.id;
+    
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
     const studentsQuery = isAdmin 
-      ? collection(db, 'students') 
+      ? query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear))
       : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
 
     const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
-
-    const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
-      setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+      setLoading(false);
+    }, (err) => {
+      console.error('Error fetching students:', err);
+      handleFirestoreError(err, OperationType.LIST, 'students');
+      setLoading(false);
+    });
 
     const classesQuery = isAdmin
       ? collection(db, 'classes')
@@ -199,6 +232,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
+
+    const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
+      setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     const unsubJustifications = onSnapshot(collection(db, 'justificationOptions'), (snap) => {
       setJustificationOptions(snap.docs.map(d => ({ id: d.id, ...d.data() } as JustificationOption)));
@@ -241,7 +278,67 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubMeetings();
       unsubSchoolYear();
     };
-  }, [user, isAdmin]);
+  }, [user?.id, user?.role, JSON.stringify(user?.classIds), isAdmin, selectedSchoolYear]);
+
+  useEffect(() => {
+    if (selectedClass) {
+      const cls = classes.find(c => c.id === selectedClass);
+      if (cls) {
+        const classStudentsIds = students
+          .filter(s => (s.classId === selectedClass || s.classIds?.includes(selectedClass)))
+          .map(s => s.id);
+
+        if (cls.isOrderFixed && cls.studentOrder && cls.studentOrder.length > 0) {
+          // Keep only students currently in class, preserving order
+          const existingOrder = cls.studentOrder.filter(id => classStudentsIds.includes(id));
+          // Add any new students at the end
+          const newStudents = classStudentsIds.filter(id => !existingOrder.includes(id));
+          setWorkingStudentOrder(prev => {
+            // Only update if the base class or students list meaningfully changed and we don't have a local sequence being edited
+            const nextOrder = [...existingOrder, ...newStudents];
+            return JSON.stringify(prev) === JSON.stringify(nextOrder) ? prev : nextOrder;
+          });
+        } else {
+          // Default: Alphabetical
+          const alphaOrder = students
+            .filter(s => classStudentsIds.includes(s.id))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(s => s.id);
+          setWorkingStudentOrder(prev => {
+             return JSON.stringify(prev) === JSON.stringify(alphaOrder) ? prev : alphaOrder;
+          });
+        }
+      }
+    } else {
+      setWorkingStudentOrder([]);
+    }
+  }, [selectedClass, students.length, classes.find(c => c.id === selectedClass)?.studentOrder?.length, classes.find(c => c.id === selectedClass)?.isOrderFixed]);
+
+  const moveStudent = (index: number, direction: 'up' | 'down') => {
+    const newOrder = [...workingStudentOrder];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < newOrder.length) {
+      [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+      setWorkingStudentOrder(newOrder);
+    }
+  };
+
+  const handleSaveOrderPreference = async () => {
+    if (!selectedClass) return;
+    const cls = classes.find(c => c.id === selectedClass);
+    if (!cls) return;
+
+    try {
+      await updateDoc(doc(db, 'classes', selectedClass), {
+        isOrderFixed: true,
+        studentOrder: workingStudentOrder,
+        updatedAt: new Date().toISOString()
+      });
+      showAlert('Sucesso', 'Preferencia de ordem salva e fixada com sucesso!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `classes/${selectedClass}`);
+    }
+  };
 
   // Sorting and Filtering Logic
   const filteredStudents = useMemo(() => {
@@ -349,7 +446,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [viewingMeeting, setViewingMeeting] = useState<any | null>(null);
 
   const handleDeleteStudent = async (id: string) => {
-    showConfirm('Excluir Aluno', 'Deseja realmente excluir este aluno?', async () => {
+    showAdminConfirm('Excluir Aluno', 'Deseja realmente excluir este aluno?', async () => {
       try {
         await deleteDoc(doc(db, 'students', id));
       } catch (err) {
@@ -382,7 +479,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   };
 
   const handleDeleteMeeting = async (id: string) => {
-    showConfirm('Excluir Reunião', 'Deseja realmente excluir esta ata de reunião?', async () => {
+    showAdminConfirm('Excluir Reunião', 'Deseja realmente excluir esta ata de reunião?', async () => {
       try {
         await deleteDoc(doc(db, 'meetings', id));
       } catch (err) {
@@ -391,7 +488,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
   const handleDeleteTeacher = async (id: string) => {
-    showConfirm('Excluir Professor', 'Deseja realmente excluir este professor?', async () => {
+    showAdminConfirm('Excluir Professor', 'Deseja realmente excluir este professor?', async () => {
       try {
         await deleteDoc(doc(db, 'users', id));
       } catch (err) {
@@ -401,7 +498,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   };
 
   const handleDeleteClass = async (id: string) => {
-    showConfirm('Excluir Turma', 'Deseja realmente excluir esta turma?', async () => {
+    showAdminConfirm('Excluir Turma', 'Deseja realmente excluir esta turma?', async () => {
       try {
         await deleteDoc(doc(db, 'classes', id));
       } catch (err) {
@@ -445,6 +542,36 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
+    }
+  };
+
+  const handleAddReport = async () => {
+    if (!newReportContent.trim() || !reportTargetId) return;
+    setIsSavingReport(true);
+    try {
+      if (reportType === 'student') {
+        await addDoc(collection(db, 'student_reports'), {
+          studentId: reportTargetId,
+          teacherId: auth.currentUser?.uid || 'system',
+          content: newReportContent.trim(),
+          date: safeFormat(new Date(), 'yyyy-MM-dd'),
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, 'teacher_reports'), {
+          targetTeacherId: reportTargetId,
+          adminId: auth.currentUser?.uid || 'system',
+          content: newReportContent.trim(),
+          date: safeFormat(new Date(), 'yyyy-MM-dd'),
+          createdAt: new Date().toISOString()
+        });
+      }
+      setNewReportContent('');
+      showAlert('Sucesso', 'Relatório cadastrado com sucesso!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, reportType === 'student' ? 'student_reports' : 'teacher_reports');
+    } finally {
+      setIsSavingReport(false);
     }
   };
 
@@ -661,8 +788,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    setLoading(true);
-    try {
+    showAdminConfirm('Confirmar Processamento', 'Deseja realmente iniciar o processo de rematrícula automática?', async () => {
+      setLoading(true);
+      try {
       let reenrollCount = 0;
       let completedCount = 0;
       let classesCreatedCount = 0;
@@ -772,18 +900,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     } finally {
       setLoading(false);
     }
-  };
+  });
+};
 
   // Attendance Logic
-  const [attendanceList, setAttendanceList] = useState<{ [key: string]: boolean }>({});
+  const [attendanceList, setAttendanceList] = useState<{ [key: string]: string | boolean }>({});
   const [justifications, setJustifications] = useState<{ [key: string]: string }>({});
   const [attendanceDate, setAttendanceDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [startTime, setStartTime] = useState('15:50');
   const [endTime, setEndTime] = useState('16:40');
   const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
   const [defaultTimes, setDefaultTimes] = useState({ start: '15:50', end: '16:40' });
-  const [markingViewMode, setMarkingViewMode] = useState<'grid' | 'list'>('grid');
+  const [markingViewMode, setMarkingViewMode] = useState<'grid' | 'list'>('list');
   const [markingZoom, setMarkingZoom] = useState<number>(1);
+  const [markingOrderMode, setMarkingOrderMode] = useState(false);
 
   const handleFixTimes = async () => {
     try {
@@ -855,7 +985,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   useEffect(() => {
     if (selectedClass) {
       const classStudents = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass));
-      const initial = classStudents.reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
+      const initial = classStudents.reduce((acc, s) => ({ ...acc, [s.id]: 'present' }), {});
       setAttendanceList(initial);
       setJustifications({});
     }
@@ -874,8 +1004,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    const present = Object.keys(attendanceList).filter(id => attendanceList[id]);
-    const absent = Object.keys(attendanceList).filter(id => !attendanceList[id]);
+    const present = Object.keys(attendanceList).filter(id => attendanceList[id] === 'present' || attendanceList[id] === true);
+    const absent = Object.keys(attendanceList).filter(id => attendanceList[id] === 'absent' || attendanceList[id] === false);
     
     try {
       if (currentPlanning && contentGiven !== currentPlanning.content && !observation.trim()) {
@@ -973,7 +1103,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    showConfirm('Excluir Chamada', 'Deseja realmente excluir este registro de chamada?', async () => {
+    showAdminConfirm('Excluir Chamada', 'Deseja realmente excluir este registro de chamada?', async () => {
       try {
         await deleteDoc(doc(db, 'attendance', id));
       } catch (err) {
@@ -1111,19 +1241,46 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 Imprimir
               </button>
               <button
-                onClick={() => setShowForm(true)}
+                onClick={() => {
+                  if (subTab === 'meetings') {
+                    setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+                    setEditingMeeting(null);
+                  } else if (subTab === 'students') {
+                    setEditingStudent(null);
+                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+                  } else if (subTab === 'teachers') {
+                    setEditingTeacher(null);
+                    setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                  } else if (subTab === 'classes') {
+                    setEditingClass(null);
+                    setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+                  }
+                  setShowForm(true);
+                }}
                 className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-5 h-5" />
-                Novo {subTab === 'students' ? 'Aluno' : subTab === 'teachers' ? 'Professor' : 'Turma'}
+                Novo {subTab === 'students' ? 'Aluno' : subTab === 'teachers' ? 'Professor' : subTab === 'meetings' ? 'Ata/Reunião' : 'Turma'}
               </button>
             </div>
           )}
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+            title={isCollapsed ? "Expandir" : "Recolher"}
+          >
+            {isCollapsed ? <ChevronDown className="w-5 h-5 text-slate-500" /> : <ChevronUp className="w-5 h-5 text-slate-500" />}
+          </button>
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <motion.div 
+        initial={false}
+        animate={{ height: isCollapsed ? 0 : 'auto', opacity: isCollapsed ? 0 : 1 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
+      >
         {subTab === 'students' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -1479,6 +1636,67 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     Fixar Padrão
                   </span>
                 </button>
+                {selectedClass && (
+                  <>
+                    <button
+                      onClick={() => setMarkingOrderMode(!markingOrderMode)}
+                      className={cn(
+                        "p-2.5 rounded-xl transition-all shadow-sm group relative",
+                        markingOrderMode ? "bg-amber-100 text-amber-600 ring-2 ring-amber-500" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+                      )}
+                      title="Configurar Ordem dos Alunos"
+                    >
+                      <ArrowUpDown className="w-5 h-5" />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        Configurar Ordem
+                      </span>
+                    </button>
+                    {markingOrderMode && (
+                      <button
+                        onClick={async () => {
+                          const classStudentsIds = students
+                            .filter(s => (s.classId === selectedClass || s.classIds?.includes(selectedClass)))
+                            .map(s => s.id);
+                          const alphaOrder = students
+                            .filter(s => classStudentsIds.includes(s.id))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(s => s.id);
+                          setWorkingStudentOrder(alphaOrder);
+                          showAlert('Sucesso', 'Ordem redefinida para alfabética. Clique em "Fixar Preferência" para salvar.');
+                        }}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition-all"
+                      >
+                        Redefinir A-Z
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSaveOrderPreference}
+                      className={cn(
+                        "px-4 py-2 rounded-xl transition-all shadow-sm group relative flex items-center gap-2 font-bold text-xs shadow-indigo-100",
+                        (classes.find(c => c.id === selectedClass)?.isOrderFixed && JSON.stringify(classes.find(c => c.id === selectedClass)?.studentOrder) === JSON.stringify(workingStudentOrder))
+                          ? "bg-indigo-600 text-white"
+                          : "bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50"
+                      )}
+                      title="Fixar/Salvar ordem dos alunos"
+                    >
+                      <Pin className="w-4 h-4" />
+                      {(classes.find(c => c.id === selectedClass)?.isOrderFixed && JSON.stringify(classes.find(c => c.id === selectedClass)?.studentOrder) === JSON.stringify(workingStudentOrder)) ? 'Ordem Salva' : 'Fixar Preferência'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDiaryReportClass(selectedClass);
+                        setShowDiaryReport(true);
+                      }}
+                      className="p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-xl transition-all shadow-sm group relative"
+                      title="Gerar Diário de Classe"
+                    >
+                      <FileText className="w-5 h-5" />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        Gerar Diário
+                      </span>
+                    </button>
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
@@ -1520,10 +1738,61 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                {selectedClass && (
+                  <div className="flex items-center gap-2">
+                    {showDiaryRangeBar ? (
+                      <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm animate-in slide-in-from-right-2 duration-300">
+                        <div className="flex flex-col">
+                          <label className="text-[10px] font-black text-slate-400 uppercase px-2">Início</label>
+                          <input 
+                            type="date"
+                            value={diaryStartDate}
+                            onChange={(e) => setDiaryStartDate(e.target.value)}
+                            className="px-2 py-0.5 text-xs font-bold border-none outline-none text-slate-700 bg-transparent"
+                          />
+                        </div>
+                        <div className="w-px h-6 bg-slate-100" />
+                        <div className="flex flex-col">
+                          <label className="text-[10px] font-black text-slate-400 uppercase px-2">Fim</label>
+                          <input 
+                            type="date"
+                            value={diaryEndDate}
+                            onChange={(e) => setDiaryEndDate(e.target.value)}
+                            className="px-2 py-0.5 text-xs font-bold border-none outline-none text-slate-700 bg-transparent"
+                          />
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setDiaryReportClass(selectedClass);
+                            setShowDiaryReport(true);
+                            setShowDiaryRangeBar(false);
+                          }}
+                          className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-all ml-2"
+                        >
+                          Gerar Diário
+                        </button>
+                        <button 
+                          onClick={() => setShowDiaryRangeBar(false)}
+                          className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowDiaryRangeBar(true)}
+                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-semibold rounded-xl transition-all text-sm flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Gerar Diário
+                      </button>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={() => {
-                    const allPresent = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
-                    setAttendanceList(allPresent);
+                    const allPresentValue = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: 'present' }), {});
+                    setAttendanceList(allPresentValue);
                   }}
                   className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-xl transition-all text-sm"
                 >
@@ -1531,8 +1800,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 </button>
                 <button
                   onClick={() => {
-                    const allAbsent = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: false }), {});
-                    setAttendanceList(allAbsent);
+                    const allAbsentValue = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: 'absent' }), {});
+                    setAttendanceList(allAbsentValue);
                   }}
                   className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl transition-all text-sm"
                 >
@@ -1612,60 +1881,117 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
                     : "grid-cols-1"
                 )}>
-                  {students
-                    .filter(s => (s.classId === selectedClass || s.classIds?.includes(selectedClass)))
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(student => (
-                    <button
+                  {workingStudentOrder
+                    .map(sid => students.find(s => s.id === sid))
+                    .filter((s): s is Student => !!s)
+                    .map((student, index) => (
+                    <div
                       key={student.id}
-                      onClick={() => setAttendanceList(prev => ({ ...prev, [student.id]: !prev[student.id] }))}
                       className={cn(
-                        "flex items-center justify-between transition-all rounded-xl border",
+                        "flex items-center justify-between transition-all rounded-xl border group",
                         markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
-                        attendanceList[student.id] 
+                        (attendanceList[student.id] === 'present' || attendanceList[student.id] === true)
                           ? "bg-green-50 border-green-200 text-green-700" 
                           : "bg-red-50 border-red-200 text-red-700"
                       )}
                     >
                       <div className="flex items-center gap-3">
+                        {markingOrderMode && (
+                          <div className="flex flex-col gap-0.5">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
+                              disabled={index === 0}
+                              className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
+                              disabled={index === workingStudentOrder.length - 1}
+                              className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <div className={cn(
-                          "rounded-full flex items-center justify-center font-bold",
+                          "rounded-full flex items-center justify-center font-bold shrink-0",
                           markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
-                          attendanceList[student.id] ? "bg-green-200" : "bg-red-200"
+                          (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-200" : "bg-red-200"
                         )}>
                           {student.name.charAt(0)}
                         </div>
-                        <div className="text-left">
-                          <span className={cn(
-                            "font-medium block",
-                            markingZoom === 1 ? "text-[11px]" : markingZoom === 2 ? "text-sm" : "text-base"
-                          )}>{student.name}</span>
-                          {justifications[student.id] && (
-                            <span className="text-[10px] text-slate-500 italic">J: {justifications[student.id]}</span>
-                          )}
-                        </div>
+                         <div className="text-left">
+                           <span className={cn(
+                             "font-medium block",
+                             markingZoom === 1 ? "text-[11px]" : markingZoom === 2 ? "text-sm" : "text-base"
+                           )}>{student.name}</span>
+                           <div className="flex items-center gap-1.5 mt-0.5">
+                             {justifications[student.id] && (
+                               <span className="text-[10px] text-slate-500 italic">J: {justifications[student.id]}</span>
+                             )}
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setReportTargetId(student.id);
+                                 setReportType('student');
+                                 setShowReportListModal(true);
+                               }}
+                               className="p-1 hover:bg-slate-200 rounded text-indigo-600 transition-all"
+                               title="Ver histórico de relatórios"
+                             >
+                               <FileText className="w-3 h-3" />
+                             </button>
+                           </div>
+                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {!attendanceList[student.id] && (
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCurrentJustifyStudent(student.id);
-                              setShowJustifyModal(true);
-                            }}
-                            className={cn(
-                              "rounded-lg flex items-center justify-center font-bold transition-all",
-                              markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
-                              justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                            )}
-                            title="Justificar falta"
-                          >
-                            J
-                          </button>
-                        )}
-                        {attendanceList[student.id] ? <CheckCircle2 className={cn(markingZoom === 1 ? "w-4 h-4" : "w-5 h-5")} /> : <XCircle className={cn(markingZoom === 1 ? "w-4 h-4" : "w-5 h-5")} />}
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setAttendanceList(prev => ({ 
+                              ...prev, 
+                              [student.id]: (prev[student.id] === 'present' || prev[student.id] === true) ? 'absent' : 'present' 
+                            })); 
+                          }}
+                          className={cn(
+                            "rounded-xl flex items-center justify-center transition-all shadow-sm",
+                            markingZoom === 1 ? "w-10 h-10" : markingZoom === 2 ? "w-12 h-12" : "w-14 h-14",
+                            (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-600 text-white shadow-green-100" : "bg-red-600 text-white shadow-red-100"
+                          )}
+                          title={(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "Presente (Clique para Falta)" : "Falta (Clique para Presente)"}
+                        >
+                          {(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? (
+                            <CheckCircle2 className="w-6 h-6" />
+                          ) : (
+                            <XCircle className="w-6 h-6" />
+                          )}
+                        </button>
+                        
+                        <AnimatePresence>
+                          {!(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) && (
+                            <motion.button 
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: -10 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentJustifyStudent(student.id);
+                                setShowJustifyModal(true);
+                              }}
+                              className={cn(
+                                "rounded-lg flex items-center justify-center font-bold transition-all",
+                                markingZoom === 1 ? "w-10 h-10 text-xs" : markingZoom === 2 ? "w-12 h-12 text-sm" : "w-14 h-14 text-base",
+                                justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                              )}
+                              title="Justificar falta"
+                            >
+                              J
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -2223,26 +2549,31 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 <h3 className="text-xl font-bold text-slate-900">Atas de Reuniões</h3>
                 <p className="text-sm text-slate-500">Registro e gestão de reuniões administrativas e pedagógicas</p>
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
-                    setEditingMeeting(null);
-                    setShowForm(true);
-                  }}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
-                >
-                  <Plus className="w-5 h-5" />
-                  Nova Ata
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+                  setEditingMeeting(null);
+                  setShowForm(true);
+                }}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+              >
+                <Plus className="w-5 h-5" />
+                Nova Ata
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {['ADMINISTRATIVA', 'PEDAGÓGICA', 'PAIS', 'GERAL'].map(type => (
+              {['ADMINISTRATIVA', 'PEDAGÓGICA', 'PAIS', 'ALUNOS', 'GERAL', 'OUTRAS'].map(type => (
                 <div key={type} className="space-y-4">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      type === 'ADMINISTRATIVA' ? "bg-indigo-400" :
+                      type === 'PEDAGÓGICA' ? "bg-amber-400" :
+                      type === 'PAIS' ? "bg-green-400" :
+                      type === 'ALUNOS' ? "bg-blue-400" :
+                      type === 'GERAL' ? "bg-purple-400" : "bg-slate-400"
+                    )} />
                     {type}
                   </h4>
                   <div className="space-y-3">
@@ -2293,7 +2624,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Modals */}
       <AnimatePresence>
@@ -2637,7 +2968,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         <option value="ADMINISTRATIVA">Administrativa</option>
                         <option value="PEDAGÓGICA">Pedagógica</option>
                         <option value="PAIS">Reunião de Pais</option>
+                        <option value="ALUNOS">Encontro de Alunos</option>
                         <option value="GERAL">Geral</option>
+                        <option value="OUTRAS">Outras</option>
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -3335,20 +3668,53 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-slate-900">
-                  Histórico de Relatórios - {reportType === 'student' 
-                    ? students.find(s => s.id === reportTargetId)?.name 
-                    : teachers.find(t => t.id === reportTargetId)?.name}
-                </h3>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Histórico de Relatórios
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    {reportType === 'student' 
+                      ? students.find(s => s.id === reportTargetId)?.name 
+                      : teachers.find(t => t.id === reportTargetId)?.name}
+                  </p>
+                </div>
                 <button onClick={() => setShowReportListModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
-                  <XCircle className="w-5 h-5 text-slate-500" />
+                  <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
-              <div className="p-6 overflow-y-auto space-y-4">
-                {(reportType === 'student' 
-                  ? studentReports.filter(r => r.studentId === reportTargetId)
-                  : teacherReports.filter(r => r.targetTeacherId === reportTargetId)
-                ).sort((a, b) => b.date.localeCompare(a.date)).map(report => (
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* New Report Form */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Novo Relatório
+                  </h4>
+                  <textarea
+                    value={newReportContent}
+                    onChange={(e) => setNewReportContent(e.target.value)}
+                    placeholder="Descreva o desempenho, comportamento ou observações..."
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-h-[100px] resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleAddReport}
+                      disabled={isSavingReport || !newReportContent.trim()}
+                      className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isSavingReport ? 'Salvando...' : 'Salvar Relatório'}
+                      <Save className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">
+                    Registros Anteriores
+                  </h4>
+                  {(reportType === 'student' 
+                    ? studentReports.filter(r => r.studentId === reportTargetId)
+                    : teacherReports.filter(r => r.targetTeacherId === reportTargetId)
+                  ).sort((a, b) => b.date.localeCompare(a.date)).map(report => (
                   <div key={report.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
@@ -3371,6 +3737,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     Nenhum relatório encontrado para este registro.
                   </div>
                 )}
+                </div>
               </div>
             </motion.div>
           </div>
@@ -3827,6 +4194,19 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           </div>
         )}
       </AnimatePresence>
+
+      <DiaryReportModal 
+        isOpen={showDiaryReport}
+        onClose={() => setShowDiaryReport(false)}
+        classId={diaryReportClass || ""}
+        classes={classes}
+        students={students}
+        attendances={attendances}
+        teachers={teachers}
+        initialMonth={diaryReportMonth}
+        startDate={diaryStartDate}
+        endDate={diaryEndDate}
+      />
     </div>
   );
 }

@@ -31,15 +31,18 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
     setLoading(true);
     setError(null);
 
-    // 1. Check for special admin: sistema@gmail.com / sistema
-    if (email.toLowerCase() === 'sistema@gmail.com' && password === 'sistema') {
+    // 1. Check for special admin: sistema / sistema
+    const normalizedLogin = email.trim().toLowerCase();
+    const normalizedPassword = password.trim().toLowerCase();
+
+    if (normalizedLogin === 'sistema' && normalizedPassword === 'sistema') {
       const adminData = {
         id: 'sistema_admin',
         name: 'Administrador Geral',
-        email: 'sistema@gmail.com',
+        email: 'sistema@igbapi.com',
         role: 'admin',
         classIds: [],
-        allowedTabs: ['dashboard', 'academic', 'admin', 'projects', 'finance', 'reports'],
+        allowedTabs: ['dashboard', 'academic', 'admin', 'projects', 'finance', 'reports', 'planning', 'organogram'],
         createdAt: new Date().toISOString()
       };
       onLoginSuccess(adminData);
@@ -244,7 +247,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                  placeholder="exemplo@gmail.com"
+                  placeholder="Usuário ou email"
                 />
               </div>
             </div>

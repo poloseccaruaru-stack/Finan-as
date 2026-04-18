@@ -44,6 +44,8 @@ export interface Class {
   ageRange: string;
   teacherId?: string;
   studentIds: string[];
+  studentOrder?: string[];
+  isOrderFixed?: boolean;
   schoolYear?: string;
   createdAt: string;
   status?: 'ATIVA' | 'ENCERRADA';
@@ -68,6 +70,7 @@ export interface Attendance {
   date: string;
   presentStudentIds: string[];
   absentStudentIds: string[];
+  partialStudentIds?: string[];
   startTime?: string;
   endTime?: string;
   justifications?: Record<string, string>;
@@ -207,11 +210,18 @@ export interface ManualReport {
 
 export interface Meeting {
   id: string;
-  type: 'ADMINISTRATIVA' | 'PEDAGÓGICA' | 'PAIS' | 'ALUNOS' | 'OUTRAS';
+  type: 'ADMINISTRATIVA' | 'PEDAGÓGICA' | 'PAIS' | 'ALUNOS' | 'GERAL' | 'OUTRAS';
   title: string;
   content: string;
   date: string;
-  participants?: string[];
+  participants?: string;
+  createdAt: string;
+}
+
+export interface GeneralCalendar {
+  id: string;
+  title: string;
+  content: string;
   createdAt: string;
 }
 

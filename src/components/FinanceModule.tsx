@@ -27,7 +27,9 @@ import {
   Search,
   X,
   Wallet,
-  Printer
+  Printer,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Transaction, Budget, CATEGORIES, Teacher, EstimatedExpense } from '../types';
 import { cn, safeFormat } from '../lib/utils';
@@ -51,6 +53,7 @@ interface Props {
 }
 
 export default function FinanceModule({ user }: Props) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -200,8 +203,37 @@ export default function FinanceModule({ user }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Header with Controls */}
+      <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-green-100">
+            <DollarSign className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Financeiro</h2>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none">Gestão de Fluxo de Caixa</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
+          title={isCollapsed ? "Expandir" : "Recolher"}
+        >
+          {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden space-y-6"
+          >
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
@@ -432,6 +464,10 @@ export default function FinanceModule({ user }: Props) {
           </div>
         </div>
       </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Estimated Expense Form Modal */}
       <AnimatePresence>

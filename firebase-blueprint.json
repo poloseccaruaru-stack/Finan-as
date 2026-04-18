@@ -114,6 +114,33 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "date", "type"]
+    },
+    "Meeting": {
+      "title": "Meeting",
+      "description": "Meeting minutes and records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["ADMINISTRATIVA", "PEDAGÓGICA", "PAIS", "ALUNOS", "GERAL", "OUTRAS"] },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "participants": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "title", "content", "date"]
+    },
+    "GeneralCalendar": {
+      "title": "GeneralCalendar",
+      "description": "General text-based calendar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content"]
     }
   },
   "firestore": {
@@ -124,6 +151,8 @@
     "/projects/{projectId}": { "schema": "Project", "description": "Projects" },
     "/transactions/{transactionId}": { "schema": "Transaction", "description": "Financial records" },
     "/regimento/{regimentoId}": { "schema": "Regimento", "description": "School regulations" },
-    "/calendar/{eventId}": { "schema": "CalendarEvent", "description": "Calendar events" }
+    "/calendar/{eventId}": { "schema": "CalendarEvent", "description": "Calendar events" },
+    "/meetings/{meetingId}": { "schema": "Meeting", "description": "Meeting minutes" },
+    "/general_calendars/{calendarId}": { "schema": "GeneralCalendar", "description": "General calendars" }
   }
 }
