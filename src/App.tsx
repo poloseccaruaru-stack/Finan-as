@@ -218,7 +218,6 @@ export default function App() {
       ].filter(sub => {
         if (isAdmin || isCoordinator) return true;
         // Teachers can only see sub-items they are allowed to
-        if (sub.id === 'teachers' || sub.id === 'classes') return false; // Usually admin only
         return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
       })
     },

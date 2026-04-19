@@ -45,13 +45,14 @@ import {
   Clock,
   LayoutGrid,
   List,
-  Minus
+  Minus,
+  GripVertical
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
 import { cn, safeFormat } from '../lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { DiaryReportModal } from './DiaryReportModal';
 
 interface Props {
@@ -667,14 +668,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setTeacherForm({
       name: teacher.name,
       email: teacher.email,
-      password: '', // Don't load password
       contact: teacher.contact,
       profession: teacher.profession || '',
       startDateEBD: teacher.startDateEBD || '',
       generalProfile: teacher.generalProfile || '',
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
-      allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports']
+      allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
+      password: teacher.password || ''
     });
     setShowForm(true);
   };
@@ -1887,18 +1888,25 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             )}
 
               <div className="space-y-6">
-                <div className={cn(
-                  "grid gap-4",
-                  markingViewMode === 'grid' 
-                    ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
-                    : "grid-cols-1"
-                )}>
+                <Reorder.Group 
+                  axis="y" 
+                  values={workingStudentOrder} 
+                  onReorder={setWorkingStudentOrder}
+                  className={cn(
+                    "grid gap-4",
+                    markingViewMode === 'grid' 
+                      ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
+                      : "grid-cols-1"
+                  )}
+                >
                   {workingStudentOrder
                     .map(sid => students.find(s => s.id === sid))
                     .filter((s): s is Student => !!s)
                     .map((student, index) => (
-                    <div
+                    <Reorder.Item
                       key={student.id}
+                      value={student.id}
+                      dragListener={markingOrderMode}
                       className={cn(
                         "flex items-center justify-between transition-all rounded-xl border group",
                         markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
@@ -1909,21 +1917,26 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     >
                       <div className="flex items-center gap-3">
                         {markingOrderMode && (
-                          <div className="flex flex-col gap-0.5">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
-                              disabled={index === 0}
-                              className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
-                            >
-                              <ChevronUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
-                              disabled={index === workingStudentOrder.length - 1}
-                              className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
-                            >
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="flex items-center gap-1">
+                            <div className="cursor-grab active:cursor-grabbing p-1 text-slate-400">
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
+                                disabled={index === 0}
+                                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
+                                disabled={index === workingStudentOrder.length - 1}
+                                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         )}
                         <div className={cn(
@@ -2003,9 +2016,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           )}
                         </AnimatePresence>
                       </div>
-                    </div>
+                    </Reorder.Item>
                   ))}
-                </div>
+                </Reorder.Group>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2818,14 +2831,31 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const role = e.target.value as 'admin' | 'coordinator' | 'teacher';
-                              let allowedTabs = teacherForm.allowedTabs;
-                              if (role === 'admin') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
-                              } else if (role === 'coordinator') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
+                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher';
+                              const currentRole = editingTeacher?.role || 'teacher';
+                              
+                              if (newRole !== currentRole) {
+                                showConfirm(
+                                  'Alterar Cargo/Perfil',
+                                  'Para alterar o perfil de acesso deste colaborador, insira a senha do sistema:',
+                                  (pass) => {
+                                    if (pass === 'SISTEMA') {
+                                      let allowedTabs = teacherForm.allowedTabs;
+                                      if (newRole === 'admin') {
+                                        allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
+                                      } else if (newRole === 'coordinator') {
+                                        allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
+                                      }
+                                      setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
+                                    } else {
+                                      showAlert('Erro', 'Senha incorreta! A alteração não foi realizada.');
+                                    }
+                                  },
+                                  true // isPassword
+                                );
+                              } else {
+                                setTeacherForm({ ...teacherForm, role: newRole });
                               }
-                              setTeacherForm({ ...teacherForm, role, allowedTabs });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
@@ -2847,13 +2877,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Senha Provisória</label>
+                          <label className="text-xs font-bold text-slate-500 uppercase">Senha de Acesso</label>
                           <input
-                            required={!editingTeacher}
-                            type="password"
+                            required
+                            type={(isAdmin || isCoordinator || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
                             value={teacherForm.password}
                             onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
-                            placeholder={editingTeacher ? 'Deixe em branco' : ''}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
