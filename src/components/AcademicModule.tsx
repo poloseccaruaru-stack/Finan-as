@@ -52,7 +52,7 @@ import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
 import { cn, safeFormat } from '../lib/utils';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import { DiaryReportModal } from './DiaryReportModal';
 
 interface Props {
@@ -76,6 +76,165 @@ const PREDEFINED_METHODOLOGIES = [
   'Música/Louvor',
   'Trabalho Manual'
 ];
+
+function AttendanceStudentCard({ 
+  student, 
+  index, 
+  markingOrderMode, 
+  markingZoom, 
+  attendanceList, 
+  justifications, 
+  setAttendanceList, 
+  setReportTargetId, 
+  setReportType, 
+  setShowReportListModal,
+  setCurrentJustifyStudent, 
+  setShowJustifyModal, 
+  moveStudent, 
+  isLast 
+}: any) {
+  const controls = useDragControls();
+
+  return (
+    <Reorder.Item
+      value={student.id}
+      dragControls={controls}
+      dragListener={false}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileDrag={{ 
+        scale: 1.02, 
+        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+        backgroundColor: "white",
+        zIndex: 50
+      }}
+      className={cn(
+        "flex items-center justify-between transition-all rounded-xl border group",
+        markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
+        (attendanceList[student.id] === 'present' || attendanceList[student.id] === true)
+          ? "bg-green-50 border-green-200 text-green-700" 
+          : "bg-red-50 border-red-200 text-red-700"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        {markingOrderMode && (
+          <div className="flex items-center gap-1">
+            <div 
+              onPointerDown={(e) => controls.start(e)}
+              className="cursor-grab active:cursor-grabbing p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+              title="Arraste para reordenar"
+            >
+              <GripVertical className="w-5 h-5" />
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <button 
+                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
+                disabled={index === 0}
+                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
+                disabled={isLast}
+                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+        
+        <div 
+           className={cn("flex items-center gap-3 transition-opacity", markingOrderMode ? "cursor-grab active:cursor-grabbing" : "")}
+           onPointerDown={(e) => markingOrderMode && controls.start(e)}
+        >
+          <div className={cn(
+            "rounded-full flex items-center justify-center font-bold shrink-0",
+            markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
+            (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-200" : "bg-red-200"
+          )}>
+            {student.name.charAt(0)}
+          </div>
+          <div className="text-left">
+            <span className={cn(
+              "font-medium block",
+              markingZoom === 1 ? "text-[11px]" : markingZoom === 2 ? "text-sm" : "text-base"
+            )}>{student.name}</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {justifications[student.id] && (
+                <span className="text-[10px] text-slate-500 italic">J: {justifications[student.id]}</span>
+              )}
+              <button
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setReportTargetId(student.id);
+                  setReportType('student');
+                  setShowReportListModal(true);
+                }}
+                className="p-1 hover:bg-slate-200 rounded text-indigo-600 transition-all"
+                title="Ver histórico de relatórios"
+              >
+                <FileText className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            setAttendanceList((prev: any) => ({ 
+              ...prev, 
+              [student.id]: (prev[student.id] === 'present' || prev[student.id] === true) ? 'absent' : 'present' 
+            })); 
+          }}
+          className={cn(
+            "rounded-xl flex items-center justify-center transition-all shadow-sm",
+            markingZoom === 1 ? "w-10 h-10" : markingZoom === 2 ? "w-12 h-12" : "w-14 h-14",
+            (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-600 text-white shadow-green-100" : "bg-red-600 text-white shadow-red-100"
+          )}
+          title={(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "Presente (Clique para Falta)" : "Falta (Clique para Presente)"}
+        >
+          {(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? (
+            <CheckCircle2 className="w-6 h-6" />
+          ) : (
+            <XCircle className="w-6 h-6" />
+          )}
+        </button>
+        
+        <AnimatePresence>
+          {!(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) && (
+            <motion.button 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentJustifyStudent(student.id);
+                setShowJustifyModal(true);
+              }}
+              className={cn(
+                "rounded-lg flex items-center justify-center font-bold transition-all",
+                markingZoom === 1 ? "w-10 h-10 text-xs" : markingZoom === 2 ? "w-12 h-12 text-sm" : "w-14 h-14 text-base",
+                justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+              )}
+              title="Justificar falta"
+            >
+              J
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
+    </Reorder.Item>
+  );
+}
 
 export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -412,7 +571,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [teacherForm, setTeacherForm] = useState({
     name: '',
     email: '',
+    login: '',
     password: '',
+    confirmPassword: '',
     contact: '',
     profession: '',
     startDateEBD: '',
@@ -610,57 +771,67 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
+    if (!editingTeacher && teacherForm.password !== teacherForm.confirmPassword) {
+      showAlert('Erro de Senha', 'A senha e a confirmação não coincidem.');
+      return;
+    }
+
     if (!editingTeacher && teacherForm.password.length < 6) {
       showAlert('Senha Curta', 'A senha deve ter pelo menos 6 caracteres.');
       return;
     }
 
-    try {
-      if (editingTeacher) {
-        await updateDoc(doc(db, 'users', editingTeacher.id), {
-          name: teacherForm.name || "",
-          email: teacherForm.email || "",
-          login: teacherForm.email || "", // Save login same as email
-          contact: teacherForm.contact || "",
-          profession: teacherForm.profession || "",
-          startDateEBD: teacherForm.startDateEBD || "",
-          generalProfile: teacherForm.generalProfile || "",
-          classIds: teacherForm.classIds || [],
-          allowedTabs: teacherForm.allowedTabs || [],
-          role: teacherForm.role || 'teacher',
-          updatedAt: new Date().toISOString()
-        });
-      } else {
-        // Create Auth User
-        const userCredential = await createUserWithEmailAndPassword(auth, teacherForm.email, teacherForm.password);
-        const newUser = userCredential.user;
+    const actuallySaveTeacher = async () => {
+      try {
+        if (editingTeacher) {
+          await updateDoc(doc(db, 'users', editingTeacher.id), {
+            name: teacherForm.name || "",
+            email: teacherForm.email || "",
+            login: teacherForm.login || teacherForm.email || "",
+            contact: teacherForm.contact || "",
+            profession: teacherForm.profession || "",
+            startDateEBD: teacherForm.startDateEBD || "",
+            generalProfile: teacherForm.generalProfile || "",
+            classIds: teacherForm.classIds || [],
+            allowedTabs: teacherForm.allowedTabs || [],
+            role: teacherForm.role || 'teacher',
+            password: teacherForm.password, // Update password if provided
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          // Create Auth User
+          const userCredential = await createUserWithEmailAndPassword(auth, teacherForm.email, teacherForm.password);
+          const newUser = userCredential.user;
 
-        const registrationNumber = await generateRegistrationNumber('users');
-        // Create User Doc
-        await setDoc(doc(db, 'users', newUser.uid), {
-          name: teacherForm.name || "",
-          email: teacherForm.email || "",
-          login: teacherForm.email || "", // Save login same as email
-          password: teacherForm.password, // Keep for manual login check if needed
-          contact: teacherForm.contact || "",
-          profession: teacherForm.profession || "",
-          startDateEBD: teacherForm.startDateEBD || "",
-          generalProfile: teacherForm.generalProfile || "",
-          classIds: teacherForm.classIds || [],
-          allowedTabs: teacherForm.allowedTabs || [],
-          registrationNumber,
-          role: teacherForm.role || 'teacher',
-          firstLogin: true,
-          createdAt: new Date().toISOString()
-        });
+          const registrationNumber = await generateRegistrationNumber('users');
+          // Create User Doc
+          await setDoc(doc(db, 'users', newUser.uid), {
+            name: teacherForm.name || "",
+            email: teacherForm.email || "",
+            login: teacherForm.login || teacherForm.email || "",
+            password: teacherForm.password, 
+            contact: teacherForm.contact || "",
+            profession: teacherForm.profession || "",
+            startDateEBD: teacherForm.startDateEBD || "",
+            generalProfile: teacherForm.generalProfile || "",
+            classIds: teacherForm.classIds || [],
+            allowedTabs: teacherForm.allowedTabs || [],
+            registrationNumber,
+            role: teacherForm.role || 'teacher',
+            firstLogin: true,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        setShowForm(false);
+        setEditingTeacher(null);
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+      } catch (err) {
+        handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
+    };
 
-      setShowForm(false);
-      setEditingTeacher(null);
-      setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
-    } catch (err) {
-      handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
-    }
+    actuallySaveTeacher();
   };
 
   const handleEditTeacher = (teacher: Teacher) => {
@@ -668,6 +839,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setTeacherForm({
       name: teacher.name,
       email: teacher.email,
+      login: teacher.login || teacher.email || '',
       contact: teacher.contact,
       profession: teacher.profession || '',
       startDateEBD: teacher.startDateEBD || '',
@@ -675,7 +847,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
-      password: teacher.password || ''
+      password: teacher.password || '',
+      confirmPassword: teacher.password || ''
     });
     setShowForm(true);
   };
@@ -1259,7 +1432,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -1894,7 +2067,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   onReorder={setWorkingStudentOrder}
                   className={cn(
                     "grid gap-4",
-                    markingViewMode === 'grid' 
+                    (markingViewMode === 'grid' && !markingOrderMode)
                       ? (markingZoom === 1 ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-4" : markingZoom === 2 ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-1 lg:grid-cols-2")
                       : "grid-cols-1"
                   )}
@@ -1903,120 +2076,23 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     .map(sid => students.find(s => s.id === sid))
                     .filter((s): s is Student => !!s)
                     .map((student, index) => (
-                    <Reorder.Item
-                      key={student.id}
-                      value={student.id}
-                      dragListener={markingOrderMode}
-                      className={cn(
-                        "flex items-center justify-between transition-all rounded-xl border group",
-                        markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
-                        (attendanceList[student.id] === 'present' || attendanceList[student.id] === true)
-                          ? "bg-green-50 border-green-200 text-green-700" 
-                          : "bg-red-50 border-red-200 text-red-700"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        {markingOrderMode && (
-                          <div className="flex items-center gap-1">
-                            <div className="cursor-grab active:cursor-grabbing p-1 text-slate-400">
-                              <GripVertical className="w-4 h-4" />
-                            </div>
-                            <div className="flex flex-col gap-0.5">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
-                                disabled={index === 0}
-                                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
-                              >
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
-                                disabled={index === workingStudentOrder.length - 1}
-                                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
-                              >
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <div className={cn(
-                          "rounded-full flex items-center justify-center font-bold shrink-0",
-                          markingZoom === 1 ? "w-6 h-6 text-[10px]" : markingZoom === 2 ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm",
-                          (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-200" : "bg-red-200"
-                        )}>
-                          {student.name.charAt(0)}
-                        </div>
-                         <div className="text-left">
-                           <span className={cn(
-                             "font-medium block",
-                             markingZoom === 1 ? "text-[11px]" : markingZoom === 2 ? "text-sm" : "text-base"
-                           )}>{student.name}</span>
-                           <div className="flex items-center gap-1.5 mt-0.5">
-                             {justifications[student.id] && (
-                               <span className="text-[10px] text-slate-500 italic">J: {justifications[student.id]}</span>
-                             )}
-                             <button
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 setReportTargetId(student.id);
-                                 setReportType('student');
-                                 setShowReportListModal(true);
-                               }}
-                               className="p-1 hover:bg-slate-200 rounded text-indigo-600 transition-all"
-                               title="Ver histórico de relatórios"
-                             >
-                               <FileText className="w-3 h-3" />
-                             </button>
-                           </div>
-                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setAttendanceList(prev => ({ 
-                              ...prev, 
-                              [student.id]: (prev[student.id] === 'present' || prev[student.id] === true) ? 'absent' : 'present' 
-                            })); 
-                          }}
-                          className={cn(
-                            "rounded-xl flex items-center justify-center transition-all shadow-sm",
-                            markingZoom === 1 ? "w-10 h-10" : markingZoom === 2 ? "w-12 h-12" : "w-14 h-14",
-                            (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-600 text-white shadow-green-100" : "bg-red-600 text-white shadow-red-100"
-                          )}
-                          title={(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "Presente (Clique para Falta)" : "Falta (Clique para Presente)"}
-                        >
-                          {(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? (
-                            <CheckCircle2 className="w-6 h-6" />
-                          ) : (
-                            <XCircle className="w-6 h-6" />
-                          )}
-                        </button>
-                        
-                        <AnimatePresence>
-                          {!(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) && (
-                            <motion.button 
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: -10 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentJustifyStudent(student.id);
-                                setShowJustifyModal(true);
-                              }}
-                              className={cn(
-                                "rounded-lg flex items-center justify-center font-bold transition-all",
-                                markingZoom === 1 ? "w-10 h-10 text-xs" : markingZoom === 2 ? "w-12 h-12 text-sm" : "w-14 h-14 text-base",
-                                justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                              )}
-                              title="Justificar falta"
-                            >
-                              J
-                            </motion.button>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </Reorder.Item>
+                      <AttendanceStudentCard
+                        key={student.id}
+                        student={student}
+                        index={index}
+                        markingOrderMode={markingOrderMode}
+                        markingZoom={markingZoom}
+                        attendanceList={attendanceList}
+                        justifications={justifications}
+                        setAttendanceList={setAttendanceList}
+                        setReportTargetId={setReportTargetId}
+                        setReportType={setReportType}
+                        setShowReportListModal={setShowReportListModal}
+                        setCurrentJustifyStudent={setCurrentJustifyStudent}
+                        setShowJustifyModal={setShowJustifyModal}
+                        moveStudent={moveStudent}
+                        isLast={index === workingStudentOrder.length - 1}
+                      />
                   ))}
                 </Reorder.Group>
               </div>
@@ -2832,30 +2908,13 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             value={teacherForm.role}
                             onChange={(e) => {
                               const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher';
-                              const currentRole = editingTeacher?.role || 'teacher';
-                              
-                              if (newRole !== currentRole) {
-                                showConfirm(
-                                  'Alterar Cargo/Perfil',
-                                  'Para alterar o perfil de acesso deste colaborador, insira a senha do sistema:',
-                                  (pass) => {
-                                    if (pass === 'SISTEMA') {
-                                      let allowedTabs = teacherForm.allowedTabs;
-                                      if (newRole === 'admin') {
-                                        allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
-                                      } else if (newRole === 'coordinator') {
-                                        allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
-                                      }
-                                      setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
-                                    } else {
-                                      showAlert('Erro', 'Senha incorreta! A alteração não foi realizada.');
-                                    }
-                                  },
-                                  true // isPassword
-                                );
-                              } else {
-                                setTeacherForm({ ...teacherForm, role: newRole });
+                              let allowedTabs = teacherForm.allowedTabs;
+                              if (newRole === 'admin') {
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
+                              } else if (newRole === 'coordinator') {
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
                               }
+                              setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
@@ -2867,7 +2926,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Email (Login)</label>
+                          <label className="text-xs font-bold text-slate-500 uppercase">Email</label>
                           <input
                             required
                             type="email"
@@ -2877,12 +2936,34 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           />
                         </div>
                         <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Login (Usuário)</label>
+                          <input
+                            required
+                            type="text"
+                            value={teacherForm.login}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, login: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-500 uppercase">Senha de Acesso</label>
                           <input
                             required
                             type={(isAdmin || isCoordinator || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
                             value={teacherForm.password}
                             onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Confirmar Senha</label>
+                          <input
+                            required
+                            type={(isAdmin || isCoordinator || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
+                            value={teacherForm.confirmPassword}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, confirmPassword: e.target.value })}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
