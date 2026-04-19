@@ -193,6 +193,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   };
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasFullAccess = isAdmin || isCoordinator;
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -212,7 +214,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    const studentsQuery = isAdmin 
+    const studentsQuery = hasFullAccess 
       ? query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear))
       : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -225,7 +227,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setLoading(false);
     });
 
-    const classesQuery = isAdmin
+    const classesQuery = hasFullAccess
       ? collection(db, 'classes')
       : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -278,7 +280,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubMeetings();
       unsubSchoolYear();
     };
-  }, [user?.id, user?.role, JSON.stringify(user?.classIds), isAdmin, selectedSchoolYear]);
+  }, [user?.id, user?.role, JSON.stringify(user?.classIds), hasFullAccess, isAdmin, selectedSchoolYear]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -414,6 +416,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     profession: '',
     startDateEBD: '',
     generalProfile: '',
+    role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[]
   });
@@ -616,12 +619,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         await updateDoc(doc(db, 'users', editingTeacher.id), {
           name: teacherForm.name || "",
           email: teacherForm.email || "",
+          login: teacherForm.email || "", // Save login same as email
           contact: teacherForm.contact || "",
           profession: teacherForm.profession || "",
           startDateEBD: teacherForm.startDateEBD || "",
           generalProfile: teacherForm.generalProfile || "",
           classIds: teacherForm.classIds || [],
           allowedTabs: teacherForm.allowedTabs || [],
+          role: teacherForm.role || 'teacher',
           updatedAt: new Date().toISOString()
         });
       } else {
@@ -634,6 +639,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         await setDoc(doc(db, 'users', newUser.uid), {
           name: teacherForm.name || "",
           email: teacherForm.email || "",
+          login: teacherForm.email || "", // Save login same as email
+          password: teacherForm.password, // Keep for manual login check if needed
           contact: teacherForm.contact || "",
           profession: teacherForm.profession || "",
           startDateEBD: teacherForm.startDateEBD || "",
@@ -641,7 +648,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           classIds: teacherForm.classIds || [],
           allowedTabs: teacherForm.allowedTabs || [],
           registrationNumber,
-          role: 'teacher',
+          role: teacherForm.role || 'teacher',
           firstLogin: true,
           createdAt: new Date().toISOString()
         });
@@ -649,7 +656,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
       setShowForm(false);
       setEditingTeacher(null);
-      setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+      setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
     } catch (err) {
       handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
     }
@@ -665,6 +672,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       profession: teacher.profession || '',
       startDateEBD: teacher.startDateEBD || '',
       generalProfile: teacher.generalProfile || '',
+      role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports']
     });
@@ -1219,7 +1227,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               </button>
             </div>
           )}
-          {isAdmin && subTab !== 'attendance' && (
+          {hasFullAccess && subTab !== 'attendance' && (
             <div className="flex gap-2">
               {subTab === 'teachers' && (
                 <button 
@@ -1250,7 +1258,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', password: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -1421,10 +1429,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Professor</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador / Cargo</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Info. Profissional</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email / Contato</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turmas</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
               </thead>
@@ -1433,35 +1441,39 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <tr key={teacher.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 font-bold">
+                        <div className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center font-bold",
+                          teacher.role === 'admin' ? "bg-red-50 text-red-600" : teacher.role === 'coordinator' ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"
+                        )}>
                           {teacher.name.charAt(0)}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
-                          <p className="text-xs text-slate-500">{teacher.contact}</p>
+                          <p className={cn(
+                            "text-[10px] font-black uppercase tracking-widest",
+                            teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Professor'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{teacher.email}</td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-slate-700 font-medium">{teacher.profession || '-'}</p>
+                      <p className="text-xs text-slate-500">Início: {teacher.startDateEBD ? safeFormat(teacher.startDateEBD, 'dd/MM/yyyy') : '-'}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-slate-600 font-medium">{teacher.email}</p>
+                      <p className="text-xs text-slate-400">{teacher.contact || 'Nenhum contato'}</p>
+                    </td>
                     <td className="px-6 py-4 text-sm font-mono text-slate-500">
                       {teacher.registrationNumber || '-'}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {teacher.classIds?.map(cid => (
-                          <span key={cid} className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded uppercase">
-                            {classes.find(c => c.id === cid)?.name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                        {isAdmin && teacher.role !== 'admin' && (
+                        {hasFullAccess && teacher.role !== 'admin' && (
                           <button 
                             onClick={() => {
                               showConfirm(
-                                'Entrar como Professor',
+                                'Entrar como Colaborador',
                                 `Para visualizar a plataforma como "${teacher.name}", digite a senha do sistema:`,
                                 (pass) => {
                                   if (pass === 'SISTEMA') {
@@ -1474,12 +1486,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               );
                             }}
                             className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                            title="Visualizar como Professor"
+                            title="Visualizar como Colaborador"
                           >
                             <Eye className="w-5 h-5" />
                           </button>
                         )}
-                        {isAdmin && (
+                        {hasFullAccess && (
                           <>
                             <button 
                               onClick={() => {
@@ -2270,14 +2282,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <tbody className="divide-y divide-slate-100">
                             {attendances
                               .filter(a => {
-                                const matchesClass = isAdmin 
+                                const matchesClass = hasFullAccess 
                                   ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
                                   : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
                                 
                                 const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
                                                    (!attendanceEndDate || a.date <= attendanceEndDate);
                                 
-                                const matchesAccess = isAdmin || user.classIds.includes(a.classId);
+                                const matchesAccess = hasFullAccess || user.classIds.includes(a.classId);
                                 return matchesClass && matchesDate && matchesAccess;
                               })
                               .sort((a, b) => a.date.localeCompare(b.date)) // Sort ascending for sequence
@@ -2590,7 +2602,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               <button onClick={() => setViewingMeeting(meeting)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                 <Eye className="w-4 h-4" />
                               </button>
-                              {isAdmin && (
+                              {hasFullAccess && (
                                 <>
                                   <button onClick={() => { setEditingMeeting(meeting); setMeetingForm({ ...meeting }); setShowForm(true); }} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
                                     <Edit className="w-4 h-4" />
@@ -2790,15 +2802,38 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Left Column: Basic Info */}
                     <div className="space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
-                        <input
-                          required
-                          type="text"
-                          value={teacherForm.name}
-                          onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
+                          <input
+                            required
+                            type="text"
+                            value={teacherForm.name}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Perfil de Acesso (Cargo)</label>
+                          <select
+                            value={teacherForm.role}
+                            onChange={(e) => {
+                              const role = e.target.value as 'admin' | 'coordinator' | 'teacher';
+                              let allowedTabs = teacherForm.allowedTabs;
+                              if (role === 'admin') {
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
+                              } else if (role === 'coordinator') {
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
+                              }
+                              setTeacherForm({ ...teacherForm, role, allowedTabs });
+                            }}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="teacher">Professor (Acesso Parcial)</option>
+                            <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
+                            <option value="admin">Administrador (Acesso Total)</option>
+                          </select>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">

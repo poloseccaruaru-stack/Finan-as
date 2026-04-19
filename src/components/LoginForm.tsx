@@ -51,10 +51,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
     }
 
     try {
-      // 2. Check for Manual Teacher Login in Firestore (by login field)
-      const teachersSnap = await getDocs(query(collection(db, 'users'), where('login', '==', email), where('password', '==', password)));
-      if (!teachersSnap.empty) {
-        const teacherData = { id: teachersSnap.docs[0].id, ...teachersSnap.docs[0].data() };
+      // 2. Check for Manual Teacher Login in Firestore (by login or email field)
+      const teachersByLogin = await getDocs(query(collection(db, 'users'), where('login', '==', email), where('password', '==', password)));
+      const teachersByEmail = await getDocs(query(collection(db, 'users'), where('email', '==', email), where('password', '==', password)));
+      
+      const teacherDoc = !teachersByLogin.empty ? teachersByLogin.docs[0] : (!teachersByEmail.empty ? teachersByEmail.docs[0] : null);
+
+      if (teacherDoc) {
+        const teacherData = { id: teacherDoc.id, ...teacherDoc.data() };
         onLoginSuccess(teacherData);
         setLoading(false);
         return;

@@ -26,7 +26,7 @@ export interface Teacher {
   email: string;
   contact: string;
   classIds: string[];
-  role: 'admin' | 'teacher';
+  role: 'admin' | 'coordinator' | 'teacher';
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;

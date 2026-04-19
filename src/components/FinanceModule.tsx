@@ -58,6 +58,21 @@ export default function FinanceModule({ user }: Props) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: (val?: string) => void;
+    isPassword?: boolean;
+    val?: string;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isPassword: false,
+    val: ''
+  });
   const [filterMonth, setFilterMonth] = useState(safeFormat(new Date(), 'yyyy-MM'));
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,6 +99,8 @@ export default function FinanceModule({ user }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasFullAccess = isAdmin || isCoordinator;
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));
@@ -197,6 +214,46 @@ export default function FinanceModule({ user }: Props) {
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'budgets');
     }
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    setConfirmModal({
+      show: true,
+      title: 'Excluir Transação',
+      message: 'Para excluir esta transação permanentemente, digite a senha do sistema:',
+      isPassword: true,
+      onConfirm: async (pass) => {
+        if (pass === 'SISTEMA') {
+          try {
+            await deleteDoc(doc(db, 'transactions', id));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`);
+          }
+        } else {
+          alert('Senha do sistema incorreta!');
+        }
+      }
+    });
+  };
+
+  const handleDeleteEstimate = (id: string) => {
+    setConfirmModal({
+      show: true,
+      title: 'Excluir Previsto',
+      message: 'Para excluir este gasto previsto, digite a senha do sistema:',
+      isPassword: true,
+      onConfirm: async (pass) => {
+        if (pass === 'SISTEMA') {
+          try {
+            await deleteDoc(doc(db, 'estimated_expenses', id));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `estimated_expenses/${id}`);
+          }
+        } else {
+          alert('Senha do sistema incorreta!');
+        }
+      }
+    });
   };
 
   const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981'];
@@ -367,7 +424,7 @@ export default function FinanceModule({ user }: Props) {
                 onChange={(e) => setFilterMonth(e.target.value)}
                 className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              {isAdmin && (
+              {hasFullAccess && (
                 <div className="flex gap-2">
                   <button 
                     onClick={() => window.print()}
@@ -422,11 +479,12 @@ export default function FinanceModule({ user }: Props) {
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Descrição</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Categoria</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Valor</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right print:hidden">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {currentMonthTransactions.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {safeFormat(t.date, 'dd/MM/yyyy')}
                     </td>
@@ -449,6 +507,16 @@ export default function FinanceModule({ user }: Props) {
                       t.type === 'income' ? "text-green-600" : "text-red-600"
                     )}>
                       {t.type === 'income' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right print:hidden">
+                      {hasFullAccess && (
+                        <button 
+                          onClick={() => handleDeleteTransaction(t.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -694,6 +762,58 @@ export default function FinanceModule({ user }: Props) {
                   Salvar Orçamento
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModal.show && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900">{confirmModal.title}</h3>
+                <p className="text-sm text-slate-500 mt-1">{confirmModal.message}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {confirmModal.isPassword && (
+                    <input
+                      type="password"
+                      autoFocus
+                      placeholder="Digite a senha do sistema"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          confirmModal.onConfirm(e.currentTarget.value);
+                          setConfirmModal({ ...confirmModal, show: false });
+                        }
+                      }}
+                      onChange={(e) => setConfirmModal({ ...confirmModal, val: e.target.value })}
+                    />
+                )}
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                    className="flex-1 py-2 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={() => {
+                      confirmModal.onConfirm(confirmModal.val);
+                      setConfirmModal({ ...confirmModal, show: false });
+                    }}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-100 transition-all"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

@@ -199,6 +199,7 @@ export default function App() {
   }
 
   const isAdmin = userData.role === 'admin';
+  const isCoordinator = userData.role === 'coordinator';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -215,7 +216,7 @@ export default function App() {
         { id: 'meetings', label: 'Reuniões', icon: Users },
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
-        if (isAdmin) return true;
+        if (isAdmin || isCoordinator) return true;
         // Teachers can only see sub-items they are allowed to
         if (sub.id === 'teachers' || sub.id === 'classes') return false; // Usually admin only
         return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
@@ -230,13 +231,17 @@ export default function App() {
         { id: 'calendar', label: 'Calendário', icon: Calendar },
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
-      ]
+      ].filter(sub => {
+        if (isAdmin) return true;
+        if (isCoordinator) return sub.id !== 'system';
+        return userData.allowedTabs?.includes(sub.id);
+      })
     },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'reports', label: 'Relatórios', icon: Printer },
   ].filter(item => {
-    if (isAdmin) return true;
+    if (isAdmin || isCoordinator) return true;
     // For non-admins, check allowedTabs
     return userData.allowedTabs?.includes(item.id);
   });
