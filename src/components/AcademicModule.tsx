@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { db, handleFirestoreError, OperationType, auth } from '../firebase';
 import { 
   collection, 
@@ -91,9 +91,42 @@ function AttendanceStudentCard({
   setCurrentJustifyStudent, 
   setShowJustifyModal, 
   moveStudent, 
-  isLast 
+  isLast,
+  isSelected,
+  onSelect,
+  onNumberChange
 }: any) {
   const controls = useDragControls();
+  const [localNumber, setLocalNumber] = useState(index + 1);
+  const itemRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    setLocalNumber(index + 1);
+  }, [index]);
+
+  useEffect(() => {
+    if (isSelected && markingOrderMode && document.activeElement !== itemRef.current) {
+      itemRef.current?.focus();
+    }
+  }, [isSelected, markingOrderMode]);
+
+  const handleNumberBlur = () => {
+    const nextIdx = parseInt(String(localNumber)) - 1;
+    if (!isNaN(nextIdx) && nextIdx !== index) {
+      onNumberChange(index, nextIdx);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!markingOrderMode) return;
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveStudent(index, 'up');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveStudent(index, 'down');
+    }
+  };
 
   return (
     <Reorder.Item
@@ -103,6 +136,10 @@ function AttendanceStudentCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
+      ref={itemRef}
+      tabIndex={markingOrderMode ? 0 : -1}
+      onKeyDown={handleKeyDown}
+      onClick={() => markingOrderMode && onSelect(student.id)}
       whileDrag={{ 
         scale: 1.02, 
         boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
@@ -110,38 +147,50 @@ function AttendanceStudentCard({
         zIndex: 50
       }}
       className={cn(
-        "flex items-center justify-between transition-all rounded-xl border group",
+        "flex items-center justify-between transition-all rounded-xl border group relative outline-none",
         markingZoom === 1 ? "p-2" : markingZoom === 2 ? "p-4" : "p-6",
-        (attendanceList[student.id] === 'present' || attendanceList[student.id] === true)
+        isSelected && markingOrderMode ? "ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/30" : "",
+        !markingOrderMode && (attendanceList[student.id] === 'present' || attendanceList[student.id] === true)
           ? "bg-green-50 border-green-200 text-green-700" 
-          : "bg-red-50 border-red-200 text-red-700"
+          : !markingOrderMode ? "bg-red-50 border-red-200 text-red-700" : "bg-white border-slate-200"
       )}
     >
       <div className="flex items-center gap-3">
         {markingOrderMode && (
-          <div className="flex items-center gap-1">
-            <div 
-              onPointerDown={(e) => controls.start(e)}
-              className="cursor-grab active:cursor-grabbing p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-              title="Arraste para reordenar"
-            >
-              <GripVertical className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <button 
-                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
-                disabled={index === 0}
-                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+          <div className="flex items-center gap-2 mr-2">
+            <input 
+              type="text"
+              value={localNumber}
+              onChange={(e) => setLocalNumber(e.target.value)}
+              onBlur={handleNumberBlur}
+              onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as any).blur()}
+              className="w-8 h-8 text-center text-xs font-bold bg-slate-100 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              title="Número na chamada"
+            />
+            <div className="flex items-center gap-1">
+              <div 
+                onPointerDown={(e) => controls.start(e)}
+                className="cursor-grab active:cursor-grabbing p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                title="Arraste para reordenar"
               >
-                <ChevronUp className="w-3.5 h-3.5" />
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
-                disabled={isLast}
-                className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
+                <GripVertical className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); moveStudent(index, 'up'); }}
+                  disabled={index === 0}
+                  className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); moveStudent(index, 'down'); }}
+                  disabled={isLast}
+                  className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -485,6 +534,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     }
   };
 
+  const handleManualReorder = (fromIndex: number, toIndex: number) => {
+    const newOrder = [...workingStudentOrder];
+    const item = newOrder.splice(fromIndex, 1)[0];
+    const target = Math.max(0, Math.min(toIndex, newOrder.length));
+    newOrder.splice(target, 0, item);
+    setWorkingStudentOrder(newOrder);
+  };
+
   const handleSaveOrderPreference = async () => {
     if (!selectedClass) return;
     const cls = classes.find(c => c.id === selectedClass);
@@ -536,6 +593,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   // Forms State
   const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
+  const [selectedOrderStudentId, setSelectedOrderStudentId] = useState<string | null>(null);
   const [attendanceFilterClasses, setAttendanceFilterClasses] = useState<string[]>(['all']);
   const [attendanceStartDate, setAttendanceStartDate] = useState('');
   const [attendanceEndDate, setAttendanceEndDate] = useState('');
@@ -1223,29 +1281,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         await addDoc(collection(db, 'attendance'), attendanceData);
       }
 
-      // Update student stats
-      for (const studentId of absent) {
-        const student = students.find(s => s.id === studentId);
-        if (student) {
-          // Only count as absence if not justified
-          const isJustified = !!justifications[studentId];
-          if (!isJustified) {
-            await updateDoc(doc(db, 'students', studentId), {
-              consecutiveAbsences: (student.consecutiveAbsences || 0) + 1,
-              lastAbsenceDate: attendanceDate
-            });
-          }
-        }
-      }
-
-      for (const studentId of present) {
-        await updateDoc(doc(db, 'students', studentId), {
-          consecutiveAbsences: 0
-        });
-      }
-
+      // Show success message immediately after the main record is saved
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
+
+      // Reset form fields
       setContentGiven('');
       setStartTime(defaultTimes.start);
       setEndTime(defaultTimes.end);
@@ -1256,6 +1296,31 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setVersiculoCitado('SIM');
       setHouveOferta('SIM');
       setEditingAttendance(null);
+      setSelectedClass(null);
+
+      // Update student stats in parallel (background)
+      const studentUpdates = [];
+      
+      for (const studentId of absent) {
+        const student = students.find(s => s.id === studentId);
+        if (student) {
+          const isJustified = !!justifications[studentId];
+          if (!isJustified) {
+            studentUpdates.push(updateDoc(doc(db, 'students', studentId), {
+              consecutiveAbsences: (student.consecutiveAbsences || 0) + 1,
+              lastAbsenceDate: attendanceDate
+            }));
+          }
+        }
+      }
+
+      for (const studentId of present) {
+        studentUpdates.push(updateDoc(doc(db, 'students', studentId), {
+          consecutiveAbsences: 0
+        }));
+      }
+
+      await Promise.all(studentUpdates);
     } catch (err) {
       handleFirestoreError(err, editingAttendance ? OperationType.UPDATE : OperationType.CREATE, 'attendance');
     }
@@ -1771,6 +1836,27 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         {subTab === 'attendance' && (
           <div className="p-6 space-y-6">
+            <AnimatePresence>
+              {showSuccess && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md"
+                >
+                  <div className="bg-green-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center justify-center gap-3 border-2 border-green-500/50 backdrop-blur-sm">
+                    <div className="bg-white/20 p-2 rounded-xl">
+                      <Check className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-black text-sm uppercase tracking-wider">Sucesso!</span>
+                      <span className="text-xs font-bold text-green-50">O registro de chamada foi realizado com sucesso.</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="flex flex-col md:flex-row gap-4 items-end">
               <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Selecionar Turma</label>
@@ -2092,6 +2178,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         setShowJustifyModal={setShowJustifyModal}
                         moveStudent={moveStudent}
                         isLast={index === workingStudentOrder.length - 1}
+                        isSelected={selectedOrderStudentId === student.id}
+                        onSelect={setSelectedOrderStudentId}
+                        onNumberChange={handleManualReorder}
                       />
                   ))}
                 </Reorder.Group>
@@ -2198,12 +2287,6 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 </div>
 
                 <div className="flex flex-col gap-4">
-                  {showSuccess && (
-                    <div className="bg-green-100 text-green-700 px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 animate-bounce">
-                      <Check className="w-5 h-5" />
-                      Chamada salva com sucesso!
-                    </div>
-                  )}
                   <button
                     onClick={saveAttendance}
                     className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-100 transition-all"
