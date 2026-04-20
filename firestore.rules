@@ -1,36 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields: name, email, role, createdAt
-    //
-    // Collection: students
-    // Fields: name, birthDate, guardians, emergencyContact, history, classId, createdAt
-    //
-    // Collection: teachers
-    // Fields: name, email, subjects, classIds, createdAt
-    //
-    // Collection: classes
-    // Fields: name, year, teacherId, createdAt
-    //
-    // Collection: attendance
-    // Fields: classId, date, presentStudentIds, absentStudentIds, createdAt
-    //
-    // Collection: projects
-    // Fields: title, description, startDate, endDate, teacherIds, studentIds, createdAt
-    //
-    // Collection: transactions
-    // Fields: description, amount, type, category, date, status, createdAt
-    //
-    // Collection: regimento
-    // Fields: title, content, order, createdAt
-    //
-    // ===============================================================
-
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
@@ -42,17 +12,28 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coordinator')) ||
          (request.auth.token.email == "poloseccaruaru@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function isValidString(field, maxLen) {
-      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
+    function isTeacher() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
     }
 
-    function isValidNumber(field) {
-      return request.resource.data[field] is number;
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // Validation Helpers
+    function isValidAbsenceResolution(data) {
+      return data.studentId is string && data.studentId.size() <= 128 &&
+             data.note is string && data.note.size() <= 5000 &&
+             data.date is string && data.date.size() <= 20 &&
+             data.consecutiveAbsences is number &&
+             (data.teacherId == request.auth.uid || isAdmin());
     }
 
     // Rules for each collection
@@ -63,32 +44,32 @@ service cloud.firestore {
 
     match /students/{studentId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // For now, allow all authenticated users
+      allow write: if isAdmin() || isTeacher();
     }
 
     match /teachers/{teacherId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /classes/{classId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin() || isTeacher();
     }
 
     match /projects/{projectId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin() || isTeacher();
     }
 
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /regimento/{regId} {
@@ -96,28 +77,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /justificationOptions/{optId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+    match /absenceResolutions/{resId} {
+      allow read: if isAdmin() || isTeacher();
+      allow create: if isAuthenticated() && isValidAbsenceResolution(incoming());
+      allow update: if (isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid)) && isValidAbsenceResolution(incoming());
+      allow delete: if isAdmin();
     }
 
-    match /events/{eventId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /budgets/{budgetId} {
+    match /preDefinedResolutions/{resId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    match /estimated_expenses/{expenseId} {
+    match /enrollments/{enrollId} {
       allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /ai_actions/{actionId} {
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
@@ -128,27 +106,27 @@ service cloud.firestore {
 
     match /calendarEvents/{eventId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /planning/{planningId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin() || isTeacher();
     }
 
     match /student_reports/{reportId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin() || isTeacher();
     }
 
     match /teacher_reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /meetings/{meetingId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     match /general_calendars/{calId} {
@@ -163,6 +141,11 @@ service cloud.firestore {
 
     match /test/{docId} {
       allow read: if isAuthenticated();
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

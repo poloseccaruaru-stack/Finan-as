@@ -476,7 +476,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           setSchoolYear(data.startDate.split('-')[0]);
         }
       }
-    });
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
 
     return () => {
       unsubStudents();
@@ -606,7 +606,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       const q = query(collection(db, 'enrollments'), where('studentId', '==', viewingStudentHistory.id));
       const unsub = onSnapshot(q, (snap) => {
         setStudentHistory(snap.docs.map(d => ({ id: d.id, ...d.data() } as Enrollment)));
-      });
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'enrollments'));
       return () => unsub();
     }
   }, [viewingStudentHistory]);
@@ -1182,7 +1182,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           setEndTime(times.end);
         }
       }
-    });
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'config/attendance_times'));
     return () => unsubTimes();
   }, [editingAttendance]);
 
@@ -1195,7 +1195,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   useEffect(() => {
     const unsubPlanning = onSnapshot(collection(db, 'planning'), (snap) => {
       setPlannings(snap.docs.map(d => ({ id: d.id, ...d.data() } as Planning)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'planning'));
     return () => unsubPlanning();
   }, []);
 

@@ -46,16 +46,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
-  subTab: 'regimento' | 'calendar' | 'system' | 'organogram';
+  subTab: 'regimento' | 'calendar' | 'system' | 'organogram' | 'meetings';
 }
 
 export default function AdminModule({ user, subTab }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
   const [schoolYear, setSchoolYear] = useState<SchoolYearConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendarForm, setShowCalendarForm] = useState(false);
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
+  const [meetingForm, setMeetingForm] = useState({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd'), participants: '', type: 'GERAL' as any });
   const [activeCalendarType, setActiveCalendarType] = useState<'ebd' | 'church' | 'convention' | 'geral'>('ebd');
   const [generalCalendars, setGeneralCalendars] = useState<GeneralCalendar[]>([]);
   const [showGeneralCalendarForm, setShowGeneralCalendarForm] = useState(false);
@@ -127,6 +131,35 @@ export default function AdminModule({ user, subTab }: Props) {
     'meetings', 'general_calendars'
   ];
 
+  const handleSaveMeeting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingMeetingId) {
+        await updateDoc(doc(db, 'meetings', editingMeetingId), {
+          ...meetingForm,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, 'meetings'), {
+          ...meetingForm,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowMeetingForm(false);
+      setMeetingForm({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd'), participants: '', type: 'GERAL' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'meetings');
+    }
+  };
+
+  const handleDeleteMeeting = async (id: string) => {
+    if (!confirm('Deseja excluir este registro de reunião?')) return;
+    try {
+      await deleteDoc(doc(db, 'meetings', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `meetings/${id}`);
+    }
+  };
   const handleBackup = async () => {
     if (!confirm('Deseja gerar um arquivo de backup com todos os dados do sistema?')) return;
     setIsBackingUp(true);
@@ -242,6 +275,13 @@ export default function AdminModule({ user, subTab }: Props) {
         }
       }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
       return () => unsubYear();
+    }
+    if (subTab === 'meetings') {
+      const q = query(collection(db, 'meetings'), orderBy('date', 'desc'));
+      const unsub = onSnapshot(q, (snap) => {
+        setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'meetings'));
+      return () => unsub();
     }
   }, [subTab]);
 
@@ -420,21 +460,38 @@ export default function AdminModule({ user, subTab }: Props) {
         <h2 className="text-2xl font-bold text-slate-900">
           {subTab === 'regimento' ? 'Regimento Interno EBD' : 
            subTab === 'calendar' ? 'Calendário Escolar' : 
-           subTab === 'organogram' ? 'Organograma' : 'Configurações do Sistema'}
+           subTab === 'organogram' ? 'Organograma' : 
+           subTab === 'meetings' ? 'Registro de Reuniões' : 'Configurações do Sistema'}
         </h2>
-        {isAdmin && subTab === 'regimento' && (
-          <button
-            onClick={() => {
-              setForm({ title: '', content: '', order: regimentos.length + 1 });
-              setEditingId(null);
-              setShowForm(true);
-            }}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
-          >
-            <Plus className="w-5 h-5" />
-            Novo Capítulo
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {isAdmin && subTab === 'regimento' && (
+            <button
+              onClick={() => {
+                setForm({ title: '', content: '', order: regimentos.length + 1 });
+                setEditingId(null);
+                setShowForm(true);
+              }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Capítulo
+            </button>
+          )}
+
+          {isAdmin && subTab === 'meetings' && (
+            <button
+              onClick={() => {
+                setEditingMeetingId(null);
+                setMeetingForm({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd'), participants: '', type: 'GERAL' });
+                setShowMeetingForm(true);
+              }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus className="w-5 h-5" />
+              Nova Reunião
+            </button>
+          )}
+        </div>
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
@@ -958,80 +1015,235 @@ export default function AdminModule({ user, subTab }: Props) {
           </div>
         )}
       </AnimatePresence>
-      {subTab === 'regimento' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {regimentos.sort((a, b) => a.order - b.order).map((reg) => (
-            <div 
-              key={reg.id} 
-              className={cn(
-                "bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group transition-all duration-300",
-                expandedRegimentoId === reg.id ? "md:col-span-2 lg:col-span-3" : "hover:shadow-md cursor-pointer"
-              )}
-              onClick={() => expandedRegimentoId !== reg.id && setExpandedRegimentoId(reg.id)}
+      {/* Meeting Form Modal */}
+      <AnimatePresence>
+        {showMeetingForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
             >
-              <div className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
-                        {reg.order}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">
+                  {editingMeetingId ? 'Editar Registro de Reunião' : 'Novo Registro de Reunião'}
+                </h3>
+                <button onClick={() => setShowMeetingForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveMeeting} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Título da Reunião</label>
+                    <input
+                      required
+                      type="text"
+                      value={meetingForm.title}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
+                    <input
+                      required
+                      type="date"
+                      value={meetingForm.date}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Tipo</label>
+                    <select
+                      value={meetingForm.type}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, type: e.target.value as any })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="ADMINISTRATIVA">Administrativa</option>
+                      <option value="PEDAGÓGICA">Pedagógica</option>
+                      <option value="PAIS">Pais</option>
+                      <option value="ALUNOS">Alunos</option>
+                      <option value="GERAL">Geral</option>
+                      <option value="OUTRAS">Outras</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Participantes</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Pedro, Maria, Todos os professores..."
+                      value={meetingForm.participants}
+                      onChange={(e) => setMeetingForm({ ...meetingForm, participants: e.target.value })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Ata da Reunião / Conteúdo</label>
+                  <textarea
+                    required
+                    rows={8}
+                    value={meetingForm.content}
+                    onChange={(e) => setMeetingForm({ ...meetingForm, content: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  {editingMeetingId ? 'Atualizar Registro' : 'Salvar Registro'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {subTab === 'meetings' && (
+        <div className="space-y-4">
+          {meetings.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+              <FileText className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhuma reunião registrada</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {meetings.map((meeting) => (
+                <div key={meeting.id} className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-all group">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 mb-2">
+                        {meeting.type}
                       </span>
-                      <h3 className="text-lg font-bold text-slate-900">{reg.title}</h3>
+                      <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                        {meeting.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-medium">
+                        {format(parseISO(meeting.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      </p>
                     </div>
-                    
-                    {expandedRegimentoId === reg.id ? (
-                      <motion.div 
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-4"
-                      >
-                        <div className="prose prose-slate max-w-none text-slate-600 text-sm whitespace-pre-wrap border-t border-slate-50 pt-4">
-                          {reg.content}
-                        </div>
+                    {isAdmin && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedRegimentoId(null);
+                          onClick={() => {
+                            setEditingMeetingId(meeting.id);
+                            setMeetingForm({ ...meeting });
+                            setShowMeetingForm(true);
                           }}
-                          className="mt-4 text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
+                          className="p-2 hover:bg-amber-50 text-amber-600 rounded-lg transition-all"
                         >
-                          Fechar Leitura
+                          <Edit className="w-4 h-4" />
                         </button>
-                      </motion.div>
-                    ) : (
-                      <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-2">Clique para ler o capítulo</p>
+                        <button 
+                          onClick={() => handleDeleteMeeting(meeting.id)}
+                          className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
                   
-                  {isAdmin && (
-                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(reg);
-                        }}
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(reg.id);
-                        }}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                  {meeting.participants && (
+                    <div className="mb-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Participantes</p>
+                      <p className="text-xs text-slate-600 font-bold">{meeting.participants}</p>
                     </div>
                   )}
+
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap line-clamp-4 leading-relaxed italic">
+                      "{meeting.content}"
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
-      </motion.div>
+
+      {subTab === 'regimento' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {regimentos.sort((a, b) => a.order - b.order).map((reg) => {
+            return (
+              <div 
+                key={reg.id} 
+                className={cn(
+                  "bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group transition-all duration-300",
+                  expandedRegimentoId === reg.id ? "md:col-span-2 lg:col-span-3" : "hover:shadow-md cursor-pointer"
+                )}
+                onClick={() => expandedRegimentoId !== reg.id && setExpandedRegimentoId(reg.id)}
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
+                          {reg.order}
+                        </span>
+                        <h3 className="text-lg font-bold text-slate-900">{reg.title}</h3>
+                      </div>
+                      
+                      {expandedRegimentoId === reg.id ? (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="mt-4"
+                        >
+                          <div className="prose prose-slate max-w-none text-slate-600 text-sm whitespace-pre-wrap border-t border-slate-50 pt-4">
+                            {reg.content}
+                          </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedRegimentoId(null);
+                            }}
+                            className="mt-4 text-xs font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wider"
+                          >
+                            Fechar Leitura
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-2">Clique para ler o capítulo</p>
+                      )}
+                    </div>
+                    
+                    {isAdmin && (
+                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(reg);
+                          }}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(reg.id);
+                          }}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
 
       {/* Regimento Form Modal */}
       <AnimatePresence>

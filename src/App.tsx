@@ -16,7 +16,8 @@ import {
   getDocFromServer,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import React from 'react';
 import { 
@@ -54,7 +55,7 @@ import LoginForm from './components/LoginForm';
 import AISidebarSearch from './components/AISidebarSearch';
 import BirthdayBanner from './components/BirthdayBanner';
 import { cn } from './lib/utils';
-import { Teacher } from './types';
+import { Teacher, DashboardConfig } from './types';
 
 type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram';
 
@@ -68,6 +69,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [expandedModules, setExpandedModules] = useState<string[]>(['academic']);
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(new Date().getFullYear().toString());
+  const [config, setConfig] = useState<DashboardConfig | null>(null);
 
   const handleImpersonate = (teacher: Teacher) => {
     if (userData?.role === 'admin') {
@@ -86,10 +88,24 @@ export default function App() {
   };
 
   useEffect(() => {
+    let unsubConfig: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
           setUser(user);
+          
+          // Move listener here to ensure auth exists
+          unsubConfig = onSnapshot(
+            doc(db, 'config', 'dashboard'), 
+            (snap) => {
+              if (snap.exists()) {
+                setConfig(snap.data() as DashboardConfig);
+              }
+            },
+            (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard')
+          );
+          
           testConnection();
           const userDocRef = doc(db, 'users', user.uid);
           
@@ -155,7 +171,10 @@ export default function App() {
         setLoading(false);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubConfig?.();
+      unsubscribe();
+    };
   }, []);
 
   const handleManualLogin = (manualUser: any) => {
@@ -378,6 +397,13 @@ export default function App() {
 
         <BirthdayBanner />
 
+        {/* Events Bar - Positioned based on config */}
+        {userData && config?.eventBarPosition === 'top' && (
+          <div className="px-4 md:px-8 pt-4">
+            <SidebarEvents user={userData} compact />
+          </div>
+        )}
+
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <AnimatePresence mode="wait">
             <motion.div
@@ -396,7 +422,7 @@ export default function App() {
                   onImpersonate={handleImpersonate}
                 />
               )}
-              {(['regimento', 'calendar', 'system', 'organogram'].includes(activeTab)) && (
+              {(['regimento', 'calendar', 'system', 'organogram', 'meetings'].includes(activeTab)) && (
                 <AdminModule user={userData} subTab={activeTab as any} />
               )}
               {activeTab === 'projects' && <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
@@ -407,8 +433,8 @@ export default function App() {
           </AnimatePresence>
         </main>
         
-        {/* Compact Events at Bottom */}
-        {userData && (
+        {/* Compact Events at Bottom (Default/Config) */}
+        {userData && (!config || config?.eventBarPosition === 'bottom') && (
           <div className="px-4 md:px-8 pb-4">
             <SidebarEvents user={userData} compact />
           </div>

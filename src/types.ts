@@ -183,6 +183,26 @@ export interface TeacherReport {
 export interface DashboardConfig {
   highFrequencyLimit: number;
   intermediateFrequencyLimit: number;
+  consecutiveAbsencesLimit: number;
+  frequencyStartDate?: string;
+  frequencyEndDate?: string;
+  eventBarPosition: 'top' | 'bottom';
+}
+
+export interface AbsenceResolution {
+  id: string;
+  studentId: string;
+  teacherId: string;
+  note: string;
+  consecutiveAbsences: number;
+  date: string;
+  createdAt: string;
+}
+
+export interface PreDefinedResolution {
+  id: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface JustificationOption {
