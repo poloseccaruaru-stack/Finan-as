@@ -58,6 +58,7 @@ import {
   PieChart,
   Pie
 } from 'recharts';
+import PresenceDetailsReport from './PresenceDetailsReport';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Student, Teacher, Class, Transaction, Project, DashboardConfig, AbsenceResolution, PreDefinedResolution } from '../types';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfWeek, endOfWeek, getMonth, getDate, isValid, subMonths } from 'date-fns';
@@ -105,11 +106,26 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   // Resolution Edit States
   const [editingResolution, setEditingResolution] = useState<AbsenceResolution | null>(null);
   const [showQuickAlertConfig, setShowQuickAlertConfig] = useState(false);
+  const [showRankConfig, setShowRankConfig] = useState(false);
+  const [showClassifConfig, setShowClassifConfig] = useState(false);
+  
   const [tempConsecutiveLimit, setTempConsecutiveLimit] = useState(2);
   const [tempFreqStart, setTempFreqStart] = useState('');
   const [tempFreqEnd, setTempFreqEnd] = useState('');
+  
+  const [tempRankStart, setTempRankStart] = useState('');
+  const [tempRankEnd, setTempRankEnd] = useState('');
+  
+  const [tempClassifStart, setTempClassifStart] = useState('');
+  const [tempClassifEnd, setTempClassifEnd] = useState('');
+
+  const [detailReportParams, setDetailReportParams] = useState<{
+    type: 'classification' | 'ranking';
+    id: string;
+  } | null>(null);
 
   const [absenceDates, setAbsenceDates] = useState<Record<string, string[]>>({});
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
 
   // Sync temp values only when modal OPENS to avoid overwriting user edits while typing
   useEffect(() => {
@@ -119,6 +135,20 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       setTempFreqEnd(config.frequencyEndDate || '');
     }
   }, [showQuickAlertConfig]);
+
+  useEffect(() => {
+    if (showRankConfig) {
+      setTempRankStart(config.rankStartDate || '');
+      setTempRankEnd(config.rankEndDate || '');
+    }
+  }, [showRankConfig]);
+
+  useEffect(() => {
+    if (showClassifConfig) {
+      setTempClassifStart(config.classificationStartDate || '');
+      setTempClassifEnd(config.classificationEndDate || '');
+    }
+  }, [showClassifConfig]);
 
   // Stable Config Listener
   useEffect(() => {
@@ -132,6 +162,10 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           consecutiveAbsencesLimit: data.consecutiveAbsencesLimit || 2,
           frequencyStartDate: data.frequencyStartDate,
           frequencyEndDate: data.frequencyEndDate,
+          rankStartDate: data.rankStartDate,
+          rankEndDate: data.rankEndDate,
+          classificationStartDate: data.classificationStartDate,
+          classificationEndDate: data.classificationEndDate,
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
       }
@@ -194,9 +228,10 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
     // Fetch Attendance for absence dates
     const unsubAttendance = onSnapshot(
-      query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(100)), 
+      query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
       (snap) => {
         const records = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setAttendanceRecords(records);
         const datesMap: Record<string, string[]> = {};
         
         // Use current students from state
@@ -240,6 +275,10 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     } finally {
       setIsSavingConfig(false);
     }
+  };
+
+  const handleOpenDetail = (type: 'classification' | 'ranking', id: string) => {
+    setDetailReportParams({ type, id });
   };
 
   const handleResolveAbsences = async () => {
@@ -372,24 +411,66 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     { label: 'Projetos', value: projects.length, icon: Briefcase, color: 'bg-amber-50 text-amber-600' },
   ];
 
-  const classAttendanceData = filteredClasses.map(c => {
-    const classStudents = filteredStudents.filter(s => s.classId === c.id);
-    const avgAttendance = classStudents.length > 0 
-      ? classStudents.reduce((acc, s) => acc + (s.attendancePercentage || 0), 0) / classStudents.length
-      : 0;
-    return {
-      id: c.id,
-      name: c.name,
-      attendance: Math.round(avgAttendance),
-      students: classStudents.length
-    };
-  }).sort((a, b) => b.attendance - a.attendance);
+  const calculateStudentPeriodAttendance = (studentId: string, startDate?: string, endDate?: string) => {
+    const start = startDate ? parseISO(startDate) : null;
+    const end = endDate ? parseISO(endDate) : null;
 
-  const frequencyClassification = {
-    high: filteredStudents.filter(s => (s.attendancePercentage || 0) >= config.highFrequencyLimit).length,
-    intermediate: filteredStudents.filter(s => (s.attendancePercentage || 0) < config.highFrequencyLimit && (s.attendancePercentage || 0) >= config.intermediateFrequencyLimit).length,
-    low: filteredStudents.filter(s => (s.attendancePercentage || 0) < config.intermediateFrequencyLimit).length,
+    const relevantAttendance = attendanceRecords.filter(att => {
+      const d = parseISO(att.date);
+      const inPeriod = (!start || d >= start) && (!end || d <= end);
+      return inPeriod && (att.presentStudentIds?.includes(studentId) || att.absentStudentIds?.includes(studentId));
+    });
+
+    if (relevantAttendance.length === 0) return 100; // Default to 100 if no records found in period
+
+    const presentCount = relevantAttendance.filter(att => att.presentStudentIds?.includes(studentId)).length;
+    return (presentCount / relevantAttendance.length) * 100;
   };
+
+  const classAttendanceData = useMemo(() => {
+    return filteredClasses.map(c => {
+      const classStudents = filteredStudents.filter(s => s.classId === c.id);
+      
+      const start = config.rankStartDate ? parseISO(config.rankStartDate) : null;
+      const end = config.rankEndDate ? parseISO(config.rankEndDate) : null;
+
+      const relevantAttendance = attendanceRecords.filter(att => {
+        const d = parseISO(att.date);
+        return att.classId === c.id && (!start || d >= start) && (!end || d <= end);
+      });
+
+      const totalPossiblePresences = relevantAttendance.length * (classStudents.length || 1);
+      const actualPresences = relevantAttendance.reduce((acc, att) => acc + (att.presentStudentIds?.length || 0), 0);
+      
+      const attendancePercent = totalPossiblePresences > 0 ? (actualPresences / totalPossiblePresences) * 100 : 0;
+      
+      const avgPresentStudents = relevantAttendance.length > 0 
+        ? actualPresences / relevantAttendance.length 
+        : 0;
+
+      return {
+        id: c.id,
+        name: c.name,
+        attendance: Math.round(attendancePercent),
+        absencePercent: Math.round(100 - attendancePercent),
+        avgPresent: avgPresentStudents.toFixed(1),
+        students: classStudents.length
+      };
+    }).sort((a, b) => b.attendance - a.attendance);
+  }, [filteredClasses, filteredStudents, attendanceRecords, config.rankStartDate, config.rankEndDate]);
+
+  const frequencyClassification = useMemo(() => {
+    const periodAttendances = filteredStudents.map(s => {
+      const percent = calculateStudentPeriodAttendance(s.id, config.classificationStartDate, config.classificationEndDate);
+      return percent;
+    });
+
+    return {
+      high: periodAttendances.filter(p => p >= config.highFrequencyLimit).length,
+      intermediate: periodAttendances.filter(p => p < config.highFrequencyLimit && p >= config.intermediateFrequencyLimit).length,
+      low: periodAttendances.filter(p => p < config.intermediateFrequencyLimit).length,
+    };
+  }, [filteredStudents, attendanceRecords, config.classificationStartDate, config.classificationEndDate, config.highFrequencyLimit, config.intermediateFrequencyLimit]);
 
   const pieData = [
     { name: 'Alta', value: frequencyClassification.high, color: '#10b981' },
@@ -602,6 +683,67 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
               <Trophy className="w-5 h-5 text-amber-500" />
               <h3 className="text-lg font-bold text-slate-900">Ranking de Presença por Turma</h3>
             </div>
+            <div className="flex items-center gap-2 relative">
+              <button 
+                onClick={() => setShowRankConfig(!showRankConfig)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group"
+              >
+                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+              </button>
+
+              <AnimatePresence>
+                {showRankConfig && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 10, scale: 0.9 }}
+                    className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-10"
+                  >
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
+                            Início
+                          </label>
+                          <input 
+                            type="date" 
+                            value={tempRankStart}
+                            onChange={(e) => setTempRankStart(e.target.value)}
+                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
+                            Fim
+                          </label>
+                          <input 
+                            type="date" 
+                            value={tempRankEnd}
+                            onChange={(e) => setTempRankEnd(e.target.value)}
+                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          updateConfig({ 
+                            ...config, 
+                            rankStartDate: tempRankStart,
+                            rankEndDate: tempRankEnd
+                          });
+                          setShowRankConfig(false);
+                        }}
+                        disabled={isSavingConfig}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md"
+                      >
+                        {isSavingConfig ? 'Gravando...' : 'Fixar Seleção'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -609,8 +751,38 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" domain={[0, 100]} hide />
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={100} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} formatter={(value) => `${value}%`} />
-                <Bar dataKey="attendance" radius={[0, 8, 8, 0]} barSize={20}>
+                <Tooltip 
+                  cursor={{ fill: '#f8fafc' }} 
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-white p-3 border border-slate-100 shadow-xl rounded-xl">
+                          <p className="text-sm font-black text-slate-900 mb-2 uppercase tracking-tight">{label}</p>
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider flex justify-between gap-4">
+                              <span>Presenças:</span> <span>{data.attendance}%</span>
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between gap-4">
+                              <span>Média Alunos:</span> <span>{data.avgPresent}</span>
+                            </p>
+                            <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex justify-between gap-4">
+                              <span>Faltas:</span> <span>{data.absencePercent}%</span>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar 
+                  dataKey="attendance" 
+                  radius={[0, 8, 8, 0]} 
+                  barSize={20}
+                  onDoubleClick={(data) => handleOpenDetail('ranking', data.id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   {classAttendanceData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.attendance >= config.highFrequencyLimit ? '#10b981' : entry.attendance >= config.intermediateFrequencyLimit ? '#f59e0b' : '#ef4444'} />
                   ))}
@@ -618,11 +790,88 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <div className="mt-4 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+            {classAttendanceData.slice(0, 3).map((turma, idx) => (
+              <div key={idx} className="flex-1 min-w-[140px] p-3 bg-slate-50 rounded-xl border border-slate-100 transition-all hover:shadow-md">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">{turma.name}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold text-indigo-600">{turma.attendance}%</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">Avg: {turma.avgPresent}</span>
+                    <span className="text-[9px] font-bold text-red-400 uppercase">Faltas: {turma.absencePercent}%</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Frequency Classification */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Classificação de Alunos</h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-slate-900">Classificação de Alunos</h3>
+            <div className="flex items-center gap-2 relative">
+              <button 
+                onClick={() => setShowClassifConfig(!showClassifConfig)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group"
+              >
+                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+              </button>
+
+              <AnimatePresence>
+                {showClassifConfig && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 10, scale: 0.9 }}
+                    className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-10"
+                  >
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
+                            Início
+                          </label>
+                          <input 
+                            type="date" 
+                            value={tempClassifStart}
+                            onChange={(e) => setTempClassifStart(e.target.value)}
+                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
+                            Fim
+                          </label>
+                          <input 
+                            type="date" 
+                            value={tempClassifEnd}
+                            onChange={(e) => setTempClassifEnd(e.target.value)}
+                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          updateConfig({ 
+                            ...config, 
+                            classificationStartDate: tempClassifStart,
+                            classificationEndDate: tempClassifEnd
+                          });
+                          setShowClassifConfig(false);
+                        }}
+                        disabled={isSavingConfig}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md"
+                      >
+                        {isSavingConfig ? 'Gravando...' : 'Fixar Seleção'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
           <div className="h-[200px] mb-6">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -632,6 +881,11 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
+                  onDoubleClick={(data) => {
+                    const mappedId = data.name === 'Alta' ? 'high' : data.name === 'Intermediária' ? 'intermediate' : 'low';
+                    handleOpenDetail('classification', mappedId);
+                  }}
+                  style={{ cursor: 'pointer' }}
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1356,6 +1610,38 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           </div>
         </motion.div>
       </div>
+    )}
+  </AnimatePresence>
+
+  {/* Detail Report Overlay - "Nova Janela na Plataforma" */}
+  <AnimatePresence>
+    {detailReportParams && (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="fixed inset-0 z-[150] bg-white overflow-y-auto"
+      >
+        <div className="sticky top-0 w-full flex justify-end p-4 bg-white/80 backdrop-blur-md border-b border-slate-100 z-[160]">
+          <button 
+            onClick={() => setDetailReportParams(null)}
+            className="group flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 rounded-2xl hover:bg-red-50 hover:text-red-600 transition-all font-black uppercase tracking-widest text-[10px]"
+          >
+            <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+            Fechar Janela
+          </button>
+        </div>
+        <div className="pb-10">
+          <PresenceDetailsReport 
+            type={detailReportParams.type}
+            targetId={detailReportParams.id}
+            startDate={detailReportParams.type === 'classification' ? config.classificationStartDate : config.rankStartDate}
+            endDate={detailReportParams.type === 'classification' ? config.classificationEndDate : config.rankEndDate}
+            highLimit={config.highFrequencyLimit}
+            interLimit={config.intermediateFrequencyLimit}
+          />
+        </div>
+      </motion.div>
     )}
   </AnimatePresence>
 </div>

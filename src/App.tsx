@@ -50,6 +50,7 @@ import ProjectModule from './components/ProjectModule';
 import FinanceModule from './components/FinanceModule';
 import ReportModule from './components/ReportModule';
 import PlanningModule from './components/PlanningModule';
+import PresenceDetailsReport from './components/PresenceDetailsReport';
 import OrganogramModule from './components/OrganogramModule';
 import LoginForm from './components/LoginForm';
 import AISidebarSearch from './components/AISidebarSearch';
@@ -89,6 +90,21 @@ export default function App() {
 
   useEffect(() => {
     let unsubConfig: (() => void) | null = null;
+    
+    // Check if we are in report mode
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'presence-details') {
+      const type = params.get('type') as any;
+      const targetId = params.get('id') || '';
+      const start = params.get('start') || '';
+      const end = params.get('end') || '';
+      const hL = Number(params.get('hL')) || 80;
+      const iL = Number(params.get('iL')) || 50;
+
+      // Render standalone report
+      setLoading(false);
+      return;
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
@@ -219,6 +235,21 @@ export default function App() {
 
   const isAdmin = userData.role === 'admin';
   const isCoordinator = userData.role === 'coordinator';
+
+  // Handle Detail Report View - Standalone mode
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('view') === 'presence-details') {
+    return (
+      <PresenceDetailsReport 
+        type={urlParams.get('type') as any}
+        targetId={urlParams.get('id') || ''}
+        startDate={urlParams.get('start') || ''}
+        endDate={urlParams.get('end') || ''}
+        highLimit={Number(urlParams.get('hL')) || config?.highFrequencyLimit || 80}
+        interLimit={Number(urlParams.get('iL')) || config?.intermediateFrequencyLimit || 50}
+      />
+    );
+  }
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

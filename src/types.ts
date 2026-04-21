@@ -186,6 +186,10 @@ export interface DashboardConfig {
   consecutiveAbsencesLimit: number;
   frequencyStartDate?: string;
   frequencyEndDate?: string;
+  rankStartDate?: string;
+  rankEndDate?: string;
+  classificationStartDate?: string;
+  classificationEndDate?: string;
   eventBarPosition: 'top' | 'bottom';
 }
 
