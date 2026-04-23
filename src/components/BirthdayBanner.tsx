@@ -8,7 +8,11 @@ import { ptBR } from 'date-fns/locale';
 import { Cake, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function BirthdayBanner() {
+interface Props {
+  type: 'student' | 'collaborator';
+}
+
+export default function BirthdayBanner({ type }: Props) {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -36,14 +40,25 @@ export default function BirthdayBanner() {
 
   const weeklyBirthdays = useMemo(() => {
     const now = new Date();
-    // Monday to Sunday of the current week
     const start = startOfWeek(now, { weekStartsOn: 1 });
     const end = endOfWeek(now, { weekStartsOn: 1 });
 
-    const allPeople = [
-      ...students.map(s => ({ ...s, type: 'Aluno', className: classes.find(c => c.id === s.classId)?.name || 'Sem Turma' })),
-      ...teachers.map(t => ({ ...t, type: 'Professor', className: 'Administração/Docente', birthDate: (t as any).birthDate || '' }))
-    ].filter(p => p.birthDate);
+    let allPeople: any[] = [];
+    
+    if (type === 'student') {
+      allPeople = students.map(s => ({ 
+        ...s, 
+        personType: 'Aluno', 
+        className: classes.find(c => c.id === s.classId)?.name || 'Sem Turma' 
+      }));
+    } else {
+      allPeople = teachers.map(t => ({ 
+        ...t, 
+        personType: 'Colaborador', 
+        className: 'Administração/Docente', 
+        birthDate: (t as any).birthDate || '' 
+      }));
+    }
 
     return allPeople.filter(person => {
       if (!person.birthDate) return false;
@@ -52,10 +67,7 @@ export default function BirthdayBanner() {
       const bMonth = getMonth(bDate);
       const bDay = getDate(bDate);
       
-      // Check if this month/day falls within the current week's month/day range
-      // We create a date in the current year for the comparison
       const thisYearBirthday = new Date(now.getFullYear(), bMonth, bDay);
-      
       return isWithinInterval(thisYearBirthday, { start, end });
     }).sort((a, b) => {
       const dateA = parseISO(a.birthDate);
@@ -64,7 +76,7 @@ export default function BirthdayBanner() {
       const thisYearB = new Date(now.getFullYear(), getMonth(dateB), getDate(dateB));
       return thisYearA.getTime() - thisYearB.getTime();
     });
-  }, [students, teachers, classes]);
+  }, [students, teachers, classes, type]);
 
   useEffect(() => {
     if (weeklyBirthdays.length > 1) {
@@ -80,9 +92,12 @@ export default function BirthdayBanner() {
   const current = weeklyBirthdays[currentIndex];
 
   return (
-    <div className="bg-indigo-600 text-white py-2 px-4 shadow-lg overflow-hidden relative print:hidden">
+    <div className={cn(
+      "text-white py-2 px-4 shadow-lg overflow-hidden relative print:hidden border-b border-white/10",
+      type === 'student' ? "bg-indigo-600" : "bg-emerald-600"
+    )}>
       <div className="max-w-7xl mx-auto flex items-center justify-center gap-4">
-        <Cake className="w-5 h-5 animate-bounce" />
+        <Cake className={cn("w-5 h-5 animate-bounce", type === 'student' ? "text-amber-300" : "text-amber-200")} />
         <AnimatePresence mode="wait">
           <motion.div
             key={current.id}
@@ -91,9 +106,11 @@ export default function BirthdayBanner() {
             exit={{ y: -20, opacity: 0 }}
             className="flex items-center gap-2 text-sm font-bold"
           >
-            <span>🎉 Aniversariante da Semana:</span>
+            <span>🎉 Aniversariante da Semana ({type === 'student' ? 'Alunos' : 'Colaboradores'}):</span>
             <span className="bg-white/20 px-2 py-0.5 rounded">{current.name}</span>
-            <span className="text-indigo-100">({current.type} - {current.className})</span>
+            <span className={cn("text-sm", type === 'student' ? "text-indigo-100" : "text-emerald-100")}>
+              ({current.className})
+            </span>
             <span className="text-amber-300">
               Dia {safeFormat(current.birthDate, 'dd/MM')}
             </span>

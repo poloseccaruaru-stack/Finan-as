@@ -406,7 +406,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
   const stats = [
     { label: 'Total Alunos', value: filteredStudents.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Professores', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Colaboradores', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
     { label: 'Turmas Ativas', value: filteredClasses.length, icon: GraduationCap, color: 'bg-green-50 text-green-600' },
     { label: 'Projetos', value: projects.length, icon: Briefcase, color: 'bg-amber-50 text-amber-600' },
   ];
@@ -487,7 +487,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     
     const allPeople: any[] = [
       ...filteredStudents.map(s => ({ ...s, type: 'Aluno' })),
-      ...teachers.map(t => ({ ...t, tEmail: t.email, type: 'Professor' }))
+      ...teachers.map(t => ({ ...t, type: 'Colaborador' }))
     ];
 
     return allPeople.filter(person => {
@@ -934,12 +934,12 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           </div>
         </div>
 
-        {/* Birthdays of the Week */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        {/* Birthdays of the Week - Alunos */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-pink-500" />
-              <h3 className="text-lg font-bold text-slate-900">Aniversariantes da Semana</h3>
+              <Calendar className="w-5 h-5 text-indigo-500" />
+              <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight">Aniversariantes - Alunos</h3>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
@@ -967,38 +967,61 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
             </div>
           </div>
 
-          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-            {weeklyBirthdays.length > 0 ? (
-              weeklyBirthdays.map((person) => (
-                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-pink-200 hover:bg-pink-50/30 transition-all">
+          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
+            {weeklyBirthdays.filter(p => p.type === 'Aluno').length > 0 ? (
+              weeklyBirthdays.filter(p => p.type === 'Aluno').map((person) => (
+                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-lg shadow-sm">
-                      {person.type === 'Aluno' ? '👶' : '👨‍🏫'}
+                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">
+                      👶
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-slate-900">{person.name}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500">
-                          {person.type}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {classes.find(c => c.id === (person as any).classId)?.name || 'Sem Turma'}
-                        </span>
-                      </div>
+                      <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                        {classes.find(c => c.id === (person as any).classId)?.name || 'Sem Turma'}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black text-pink-600">
-                      {safeFormat(person.birthDate, 'dd/MM')}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Aniversário</p>
+                    <p className="text-xs font-black text-indigo-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-12 text-slate-400 italic text-sm">
-                Nenhum aniversariante neste período.
-              </div>
+              <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum aluno.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Birthdays of the Week - Colaboradores */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-emerald-500" />
+              <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight">Aniversariantes - Colaboradores</h3>
+            </div>
+          </div>
+
+          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
+            {weeklyBirthdays.filter(p => p.type === 'Colaborador').length > 0 ? (
+              weeklyBirthdays.filter(p => p.type === 'Colaborador').map((person) => (
+                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-emerald-200 transition-all">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">
+                      👨‍🏫
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Administração/Docente</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-black text-emerald-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum colaborador.</div>
             )}
           </div>
         </div>

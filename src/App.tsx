@@ -58,7 +58,7 @@ import BirthdayBanner from './components/BirthdayBanner';
 import { cn } from './lib/utils';
 import { Teacher, DashboardConfig } from './types';
 
-type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram';
+type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -259,7 +259,7 @@ export default function App() {
       icon: GraduationCap,
       subItems: [
         { id: 'students', label: 'Alunos', icon: Users },
-        { id: 'teachers', label: 'Professores', icon: BookOpen },
+        { id: 'teachers', label: 'Colaboradores', icon: BookOpen },
         { id: 'classes', label: 'Turmas', icon: LayoutDashboard },
         { id: 'attendance', label: 'Chamada', icon: CheckSquare },
         { id: 'planning', label: 'Planejamento', icon: BookOpen },
@@ -278,6 +278,8 @@ export default function App() {
       subItems: [
         { id: 'regimento', label: 'Regimento', icon: FileText },
         { id: 'calendar', label: 'Calendário', icon: Calendar },
+        { id: 'comunicados', label: 'Comunicados', icon: FileText },
+        { id: 'documentos', label: 'Documentos Gerais', icon: FileText },
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
@@ -426,7 +428,10 @@ export default function App() {
           </div>
         </header>
 
-        <BirthdayBanner />
+        <div className="flex flex-col">
+          <BirthdayBanner type="student" />
+          <BirthdayBanner type="collaborator" />
+        </div>
 
         {/* Events Bar - Positioned based on config */}
         {userData && config?.eventBarPosition === 'top' && (
@@ -445,7 +450,7 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               {activeTab === 'dashboard' && <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />}
-              {(['students', 'teachers', 'classes', 'attendance', 'schoolYear'].includes(activeTab)) && (
+              {(['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'meetings'].includes(activeTab)) && (
                 <AcademicModule 
                   user={userData} 
                   subTab={activeTab as any} 
@@ -453,7 +458,7 @@ export default function App() {
                   onImpersonate={handleImpersonate}
                 />
               )}
-              {(['regimento', 'calendar', 'system', 'organogram', 'meetings'].includes(activeTab)) && (
+              {(['regimento', 'calendar', 'system', 'organogram', 'comunicados', 'documentos'].includes(activeTab)) && (
                 <AdminModule user={userData} subTab={activeTab as any} />
               )}
               {activeTab === 'projects' && <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />}

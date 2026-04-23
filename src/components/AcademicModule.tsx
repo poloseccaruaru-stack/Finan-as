@@ -635,6 +635,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     contact: '',
     profession: '',
     startDateEBD: '',
+    birthDate: '',
     generalProfile: '',
     role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
     classIds: [] as string[],
@@ -646,6 +647,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     setStudentForm(prev => ({ ...prev, schoolYear: selectedSchoolYear }));
     setClassForm(prev => ({ ...prev, schoolYear: selectedSchoolYear }));
   }, [selectedSchoolYear]);
+
+  // Auto-filter attendance list when a class is selected in the marking section
+  useEffect(() => {
+    if (subTab === 'attendance' && selectedClass) {
+      if (isAdmin) {
+        setAttendanceFilterClasses([selectedClass]);
+      } else {
+        setAttendanceFilterClass(selectedClass);
+      }
+    }
+  }, [selectedClass, subTab, isAdmin]);
 
   const [classForm, setClassForm] = useState({
     name: '',
@@ -711,7 +723,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
   const handleDeleteTeacher = async (id: string) => {
-    showAdminConfirm('Excluir Professor', 'Deseja realmente excluir este professor?', async () => {
+    showAdminConfirm('Excluir Colaborador', 'Deseja realmente excluir este colaborador?', async () => {
       try {
         await deleteDoc(doc(db, 'users', id));
       } catch (err) {
@@ -849,6 +861,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             contact: teacherForm.contact || "",
             profession: teacherForm.profession || "",
             startDateEBD: teacherForm.startDateEBD || "",
+            birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
@@ -871,6 +884,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             contact: teacherForm.contact || "",
             profession: teacherForm.profession || "",
             startDateEBD: teacherForm.startDateEBD || "",
+            birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
@@ -883,7 +897,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -901,6 +915,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       contact: teacher.contact,
       profession: teacher.profession || '',
       startDateEBD: teacher.startDateEBD || '',
+      birthDate: (teacher as any).birthDate || '',
       generalProfile: teacher.generalProfile || '',
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
@@ -1507,7 +1522,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-5 h-5" />
-                Novo {subTab === 'students' ? 'Aluno' : subTab === 'teachers' ? 'Professor' : subTab === 'meetings' ? 'Ata/Reunião' : 'Turma'}
+                Novo {subTab === 'students' ? 'Aluno' : subTab === 'teachers' ? 'Colaborador' : subTab === 'meetings' ? 'Ata/Reunião' : 'Turma'}
               </button>
             </div>
           )}
@@ -1691,7 +1706,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <p className={cn(
                             "text-[10px] font-black uppercase tracking-widest",
                             teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
-                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Professor'}</p>
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Colaborador'}</p>
                         </div>
                       </div>
                     </td>
@@ -1785,7 +1800,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ano Letivo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Faixa Etária</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Professor Responsável</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador Responsável</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Alunos</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
@@ -2823,7 +2838,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
                   {subTab === 'students' ? (editingStudent ? 'Editar Aluno' : 'Cadastrar Aluno') : 
-                   subTab === 'teachers' ? (editingTeacher ? 'Editar Professor' : 'Cadastrar Professor') : 
+                   subTab === 'teachers' ? (editingTeacher ? 'Editar Colaborador' : 'Cadastrar Colaborador') : 
                    subTab === 'meetings' ? (editingMeeting ? 'Editar Ata' : 'Nova Ata de Reunião') :
                    'Cadastrar Turma'}
                 </h3>
@@ -3001,7 +3016,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="teacher">Professor (Acesso Parcial)</option>
+                            <option value="teacher">Colaborador (Acesso Parcial)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
                           </select>
@@ -3062,6 +3077,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           />
                         </div>
                         <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Data de Aniversário</label>
+                          <input
+                            type="date"
+                            value={teacherForm.birthDate}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, birthDate: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-500 uppercase">Profissão</label>
                           <input
                             type="text"
@@ -3070,18 +3096,18 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Início Exercício Docente na EBD</label>
+                          <input
+                            type="date"
+                            value={teacherForm.startDateEBD}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, startDateEBD: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Início Exercício Docente na EBD</label>
-                        <input
-                          type="date"
-                          value={teacherForm.startDateEBD}
-                          onChange={(e) => setTeacherForm({ ...teacherForm, startDateEBD: e.target.value })}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Professor</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Colaborador</label>
                         <textarea
                           value={teacherForm.generalProfile}
                           onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
@@ -3146,7 +3172,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
                             {[
                               { id: 'students', label: 'Alunos' },
-                              { id: 'teachers', label: 'Professores' },
+                              { id: 'teachers', label: 'Colaboradores' },
                               { id: 'classes', label: 'Turmas' },
                               { id: 'attendance', label: 'Chamada' },
                               { id: 'planning', label: 'Planejamento' },
@@ -3177,7 +3203,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
-                    {editingTeacher ? 'Atualizar Professor' : 'Salvar Professor'}
+                    {editingTeacher ? 'Atualizar Colaborador' : 'Salvar Colaborador'}
                   </button>
                 </form>
               )}
@@ -3288,7 +3314,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Professor Responsável</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Colaborador Responsável</label>
                     <select
                       value={classForm.teacherId}
                       onChange={(e) => setClassForm({ ...classForm, teacherId: e.target.value })}
@@ -3412,7 +3438,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Professor'})
+                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Colaborador'})
                 </h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <XCircle className="w-5 h-5 text-slate-500" />
@@ -3469,7 +3495,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {attendances.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(att => (
+            {attendances
+              .filter(a => !selectedClass || a.classId === selectedClass)
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .map(att => (
               <div key={att.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4 group relative">
                 <div className="flex justify-between items-start">
                   <div>
@@ -3984,7 +4013,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Relatório Geral de {reportType === 'student' ? 'Alunos' : 'Professores'}
+                  Relatório Geral de {reportType === 'student' ? 'Alunos' : 'Colaboradores'}
                 </h3>
                 <div className="flex gap-2">
                   <button 
@@ -4001,7 +4030,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               <div className="p-8 overflow-y-auto print:p-0">
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
-                    Relatório Geral - {reportType === 'student' ? 'Alunos' : 'Professores'}
+                    Relatório Geral - {reportType === 'student' ? 'Alunos' : 'Colaboradores'}
                   </h2>
                   <p className="text-slate-500 font-bold">Gerado em {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
                 </div>

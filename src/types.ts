@@ -25,6 +25,7 @@ export interface Teacher {
   name: string;
   email: string;
   contact: string;
+  birthDate?: string;
   classIds: string[];
   role: 'admin' | 'coordinator' | 'teacher';
   profession?: string;
@@ -246,6 +247,22 @@ export interface GeneralCalendar {
   id: string;
   title: string;
   content: string;
+  createdAt: string;
+}
+
+export interface Comunicado {
+  id: string;
+  target: string; // "professores", "alunos", "equipe" or comma separated
+  date: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface GeneralDocument {
+  id: string;
+  title: string;
+  content: string;
+  date: string;
   createdAt: string;
 }
 

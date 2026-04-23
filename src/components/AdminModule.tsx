@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
-  subTab: 'regimento' | 'calendar' | 'system' | 'organogram' | 'meetings';
+  subTab: 'regimento' | 'calendar' | 'system' | 'organogram' | 'meetings' | 'comunicados' | 'documentos';
 }
 
 export default function AdminModule({ user, subTab }: Props) {
@@ -54,11 +54,20 @@ export default function AdminModule({ user, subTab }: Props) {
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [comunicados, setComunicados] = useState<any[]>([]);
+  const [documentos, setDocumentos] = useState<any[]>([]);
   const [schoolYear, setSchoolYear] = useState<SchoolYearConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendarForm, setShowCalendarForm] = useState(false);
   const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [showComunicadoForm, setShowComunicadoForm] = useState(false);
+  const [showDocumentoForm, setShowDocumentoForm] = useState(false);
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
+  const [editingComunicadoId, setEditingComunicadoId] = useState<string | null>(null);
+  const [editingDocumentoId, setEditingDocumentoId] = useState<string | null>(null);
+
+  const [comunicadoForm, setComunicadoForm] = useState({ target: 'equipe', text: '', date: format(new Date(), 'yyyy-MM-dd') });
+  const [documentoForm, setDocumentoForm] = useState({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd') });
   const [meetingForm, setMeetingForm] = useState({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd'), participants: '', type: 'GERAL' as any });
   const [activeCalendarType, setActiveCalendarType] = useState<'ebd' | 'church' | 'convention' | 'geral'>('ebd');
   const [generalCalendars, setGeneralCalendars] = useState<GeneralCalendar[]>([]);
@@ -152,12 +161,62 @@ export default function AdminModule({ user, subTab }: Props) {
     }
   };
 
+  const handleSaveComunicado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingComunicadoId) {
+        await updateDoc(doc(db, 'comunicados', editingComunicadoId), comunicadoForm);
+      } else {
+        await addDoc(collection(db, 'comunicados'), { ...comunicadoForm, createdAt: new Date().toISOString() });
+      }
+      setShowComunicadoForm(false);
+      setEditingComunicadoId(null);
+      setComunicadoForm({ target: 'equipe', text: '', date: format(new Date(), 'yyyy-MM-dd') });
+    } catch (err) {
+      handleFirestoreError(err, editingComunicadoId ? OperationType.UPDATE : OperationType.CREATE, 'comunicados');
+    }
+  };
+
+  const handleSaveDocumento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingDocumentoId) {
+        await updateDoc(doc(db, 'documentos', editingDocumentoId), documentoForm);
+      } else {
+        await addDoc(collection(db, 'documentos'), { ...documentoForm, createdAt: new Date().toISOString() });
+      }
+      setShowDocumentoForm(false);
+      setEditingDocumentoId(null);
+      setDocumentoForm({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd') });
+    } catch (err) {
+      handleFirestoreError(err, editingDocumentoId ? OperationType.UPDATE : OperationType.CREATE, 'documentos');
+    }
+  };
+
   const handleDeleteMeeting = async (id: string) => {
     if (!confirm('Deseja excluir este registro de reunião?')) return;
     try {
       await deleteDoc(doc(db, 'meetings', id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `meetings/${id}`);
+    }
+  };
+
+  const handleDeleteComunicado = async (id: string) => {
+    if (!confirm('Deseja excluir este comunicado?')) return;
+    try {
+      await deleteDoc(doc(db, 'comunicados', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `comunicados/${id}`);
+    }
+  };
+
+  const handleDeleteDocumento = async (id: string) => {
+    if (!confirm('Deseja excluir este documento?')) return;
+    try {
+      await deleteDoc(doc(db, 'documentos', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `documentos/${id}`);
     }
   };
   const handleBackup = async () => {
@@ -461,6 +520,8 @@ export default function AdminModule({ user, subTab }: Props) {
           {subTab === 'regimento' ? 'Regimento Interno EBD' : 
            subTab === 'calendar' ? 'Calendário Escolar' : 
            subTab === 'organogram' ? 'Organograma' : 
+           subTab === 'comunicados' ? 'Comunicados' :
+           subTab === 'documentos' ? 'Documentos Gerais' :
            subTab === 'meetings' ? 'Registro de Reuniões' : 'Configurações do Sistema'}
         </h2>
         <div className="flex items-center gap-3">
@@ -475,6 +536,34 @@ export default function AdminModule({ user, subTab }: Props) {
             >
               <Plus className="w-5 h-5" />
               Novo Capítulo
+            </button>
+          )}
+
+          {isAdmin && subTab === 'comunicados' && (
+            <button
+              onClick={() => {
+                setEditingComunicadoId(null);
+                setComunicadoForm({ target: 'equipe', text: '', date: format(new Date(), 'yyyy-MM-dd') });
+                setShowComunicadoForm(true);
+              }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Comunicado
+            </button>
+          )}
+
+          {isAdmin && subTab === 'documentos' && (
+            <button
+              onClick={() => {
+                setEditingDocumentoId(null);
+                setDocumentoForm({ title: '', content: '', date: format(new Date(), 'yyyy-MM-dd') });
+                setShowDocumentoForm(true);
+              }}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Documento
             </button>
           )}
 
@@ -508,6 +597,84 @@ export default function AdminModule({ user, subTab }: Props) {
         className="overflow-hidden space-y-6"
       >
         {subTab === 'organogram' && <OrganogramModule user={user} />}
+
+        {/* Comunicados List */}
+        {subTab === 'comunicados' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {comunicados.map(c => (
+              <div key={c.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4 group relative">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded uppercase tracking-widest border border-indigo-100">
+                      {c.target === 'equipe' ? 'Equipe' : c.target === 'professores' ? 'Professores' : 'Alunos'}
+                    </span>
+                    <p className="text-sm font-bold text-slate-500 mt-2">
+                      {safeFormat(c.date, 'dd/MM/yyyy')}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button 
+                      onClick={() => {
+                        setEditingComunicadoId(c.id);
+                        setComunicadoForm({ target: c.target, text: c.text, date: c.date });
+                        setShowComunicadoForm(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteComunicado(c.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Documentos List */}
+        {subTab === 'documentos' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {documentos.map(d => (
+              <div key={d.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4 group relative">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">{d.title}</h4>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{safeFormat(d.date, 'dd/MM/yyyy')}</p>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button 
+                      onClick={() => {
+                        setEditingDocumentoId(d.id);
+                        setDocumentoForm({ title: d.title, content: d.content, date: d.date });
+                        setShowDocumentoForm(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteDocumento(d.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 h-32 overflow-y-auto">
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{d.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
       {subTab === 'system' && isAdmin && (
         <div className="space-y-6">
@@ -1298,6 +1465,124 @@ export default function AdminModule({ user, subTab }: Props) {
                 </div>
                 <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
                   {editingId ? 'Atualizar Capítulo' : 'Salvar Capítulo'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Documento Form Modal */}
+      <AnimatePresence>
+        {showDocumentoForm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900 uppercase">
+                  {editingDocumentoId ? 'Editar Documento' : 'Novo Documento'}
+                </h3>
+                <button onClick={() => setShowDocumentoForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveDocumento} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Título do Documento</label>
+                  <input
+                    required
+                    type="text"
+                    value={documentoForm.title}
+                    onChange={(e) => setDocumentoForm({ ...documentoForm, title: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
+                  <input
+                    required
+                    type="date"
+                    value={documentoForm.date}
+                    onChange={(e) => setDocumentoForm({ ...documentoForm, date: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Conteúdo</label>
+                  <textarea
+                    required
+                    rows={8}
+                    value={documentoForm.content}
+                    onChange={(e) => setDocumentoForm({ ...documentoForm, content: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  Salvar Documento
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Comunicado Form Modal */}
+      <AnimatePresence>
+        {showComunicadoForm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900 uppercase">
+                  {editingComunicadoId ? 'Editar Comunicado' : 'Novo Comunicado'}
+                </h3>
+                <button onClick={() => setShowComunicadoForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveComunicado} className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Para quem?</label>
+                  <select
+                    value={comunicadoForm.target}
+                    onChange={(e) => setComunicadoForm({ ...comunicadoForm, target: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="equipe">Equipe</option>
+                    <option value="professores">Professores</option>
+                    <option value="alunos">Alunos</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Data</label>
+                  <input
+                    required
+                    type="date"
+                    value={comunicadoForm.date}
+                    onChange={(e) => setComunicadoForm({ ...comunicadoForm, date: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Texto do Comunicado</label>
+                  <textarea
+                    required
+                    rows={6}
+                    value={comunicadoForm.text}
+                    onChange={(e) => setComunicadoForm({ ...comunicadoForm, text: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
+                  Salvar Comunicado
                 </button>
               </form>
             </motion.div>

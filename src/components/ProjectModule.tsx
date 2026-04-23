@@ -599,13 +599,22 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
                         <Eye className="w-5 h-5" />
                       </button>
                       {isAdmin && (
-                        <button 
-                          onClick={() => handleEdit(project)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          title="Editar"
-                        >
-                          <Edit className="w-5 h-5" />
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => handleEdit(project)}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            title="Editar"
+                          >
+                            <Edit className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(project.id)}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
