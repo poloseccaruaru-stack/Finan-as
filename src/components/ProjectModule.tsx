@@ -26,7 +26,8 @@ import {
   Eye,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings
 } from 'lucide-react';
 import { Project, Teacher, Student } from '../types';
 import { cn, safeFormat } from '../lib/utils';
@@ -61,12 +62,14 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
     message: '',
     type: 'alert'
   });
+  const [modalInput, setModalInput] = useState('');
 
   const showAlert = (title: string, message: string) => {
     setModalConfig({ show: true, title, message, type: 'alert' });
   };
 
   const showConfirm = (title: string, message: string, onConfirm: (inputValue?: string) => void, isPassword = false) => {
+    setModalInput('');
     setModalConfig({ show: true, title, message, type: 'confirm', onConfirm, isPassword });
   };
 
@@ -631,6 +634,82 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
           </table>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {modalConfig.show && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border border-slate-100"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+                  modalConfig.type === 'confirm' ? "bg-amber-100 text-amber-600 shadow-amber-100" : "bg-red-100 text-red-600 shadow-red-100"
+                )}>
+                  {modalConfig.type === 'confirm' ? <Settings className="w-6 h-6" /> : <Trash2 className="w-6 h-6" />}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">{modalConfig.title}</h3>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Confirmação de Segurança</p>
+                </div>
+              </div>
+              
+              <p className="text-slate-600 mb-8 font-medium leading-relaxed">{modalConfig.message}</p>
+              
+              {modalConfig.isPassword && (
+                <div className="mb-8 space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Senha do Administrador</label>
+                  <input
+                    type="password"
+                    placeholder="Digite a senha..."
+                    autoFocus
+                    value={modalInput}
+                    onChange={(e) => setModalInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        modalConfig.onConfirm?.(modalInput);
+                        setModalConfig(prev => ({ ...prev, show: false }));
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-mono"
+                  />
+                </div>
+              )}
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setModalConfig(prev => ({ ...prev, show: false }))}
+                  className="flex-1 py-4 px-6 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+                {modalConfig.type === 'confirm' ? (
+                  <button
+                    onClick={() => {
+                      modalConfig.onConfirm?.(modalInput);
+                      setModalConfig(prev => ({ ...prev, show: false }));
+                    }}
+                    className="flex-1 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-indigo-100"
+                  >
+                    Confirmar
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setModalConfig(prev => ({ ...prev, show: false }))}
+                    className="flex-1 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-lg shadow-indigo-100"
+                  >
+                    Entendido
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   )}
 </motion.div>

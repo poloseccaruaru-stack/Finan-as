@@ -342,6 +342,20 @@ export default function AdminModule({ user, subTab }: Props) {
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'meetings'));
       return () => unsub();
     }
+    if (subTab === 'comunicados') {
+      const q = query(collection(db, 'comunicados'), orderBy('date', 'desc'));
+      const unsub = onSnapshot(q, (snap) => {
+        setComunicados(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'comunicados'));
+      return () => unsub();
+    }
+    if (subTab === 'documentos') {
+      const q = query(collection(db, 'documentos'), orderBy('date', 'desc'));
+      const unsub = onSnapshot(q, (snap) => {
+        setDocumentos(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'documentos'));
+      return () => unsub();
+    }
   }, [subTab]);
 
   const handleSaveSchoolYear = async () => {

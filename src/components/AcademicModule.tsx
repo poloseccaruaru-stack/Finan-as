@@ -639,7 +639,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     generalProfile: '',
     role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
     classIds: [] as string[],
-    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[]
+    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
+    address: ''
   });
 
   // Sync forms with selectedSchoolYear
@@ -863,6 +864,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             startDateEBD: teacherForm.startDateEBD || "",
             birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
+            address: teacherForm.address || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             role: teacherForm.role || 'teacher',
@@ -886,6 +888,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             startDateEBD: teacherForm.startDateEBD || "",
             birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
+            address: teacherForm.address || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             registrationNumber,
@@ -897,7 +900,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -917,6 +920,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       startDateEBD: teacher.startDateEBD || '',
       birthDate: (teacher as any).birthDate || '',
       generalProfile: teacher.generalProfile || '',
+      address: teacher.address || '',
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
@@ -1512,7 +1516,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -3085,6 +3089,16 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Endereço Completo</label>
+                        <input
+                          type="text"
+                          value={teacherForm.address}
+                          onChange={(e) => setTeacherForm({ ...teacherForm, address: e.target.value })}
+                          placeholder="Rua, número, bairro, cidade..."
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">

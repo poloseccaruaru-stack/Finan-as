@@ -37,6 +37,7 @@ export interface Teacher {
   password?: string;
   allowedTabs?: string[];
   registrationNumber?: string;
+  address?: string;
 }
 
 export interface Class {
@@ -191,6 +192,9 @@ export interface DashboardConfig {
   rankEndDate?: string;
   classificationStartDate?: string;
   classificationEndDate?: string;
+  colabBirthdayStartDate?: string;
+  colabBirthdayEndDate?: string;
+  layout?: string[];
   eventBarPosition: 'top' | 'bottom';
 }
 

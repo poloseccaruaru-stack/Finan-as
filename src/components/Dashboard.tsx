@@ -59,7 +59,7 @@ import {
   Pie
 } from 'recharts';
 import PresenceDetailsReport from './PresenceDetailsReport';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { Student, Teacher, Class, Transaction, Project, DashboardConfig, AbsenceResolution, PreDefinedResolution } from '../types';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfWeek, endOfWeek, getMonth, getDate, isValid, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -81,7 +81,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     highFrequencyLimit: 80,
     intermediateFrequencyLimit: 50,
     consecutiveAbsencesLimit: 2,
-    eventBarPosition: 'bottom'
+    eventBarPosition: 'bottom',
+    layout: ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']
   });
   const [showConfig, setShowConfig] = useState(false);
   
@@ -108,6 +109,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [showQuickAlertConfig, setShowQuickAlertConfig] = useState(false);
   const [showRankConfig, setShowRankConfig] = useState(false);
   const [showClassifConfig, setShowClassifConfig] = useState(false);
+  const [showColabBirthConfig, setShowColabBirthConfig] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [localLayout, setLocalLayout] = useState<string[]>([]);
   
   const [tempConsecutiveLimit, setTempConsecutiveLimit] = useState(2);
   const [tempFreqStart, setTempFreqStart] = useState('');
@@ -118,6 +122,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   
   const [tempClassifStart, setTempClassifStart] = useState('');
   const [tempClassifEnd, setTempClassifEnd] = useState('');
+
+  const [tempColabBirthStart, setTempColabBirthStart] = useState('');
+  const [tempColabBirthEnd, setTempColabBirthEnd] = useState('');
 
   const [detailReportParams, setDetailReportParams] = useState<{
     type: 'classification' | 'ranking';
@@ -150,6 +157,13 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     }
   }, [showClassifConfig]);
 
+  useEffect(() => {
+    if (showColabBirthConfig) {
+      setTempColabBirthStart(config.colabBirthdayStartDate || '');
+      setTempColabBirthEnd(config.colabBirthdayEndDate || '');
+    }
+  }, [showColabBirthConfig]);
+
   // Stable Config Listener
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, 'config', 'dashboard'), (snap) => {
@@ -166,15 +180,41 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           rankEndDate: data.rankEndDate,
           classificationStartDate: data.classificationStartDate,
           classificationEndDate: data.classificationEndDate,
+          colabBirthdayStartDate: data.colabBirthdayStartDate,
+          colabBirthdayEndDate: data.colabBirthdayEndDate,
+          layout: data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'],
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
+        // Sync local layout
+        if (data.layout) {
+          const l = data.layout.includes('stats') ? data.layout : ['stats', ...data.layout];
+          setLocalLayout(l);
+        } else {
+          setLocalLayout(['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']);
+        }
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard'));
 
     return () => unsubConfig();
   }, []);
 
-  // Other Listeners
+  // Sync local layout when config is loaded initially if local state is empty
+  useEffect(() => {
+    if (localLayout && localLayout.length === 0 && config.layout && config.layout.length > 0) {
+      setLocalLayout(config.layout);
+    }
+  }, [config.layout]);
+
+  // Handle reorder persistence
+  const handleReorder = (newLayout: string[]) => {
+    setLocalLayout(newLayout);
+    // Persist immediately but carefully
+    const debouncedSave = setTimeout(() => {
+      updateConfig({ ...config, layout: newLayout });
+    }, 500);
+    return () => clearTimeout(debouncedSave);
+  };
+
   useEffect(() => {
     const isAdmin = user.role === 'admin' || user.role === 'coordinator';
     const classIds = user?.classIds || [];
@@ -197,7 +237,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
     const studentsQuery = isAdmin 
       ? collection(db, 'students') 
-      : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
+      : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
     
     const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
@@ -209,7 +249,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
     const classesQuery = isAdmin
       ? collection(db, 'classes')
-      : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
+      : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
@@ -482,8 +522,11 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [birthdayEnd, setBirthdayEnd] = useState(safeFormat(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
 
   const weeklyBirthdays = useMemo(() => {
-    const start = parseISO(birthdayStart);
-    const end = parseISO(birthdayEnd);
+    const studentStart = parseISO(birthdayStart);
+    const studentEnd = parseISO(birthdayEnd);
+    
+    const colabStart = config.colabBirthdayStartDate ? parseISO(config.colabBirthdayStartDate) : parseISO(birthdayStart);
+    const colabEnd = config.colabBirthdayEndDate ? parseISO(config.colabBirthdayEndDate) : parseISO(birthdayEnd);
     
     const allPeople: any[] = [
       ...filteredStudents.map(s => ({ ...s, type: 'Aluno' })),
@@ -500,13 +543,16 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       const currentYear = new Date().getFullYear();
       const bDateThisYear = new Date(currentYear, getMonth(bDate), getDate(bDate));
       
+      const start = person.type === 'Aluno' ? studentStart : colabStart;
+      const end = person.type === 'Aluno' ? studentEnd : colabEnd;
+
       return isWithinInterval(bDateThisYear, { start, end });
     }).sort((a, b) => {
       const dateA = parseISO(a.birthDate!);
       const dateB = parseISO(b.birthDate!);
       return getDate(dateA) - getDate(dateB);
     });
-  }, [students, teachers, birthdayStart, birthdayEnd]);
+  }, [students, teachers, birthdayStart, birthdayEnd, config.colabBirthdayStartDate, config.colabBirthdayEndDate]);
 
   const handlePrintBirthdays = () => {
     const printWindow = window.open('', '_blank');
@@ -577,13 +623,25 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {user.role === 'admin' && (
-            <button 
-              onClick={() => setShowConfig(!showConfig)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-all text-sm font-bold text-slate-600"
-            >
-              <Settings className="w-4 h-4" />
-              Configurar Limites
-            </button>
+            <div className="flex items-center gap-2">
+               <button 
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-sm font-bold border",
+                  isEditMode ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                {isEditMode ? <Save className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+                {isEditMode ? "Fixar Layout" : "Mudar Ordem"}
+              </button>
+              <button 
+                onClick={() => setShowConfig(!showConfig)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-all text-sm font-bold text-slate-600"
+              >
+                <Settings className="w-4 h-4" />
+                Configurar Limites
+              </button>
+            </div>
           )}
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -659,557 +717,484 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
         </motion.div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", stat.color)}>
-              <stat.icon className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.label}</p>
-              <h3 className="text-2xl font-bold text-slate-900">{stat.value}</h3>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Attendance Ranking */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-500" />
-              <h3 className="text-lg font-bold text-slate-900">Ranking de Presença por Turma</h3>
-            </div>
-            <div className="flex items-center gap-2 relative">
-              <button 
-                onClick={() => setShowRankConfig(!showRankConfig)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group"
-              >
-                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-              </button>
-
-              <AnimatePresence>
-                {showRankConfig && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 10, scale: 0.9 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 10, scale: 0.9 }}
-                    className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-10"
-                  >
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Início
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempRankStart}
-                            onChange={(e) => setTempRankStart(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Fim
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempRankEnd}
-                            onChange={(e) => setTempRankEnd(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                      </div>
-
-                      <button 
-                        onClick={() => {
-                          updateConfig({ 
-                            ...config, 
-                            rankStartDate: tempRankStart,
-                            rankEndDate: tempRankEnd
-                          });
-                          setShowRankConfig(false);
+            {/* Draggable Sections Container */}
+            <Reorder.Group 
+              axis="y" 
+              values={(localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']} 
+              onReorder={(newLayout) => setLocalLayout(newLayout || [])}
+              className="flex flex-col gap-6"
+            >
+              {((localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']).map((blockId, index) => {
+                const currentLayout = (localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
+                
+                // Helper to render Draggable controls
+                const DragControls = () => isEditMode ? (
+                  <div className="absolute top-2 right-2 flex gap-1 z-20 bg-white/90 backdrop-blur p-1 rounded-lg border shadow-sm border-amber-200" onPointerDown={e => e.stopPropagation()}>
+                    <div className="flex flex-col items-center border-r border-amber-100 pr-1 mr-1">
+                      <label className="text-[8px] font-black text-amber-500 uppercase leading-none mb-1">Posição</label>
+                      <input 
+                        type="number" 
+                        value={index + 1}
+                        min="1"
+                        max={currentLayout?.length || 7}
+                        onChange={(e) => {
+                          const newPos = parseInt(e.target.value) - 1;
+                          if (isNaN(newPos) || newPos < 0 || !currentLayout || newPos >= currentLayout.length) return;
+                          
+                          const newLayout = [...currentLayout];
+                          const [removed] = newLayout.splice(index, 1);
+                          newLayout.splice(newPos, 0, removed);
+                          setLocalLayout(newLayout);
+                          updateConfig({ ...config, layout: newLayout });
                         }}
-                        disabled={isSavingConfig}
-                        className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md"
-                      >
-                        {isSavingConfig ? 'Gravando...' : 'Fixar Seleção'}
-                      </button>
+                        className="w-8 h-6 bg-amber-50 border border-amber-200 rounded text-[10px] font-bold text-center text-amber-700 focus:ring-1 focus:ring-amber-500 outline-none"
+                      />
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={classAttendanceData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" domain={[0, 100]} hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={100} />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }} 
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 border border-slate-100 shadow-xl rounded-xl">
-                          <p className="text-sm font-black text-slate-900 mb-2 uppercase tracking-tight">{label}</p>
-                          <div className="space-y-1">
-                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider flex justify-between gap-4">
-                              <span>Presenças:</span> <span>{data.attendance}%</span>
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between gap-4">
-                              <span>Média Alunos:</span> <span>{data.avgPresent}</span>
-                            </p>
-                            <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex justify-between gap-4">
-                              <span>Faltas:</span> <span>{data.absencePercent}%</span>
-                            </p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (index > 0 && currentLayout) {
+                          const newLayout = [...currentLayout];
+                          [newLayout[index], newLayout[index-1]] = [newLayout[index-1], newLayout[index]];
+                          setLocalLayout(newLayout);
+                          updateConfig({ ...config, layout: newLayout });
+                        }
+                      }}
+                      className="p-1.5 hover:bg-amber-50 rounded text-amber-600"
+                      title="Mover para cima"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button 
+                       onClick={(e) => {
+                        e.stopPropagation();
+                        if (currentLayout && index < currentLayout.length - 1) {
+                          const newLayout = [...currentLayout];
+                          [newLayout[index], newLayout[index+1]] = [newLayout[index+1], newLayout[index]];
+                          setLocalLayout(newLayout);
+                          updateConfig({ ...config, layout: newLayout });
+                        }
+                      }}
+                      className="p-1.5 hover:bg-amber-50 rounded text-amber-600"
+                      title="Mover para baixo"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <div className="px-2 py-1 bg-amber-600 text-[10px] font-black text-white rounded flex items-center uppercase tracking-widest whitespace-nowrap cursor-grab active:cursor-grabbing">
+                      Mover
+                    </div>
+                  </div>
+                ) : null;
+
+                const wrapInItem = (content: React.ReactNode) => (
+                  <Reorder.Item 
+                    key={blockId} 
+                    value={blockId}
+                    dragListener={isEditMode}
+                    className="relative"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    onDragEnd={() => {
+                      // Final save when dragging stops
+                      updateConfig({ ...config, layout: localLayout });
+                    }}
+                    whileDrag={{ 
+                      scale: 1.02, 
+                      zIndex: 50,
+                      boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+                    }}
+                  >
+                    {content}
+                  </Reorder.Item>
+                );
+
+                if (blockId === 'stats') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10 p-2 rounded-3xl")}>
+                      {stats.map((stat, idx) => (
+                        <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-all">
+                          <div className={cn("p-4 rounded-xl", stat.color)}>
+                            <stat.icon className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{stat.label}</p>
+                            <p className="text-2xl font-black text-slate-900">{stat.value}</p>
                           </div>
                         </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar 
-                  dataKey="attendance" 
-                  radius={[0, 8, 8, 0]} 
-                  barSize={20}
-                  onDoubleClick={(data) => handleOpenDetail('ranking', data.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {classAttendanceData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.attendance >= config.highFrequencyLimit ? '#10b981' : entry.attendance >= config.intermediateFrequencyLimit ? '#f59e0b' : '#ef4444'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-            {classAttendanceData.slice(0, 3).map((turma, idx) => (
-              <div key={idx} className="flex-1 min-w-[140px] p-3 bg-slate-50 rounded-xl border border-slate-100 transition-all hover:shadow-md">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">{turma.name}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-indigo-600">{turma.attendance}%</span>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase">Avg: {turma.avgPresent}</span>
-                    <span className="text-[9px] font-bold text-red-400 uppercase">Faltas: {turma.absencePercent}%</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+                );
 
-        {/* Frequency Classification */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-900">Classificação de Alunos</h3>
-            <div className="flex items-center gap-2 relative">
-              <button 
-                onClick={() => setShowClassifConfig(!showClassifConfig)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group"
-              >
-                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-              </button>
-
-              <AnimatePresence>
-                {showClassifConfig && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 10, scale: 0.9 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 10, scale: 0.9 }}
-                    className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-10"
-                  >
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Início
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempClassifStart}
-                            onChange={(e) => setTempClassifStart(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
+                if (blockId === 'ranking') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-amber-500" />
+                          <h3 className="text-lg font-bold text-slate-900">Ranking de Presença por Turma</h3>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Fim
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempClassifEnd}
-                            onChange={(e) => setTempClassifEnd(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
+                        <div className="flex items-center gap-2 relative">
+                          <button 
+                            onClick={() => setShowRankConfig(!showRankConfig)}
+                            className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"
+                          >
+                            <Settings className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-500" />
+                          </button>
+                          <AnimatePresence>
+                            {showRankConfig && (
+                              <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Início</label>
+                                      <input type="date" value={tempRankStart} onChange={(e) => setTempRankStart(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Fim</label>
+                                      <input type="date" value={tempRankEnd} onChange={(e) => setTempRankEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { updateConfig({ ...config, rankStartDate: tempRankStart, rankEndDate: tempRankEnd }); setShowRankConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       </div>
-
-                      <button 
-                        onClick={() => {
-                          updateConfig({ 
-                            ...config, 
-                            classificationStartDate: tempClassifStart,
-                            classificationEndDate: tempClassifEnd
-                          });
-                          setShowClassifConfig(false);
-                        }}
-                        disabled={isSavingConfig}
-                        className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md"
-                      >
-                        {isSavingConfig ? 'Gravando...' : 'Fixar Seleção'}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-          <div className="h-[200px] mb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  onDoubleClick={(data) => {
-                    const mappedId = data.name === 'Alta' ? 'high' : data.name === 'Intermediária' ? 'intermediate' : 'low';
-                    handleOpenDetail('classification', mappedId);
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-3">
-            {pieData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span className="text-sm text-slate-600">{item.name}</span>
-                </div>
-                <span className="text-sm font-bold text-slate-900">{item.value} alunos</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Students per Class */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Alunos por Turma</h3>
-          <div className="space-y-4">
-            {classAttendanceData.map((c) => (
-              <div key={c.id} className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-bold text-slate-700">{c.name}</span>
-                    <span className="text-sm text-slate-500">{c.students} alunos</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div 
-                      className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
-                      style={{ width: `${(c.students / (students.length || 1)) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Birthdays of the Week - Alunos */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-500" />
-              <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight">Aniversariantes - Alunos</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                <input 
-                  type="date" 
-                  value={birthdayStart}
-                  onChange={(e) => setBirthdayStart(e.target.value)}
-                  className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1"
-                />
-                <span className="text-slate-300">|</span>
-                <input 
-                  type="date" 
-                  value={birthdayEnd}
-                  onChange={(e) => setBirthdayEnd(e.target.value)}
-                  className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1"
-                />
-              </div>
-              <button 
-                onClick={handlePrintBirthdays}
-                className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
-                title="Imprimir Aniversariantes"
-              >
-                <Printer className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
-            {weeklyBirthdays.filter(p => p.type === 'Aluno').length > 0 ? (
-              weeklyBirthdays.filter(p => p.type === 'Aluno').map((person) => (
-                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">
-                      👶
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                        {classes.find(c => c.id === (person as any).classId)?.name || 'Sem Turma'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-black text-indigo-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum aluno.</div>
-            )}
-          </div>
-        </div>
-
-        {/* Birthdays of the Week - Colaboradores */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-emerald-500" />
-              <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight">Aniversariantes - Colaboradores</h3>
-            </div>
-          </div>
-
-          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
-            {weeklyBirthdays.filter(p => p.type === 'Colaborador').length > 0 ? (
-              weeklyBirthdays.filter(p => p.type === 'Colaborador').map((person) => (
-                <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-emerald-200 transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">
-                      👨‍🏫
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Administração/Docente</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-black text-emerald-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum colaborador.</div>
-            )}
-          </div>
-        </div>
-
-        {/* Critical Alerts */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-500" />
-              <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight text-sm">Alertas de Frequência</h3>
-            </div>
-            <div className="flex items-center gap-2 relative">
-              <button 
-                onClick={() => setShowQuickAlertConfig(!showQuickAlertConfig)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group"
-              >
-                <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
-              </button>
-              
-              <AnimatePresence>
-                {showQuickAlertConfig && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 10, scale: 0.9 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 10, scale: 0.9 }}
-                    className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-10"
-                  >
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                          Faltas para Alerta
-                        </label>
-                        <input 
-                          type="number" 
-                          min="1"
-                          value={tempConsecutiveLimit}
-                          onChange={(e) => setTempConsecutiveLimit(parseInt(e.target.value) || 1)}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={classAttendanceData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                            <XAxis type="number" domain={[0, 100]} hide />
+                            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={100} />
+                            <Tooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload, label }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-white p-3 border border-slate-100 shadow-xl rounded-xl">
+                                    <p className="text-sm font-black text-slate-900 mb-2 uppercase tracking-tight">{label}</p>
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider flex justify-between gap-4"><span>Presenças:</span> <span>{data.attendance}%</span></p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between gap-4"><span>Média Alunos:</span> <span>{data.avgPresent}</span></p>
+                                      <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider flex justify-between gap-4"><span>Faltas:</span> <span>{data.absencePercent}%</span></p>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }} />
+                            <Bar dataKey="attendance" radius={[0, 8, 8, 0]} barSize={20} onDoubleClick={(data) => handleOpenDetail('ranking', data.id)} style={{ cursor: 'pointer' }}>
+                              {classAttendanceData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.attendance >= config.highFrequencyLimit ? '#10b981' : entry.attendance >= config.intermediateFrequencyLimit ? '#f59e0b' : '#ef4444'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Início Período
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempFreqStart}
-                            onChange={(e) => setTempFreqStart(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">
-                            Fim Período
-                          </label>
-                          <input 
-                            type="date" 
-                            value={tempFreqEnd}
-                            onChange={(e) => setTempFreqEnd(e.target.value)}
-                            className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                      </div>
-
-                      <button 
-                        onClick={() => {
-                          updateConfig({ 
-                            ...config, 
-                            consecutiveAbsencesLimit: tempConsecutiveLimit,
-                            frequencyStartDate: tempFreqStart,
-                            frequencyEndDate: tempFreqEnd
-                          });
-                        }}
-                        disabled={isSavingConfig}
-                        className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2 disabled:opacity-50"
-                        title="Fixar Configuração"
-                      >
-                        {isSavingConfig ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Salvando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4" />
-                            Fixar Período e Limite
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-            {filteredStudents
-              .filter(s => {
-                const baseFilter = s.consecutiveAbsences >= (config.consecutiveAbsencesLimit || 2);
-                if (!baseFilter) return false;
-                
-                // Date period filter
-                if (config.frequencyStartDate || config.frequencyEndDate) {
-                  const studentAbsences = absenceDates[s.id] || [];
-                  const start = config.frequencyStartDate ? parseISO(config.frequencyStartDate) : null;
-                  const end = config.frequencyEndDate ? parseISO(config.frequencyEndDate) : null;
-                  
-                  // If period is set, at least one of the recent absences must be within the period
-                  const hasAbsenceInPeriod = studentAbsences.some(dateStr => {
-                    const d = parseISO(dateStr);
-                    return (!start || d >= start) && (!end || d <= end);
-                  });
-                  return hasAbsenceInPeriod;
-                }
-                
-                return true;
-              })
-              .map(student => (
-              <div key={student.id} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between group hover:bg-red-100/50 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-lg shadow-sm border border-red-100">
-                    ⚠️
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-red-900 uppercase leading-none mb-1">{student.name}</p>
-                    <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">
-                      Faltou {student.consecutiveAbsences} vezes seguidas!
-                    </p>
-                    {absenceDates[student.id] && (
-                      <div className="flex flex-wrap gap-1">
-                        {absenceDates[student.id]
-                          .filter(dateStr => {
-                            const d = parseISO(dateStr);
-                            const start = config.frequencyStartDate ? parseISO(config.frequencyStartDate) : null;
-                            const end = config.frequencyEndDate ? parseISO(config.frequencyEndDate) : null;
-                            return (!start || d >= start) && (!end || d <= end);
-                          })
-                          .map((date, idx) => (
-                          <span key={idx} className="text-[8px] font-bold bg-white/60 text-red-600 px-1.5 py-0.5 rounded border border-red-100 shadow-sm">
-                            {format(parseISO(date), 'dd/MM')}
-                          </span>
+                      <div className="mt-4 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                        {classAttendanceData.slice(0, 3).map((turma, idx) => (
+                          <div key={idx} className="flex-1 min-w-[140px] p-3 bg-slate-50 rounded-xl border border-slate-100 transition-all hover:shadow-md">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">{turma.name}</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-lg font-bold text-indigo-600">{turma.attendance}%</span>
+                              <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-slate-500 uppercase">Avg: {turma.avgPresent}</span>
+                                <span className="text-[9px] font-bold text-red-400 uppercase">Faltas: {turma.absencePercent}%</span>
+                              </div>
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    setResolvingStudent(student);
-                    setResolutionNote('');
-                    setShowResolveModal(true);
-                  }}
-                  className="px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md active:scale-95"
-                >
-                  Resolvido
-                </button>
-              </div>
-            ))}
-            {filteredStudents.filter(s => {
-              const baseFilter = s.consecutiveAbsences >= (config.consecutiveAbsencesLimit || 2);
-              if (!baseFilter) return false;
-              if (config.frequencyStartDate || config.frequencyEndDate) {
-                const studentAbsences = absenceDates[s.id] || [];
-                const start = config.frequencyStartDate ? parseISO(config.frequencyStartDate) : null;
-                const end = config.frequencyEndDate ? parseISO(config.frequencyEndDate) : null;
-                return studentAbsences.some(dateStr => {
-                  const d = parseISO(dateStr);
-                  return (!start || d >= start) && (!end || d <= end);
-                });
-              }
-              return true;
-            }).length === 0 && (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Check className="w-6 h-6 text-slate-300" />
-                </div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tudo em dia</p>
-                <p className="text-[10px] text-slate-400 mt-1">Nenhum alerta crítico no momento.</p>
-              </div>
-            )}
-          </div>
-        </div>
-        </div>
-      </motion.div>
-    )}
-  </AnimatePresence>
+                );
+
+                if (blockId === 'classification') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("h-full bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <Target className="w-5 h-5 text-indigo-500" />
+                          <h3 className="text-lg font-bold text-slate-900">Classificação de Alunos</h3>
+                        </div>
+                        <div className="relative">
+                          <button onClick={() => setShowClassifConfig(!showClassifConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn">
+                            <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
+                          </button>
+                          <AnimatePresence>
+                            {showClassifConfig && (
+                              <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Início</label>
+                                      <input type="date" value={tempClassifStart} onChange={(e) => setTempClassifStart(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Fim</label>
+                                      <input type="date" value={tempClassifEnd} onChange={(e) => setTempClassifEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { updateConfig({ ...config, classificationStartDate: tempClassifStart, classificationEndDate: tempClassifEnd }); setShowClassifConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                      <div className="h-[200px] mb-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie 
+                              data={pieData} 
+                              cx="50%" 
+                              cy="50%" 
+                              innerRadius={60} 
+                              outerRadius={80} 
+                              paddingAngle={5} 
+                              dataKey="value" 
+                              onDoubleClick={(data) => {
+                                const mappedId = (data as any).name === 'Alta' ? 'high' : (data as any).name === 'Intermediária' ? 'intermediate' : 'low';
+                                handleOpenDetail('classification', mappedId);
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-white p-3 border border-slate-100 shadow-xl rounded-xl">
+                                    <p className="text-xs font-black text-slate-900 uppercase">{(payload[0] as any).name}</p>
+                                    <p className="text-xl font-black" style={{ color: (payload[0].payload as any).color }}>{(payload[0] as any).value} alunos</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-4">
+                        {pieData.map((item) => (
+                          <div key={item.name} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+                              <span className="text-sm text-slate-600">{item.name}</span>
+                            </div>
+                            <span className="text-sm font-bold text-slate-900">{item.value} alunos</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (blockId === 'studentsPerClass') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <h3 className="text-lg font-bold text-slate-900 mb-6 font-black uppercase tracking-tight">Alunos por Turma</h3>
+                      <div className="space-y-4">
+                        {classAttendanceData.map((c) => (
+                          <div key={c.id} className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <div className="flex justify-between mb-1">
+                                <span className="text-sm font-bold text-slate-700">{c.name}</span>
+                                <span className="text-sm text-slate-500 font-bold">{c.students} alunos</span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-2">
+                                <div className="bg-indigo-600 h-2 rounded-full transition-all duration-500" style={{ width: `${(c.students / (students.length || 1)) * 100}%` }}></div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (blockId === 'birthdaysStudents') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-indigo-500" />
+                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight">Aniversariantes - Alunos</h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                            <input type="date" value={birthdayStart} onChange={(e) => setBirthdayStart(e.target.value)} className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1" />
+                            <span className="text-slate-300">|</span>
+                            <input type="date" value={birthdayEnd} onChange={(e) => setBirthdayEnd(e.target.value)} className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none p-1" />
+                          </div>
+                          <button onClick={handlePrintBirthdays} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all font-bold"><Printer className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                      <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[200px]">
+                        {weeklyBirthdays.filter(p => p.type === 'Aluno').length > 0 ? (
+                          weeklyBirthdays.filter(p => p.type === 'Aluno').map((person) => (
+                            <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">👶</div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{classes.find(c => c.id === (person as any).classId)?.name || 'Sem Turma'}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-black text-indigo-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum aluno.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (blockId === 'birthdaysColab') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-emerald-500" />
+                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-emerald-700">Aniversariantes - Colaboradores</h3>
+                        </div>
+                        <div className="relative">
+                          <button onClick={() => setShowColabBirthConfig(!showColabBirthConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
+                          <AnimatePresence>
+                            {showColabBirthConfig && (
+                              <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Início</label>
+                                      <input type="date" value={tempColabBirthStart} onChange={(e) => setTempColabBirthStart(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Fim</label>
+                                      <input type="date" value={tempColabBirthEnd} onChange={(e) => setTempColabBirthEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { updateConfig({ ...config, colabBirthdayStartDate: tempColabBirthStart, colabBirthdayEndDate: tempColabBirthEnd }); setShowColabBirthConfig(false); }} className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all font-bold">Fixar Seleção</button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                      <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[200px]">
+                        {weeklyBirthdays.filter(p => p.type === 'Colaborador').length > 0 ? (
+                          weeklyBirthdays.filter(p => p.type === 'Colaborador').map((person) => (
+                            <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-emerald-200 transition-all">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">👨‍🏫</div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{person.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-[9px] truncate">DOCENTE/ADMIN</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-black text-emerald-600">{safeFormat(person.birthDate, 'dd/MM')}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum colaborador.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (blockId === 'alerts') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5 text-red-500" />
+                          <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight font-black">Alertas de Frequência</h3>
+                        </div>
+                        <div className="flex items-center gap-2 relative">
+                          <button onClick={() => setShowQuickAlertConfig(!showQuickAlertConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
+                          <AnimatePresence>
+                            {showQuickAlertConfig && (
+                              <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Faltas para Alerta</label>
+                                    <input type="number" min="1" value={tempConsecutiveLimit} onChange={(e) => setTempConsecutiveLimit(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Início Período</label>
+                                      <input type="date" value={tempFreqStart} onChange={(e) => setTempFreqStart(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Fim Período</label>
+                                      <input type="date" value={tempFreqEnd} onChange={(e) => setTempFreqEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { updateConfig({ ...config, consecutiveAbsencesLimit: tempConsecutiveLimit, frequencyStartDate: tempFreqStart, frequencyEndDate: tempFreqEnd }); setShowQuickAlertConfig(false); }} className="w-full py-2 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all font-bold">Fixar Alerta</button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {filteredStudents.filter(s => {
+                          const baseFilter = s.consecutiveAbsences >= (config.consecutiveAbsencesLimit || 2);
+                          if (!baseFilter) return false;
+                          if (config.frequencyStartDate || config.frequencyEndDate) {
+                            const studentAbsences = absenceDates[s.id] || [];
+                            const start = config.frequencyStartDate ? parseISO(config.frequencyStartDate) : null;
+                            const end = config.frequencyEndDate ? parseISO(config.frequencyEndDate) : null;
+                            return studentAbsences.some(dateStr => {
+                              const d = parseISO(dateStr);
+                              return (!start || d >= start) && (!end || d <= end);
+                            });
+                          }
+                          return true;
+                        }).map(student => (
+                          <div key={student.id} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between group hover:bg-red-100/50 transition-all">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-lg shadow-sm border border-red-100">⚠️</div>
+                              <div>
+                                <p className="text-sm font-black text-red-900 uppercase leading-none mb-1 truncate max-w-[150px]">{student.name}</p>
+                                <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">Faltou {student.consecutiveAbsences} vezes seguidas!</p>
+                              </div>
+                            </div>
+                            <button onClick={() => { setResolvingStudent(student); setResolutionNote(''); setShowResolveModal(true); }} className="px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md">Resolvido</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                return null;
+              })}
+            </Reorder.Group>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
 
   <AnimatePresence>
     {showResolveModal && (resolvingStudent || editingResolution) && (
