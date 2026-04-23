@@ -259,7 +259,7 @@ export default function App() {
       icon: GraduationCap,
       subItems: [
         { id: 'students', label: 'Alunos', icon: Users },
-        { id: 'teachers', label: 'Colaboradores', icon: BookOpen },
+        { id: 'teachers', label: 'Equipe EBD', icon: BookOpen },
         { id: 'classes', label: 'Turmas', icon: LayoutDashboard },
         { id: 'attendance', label: 'Chamada', icon: CheckSquare },
         { id: 'planning', label: 'Planejamento', icon: BookOpen },

@@ -38,6 +38,8 @@ export interface Teacher {
   allowedTabs?: string[];
   registrationNumber?: string;
   address?: string;
+  academicBackground?: string;
+  theologicalBackground?: string;
 }
 
 export interface Class {

@@ -70,6 +70,8 @@ interface Props {
   selectedSchoolYear: string;
 }
 
+const DEFAULT_LAYOUT = ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
+
 export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
@@ -82,7 +84,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     intermediateFrequencyLimit: 50,
     consecutiveAbsencesLimit: 2,
     eventBarPosition: 'bottom',
-    layout: ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']
+    layout: DEFAULT_LAYOUT
   });
   const [showConfig, setShowConfig] = useState(false);
   
@@ -111,7 +113,16 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [showClassifConfig, setShowClassifConfig] = useState(false);
   const [showColabBirthConfig, setShowColabBirthConfig] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [localLayout, setLocalLayout] = useState<string[]>([]);
+  const [localLayout, setLocalLayout] = useState<string[]>(() => {
+    const saved = localStorage.getItem('ebd_dashboard_layout');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return DEFAULT_LAYOUT;
+  });
   
   const [tempConsecutiveLimit, setTempConsecutiveLimit] = useState(2);
   const [tempFreqStart, setTempFreqStart] = useState('');
@@ -182,15 +193,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           classificationEndDate: data.classificationEndDate,
           colabBirthdayStartDate: data.colabBirthdayStartDate,
           colabBirthdayEndDate: data.colabBirthdayEndDate,
-          layout: data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'],
+          layout: data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : DEFAULT_LAYOUT,
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
-        // Sync local layout
+        // Sync local layout from DB (DB priority)
         if (data.layout) {
           const l = data.layout.includes('stats') ? data.layout : ['stats', ...data.layout];
           setLocalLayout(l);
-        } else {
-          setLocalLayout(['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']);
+          localStorage.setItem('ebd_dashboard_layout', JSON.stringify(l));
         }
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard'));
@@ -198,21 +208,23 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     return () => unsubConfig();
   }, []);
 
-  // Sync local layout when config is loaded initially if local state is empty
+  // Debounced auto-save for layout updates when isEditMode is active
   useEffect(() => {
-    if (localLayout && localLayout.length === 0 && config.layout && config.layout.length > 0) {
-      setLocalLayout(config.layout);
-    }
-  }, [config.layout]);
+    if (!isEditMode || localLayout.length === 0) return;
+
+    const timer = setTimeout(() => {
+      // Check if actually changed to avoid redundant writes
+      if (JSON.stringify(localLayout) !== JSON.stringify(config.layout)) {
+        updateConfig({ ...config, layout: localLayout });
+      }
+    }, 1500); // Debounce delay
+
+    return () => clearTimeout(timer);
+  }, [localLayout, isEditMode, config.layout]);
 
   // Handle reorder persistence
   const handleReorder = (newLayout: string[]) => {
     setLocalLayout(newLayout);
-    // Persist immediately but carefully
-    const debouncedSave = setTimeout(() => {
-      updateConfig({ ...config, layout: newLayout });
-    }, 500);
-    return () => clearTimeout(debouncedSave);
   };
 
   useEffect(() => {
@@ -307,7 +319,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const updateConfig = async (newConfig: DashboardConfig) => {
     setIsSavingConfig(true);
     try {
-      await setDoc(doc(db, 'config', 'dashboard'), newConfig);
+      // Save to localStorage as fallback
+      if (newConfig.layout) {
+        localStorage.setItem('ebd_dashboard_layout', JSON.stringify(newConfig.layout));
+      }
+      
+      // Use updateDoc to avoid overwriting or creating an incomplete doc if possible
+      // But since we have a complete 'newConfig' object relative to state, we ensure all fields are sent
+      await setDoc(doc(db, 'config', 'dashboard'), newConfig, { merge: true });
       setConfig(newConfig);
       setShowQuickAlertConfig(false);
     } catch (err) {
@@ -625,14 +644,27 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           {user.role === 'admin' && (
             <div className="flex items-center gap-2">
                <button 
-                onClick={() => setIsEditMode(!isEditMode)}
+                onClick={() => {
+                  if (isEditMode) {
+                    // One final forced sync when turning off edit mode
+                    updateConfig({ ...config, layout: localLayout });
+                  }
+                  setIsEditMode(!isEditMode);
+                }}
+                title={isEditMode ? "Desativar salvamento automático da ordem" : "Ativar salvamento automático da ordem"}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-sm font-bold border",
-                  isEditMode ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-sm font-bold border shadow-sm",
+                  isEditMode 
+                    ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 ring-offset-2 animate-pulse" 
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
                 )}
               >
-                {isEditMode ? <Save className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
-                {isEditMode ? "Fixar Layout" : "Mudar Ordem"}
+                <div className={cn(
+                  "w-3 h-3 rounded-full transition-all",
+                  isEditMode ? "bg-white" : "bg-slate-300"
+                )} />
+                <Settings className={cn("w-4 h-4", isEditMode ? "animate-spin-slow" : "")} />
+                Fixar Ordem
               </button>
               <button 
                 onClick={() => setShowConfig(!showConfig)}
@@ -717,15 +749,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
         </motion.div>
       )}
 
-            {/* Draggable Sections Container */}
             <Reorder.Group 
               axis="y" 
-              values={(localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']} 
-              onReorder={(newLayout) => setLocalLayout(newLayout || [])}
+              values={localLayout} 
+              onReorder={(newLayout) => setLocalLayout(newLayout)}
               className="flex flex-col gap-6"
             >
-              {((localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts']).map((blockId, index) => {
-                const currentLayout = (localLayout && localLayout.length > 0) ? localLayout : ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
+              {localLayout.map((blockId, index) => {
+                const currentLayout = localLayout;
                 
                 // Helper to render Draggable controls
                 const DragControls = () => isEditMode ? (
@@ -745,7 +776,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                           const [removed] = newLayout.splice(index, 1);
                           newLayout.splice(newPos, 0, removed);
                           setLocalLayout(newLayout);
-                          updateConfig({ ...config, layout: newLayout });
                         }}
                         className="w-8 h-6 bg-amber-50 border border-amber-200 rounded text-[10px] font-bold text-center text-amber-700 focus:ring-1 focus:ring-amber-500 outline-none"
                       />
@@ -757,7 +787,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                           const newLayout = [...currentLayout];
                           [newLayout[index], newLayout[index-1]] = [newLayout[index-1], newLayout[index]];
                           setLocalLayout(newLayout);
-                          updateConfig({ ...config, layout: newLayout });
                         }
                       }}
                       className="p-1.5 hover:bg-amber-50 rounded text-amber-600"
@@ -772,7 +801,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                           const newLayout = [...currentLayout];
                           [newLayout[index], newLayout[index+1]] = [newLayout[index+1], newLayout[index]];
                           setLocalLayout(newLayout);
-                          updateConfig({ ...config, layout: newLayout });
                         }
                       }}
                       className="p-1.5 hover:bg-amber-50 rounded text-amber-600"

@@ -640,7 +640,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
-    address: ''
+    address: '',
+    academicBackground: '',
+    theologicalBackground: ''
   });
 
   // Sync forms with selectedSchoolYear
@@ -865,6 +867,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
             address: teacherForm.address || "",
+            academicBackground: teacherForm.academicBackground || "",
+            theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             role: teacherForm.role || 'teacher',
@@ -889,6 +893,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             birthDate: teacherForm.birthDate || "",
             generalProfile: teacherForm.generalProfile || "",
             address: teacherForm.address || "",
+            academicBackground: teacherForm.academicBackground || "",
+            theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             registrationNumber,
@@ -900,7 +906,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -921,6 +927,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       birthDate: (teacher as any).birthDate || '',
       generalProfile: teacher.generalProfile || '',
       address: teacher.address || '',
+      academicBackground: teacher.academicBackground || '',
+      theologicalBackground: teacher.theologicalBackground || '',
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
@@ -1516,7 +1524,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -1526,7 +1534,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
               >
                 <Plus className="w-5 h-5" />
-                Novo {subTab === 'students' ? 'Aluno' : subTab === 'teachers' ? 'Colaborador' : subTab === 'meetings' ? 'Ata/Reunião' : 'Turma'}
+                {subTab === 'students' ? 'Novo Aluno' : subTab === 'teachers' ? 'Cadastro do novo membro da Equipe EBD' : subTab === 'meetings' ? 'Nova Ata/Reunião' : 'Nova Turma'}
               </button>
             </div>
           )}
@@ -2842,7 +2850,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
                   {subTab === 'students' ? (editingStudent ? 'Editar Aluno' : 'Cadastrar Aluno') : 
-                   subTab === 'teachers' ? (editingTeacher ? 'Editar Colaborador' : 'Cadastrar Colaborador') : 
+                   subTab === 'teachers' ? (editingTeacher ? 'Editar Membro da Equipe' : 'Cadastrar Membro da Equipe') : 
                    subTab === 'meetings' ? (editingMeeting ? 'Editar Ata' : 'Nova Ata de Reunião') :
                    'Cadastrar Turma'}
                 </h3>
@@ -3020,7 +3028,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="teacher">Colaborador (Acesso Parcial)</option>
+                            <option value="teacher">Membro da Equipe (Acesso Parcial)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
                           </select>
@@ -3125,9 +3133,29 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         <textarea
                           value={teacherForm.generalProfile}
                           onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
                           placeholder="Descreva o perfil, experiências e observações..."
                         />
+                      </div>
+                      <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Formações Acadêmicas</label>
+                          <textarea
+                            value={teacherForm.academicBackground}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, academicBackground: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
+                            placeholder="Descreva as formações acadêmicas..."
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Formações Teológicas</label>
+                          <textarea
+                            value={teacherForm.theologicalBackground}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, theologicalBackground: e.target.value })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[80px]"
+                            placeholder="Descreva as formações teológicas..."
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -3186,7 +3214,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
                             {[
                               { id: 'students', label: 'Alunos' },
-                              { id: 'teachers', label: 'Colaboradores' },
+                              { id: 'teachers', label: 'Equipe EBD' },
                               { id: 'classes', label: 'Turmas' },
                               { id: 'attendance', label: 'Chamada' },
                               { id: 'planning', label: 'Planejamento' },
@@ -4027,7 +4055,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Relatório Geral de {reportType === 'student' ? 'Alunos' : 'Colaboradores'}
+                  Relatório Geral de {reportType === 'student' ? 'Alunos' : 'Equipe EBD'}
                 </h3>
                 <div className="flex gap-2">
                   <button 
@@ -4044,7 +4072,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               <div className="p-8 overflow-y-auto print:p-0">
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
-                    Relatório Geral - {reportType === 'student' ? 'Alunos' : 'Colaboradores'}
+                    Relatório Geral - {reportType === 'student' ? 'Alunos' : 'Equipe EBD'}
                   </h2>
                   <p className="text-slate-500 font-bold">Gerado em {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
                 </div>
