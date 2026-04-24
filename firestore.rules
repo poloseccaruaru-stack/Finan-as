@@ -65,13 +65,13 @@ service cloud.firestore {
     }
 
     match /teachers/{teacherId} {
-      allow read: if hasTabAccess('academic', 1) || isTeacher();
+      allow read: if isAdmin() || isCoordinator();
       allow write: if isAdmin();
     }
 
     match /classes/{classId} {
       allow read: if hasTabAccess('academic', 1) || isTeacherOfClass(classId);
-      allow write: if hasTabAccess('academic', 2) || isTeacherOfClass(classId);
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /attendance/{attendanceId} {
@@ -80,60 +80,60 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read: if hasTabAccess('projects', 1) || (isTeacher() && resource.data.get('teacherIds', []).hasAny([request.auth.uid]));
-      allow write: if hasTabAccess('projects', 2) || (isTeacher() && request.resource.data.get('teacherIds', []).hasAny([request.auth.uid]));
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /transactions/{transactionId} {
-      allow read: if hasTabAccess('finance', 1);
-      allow write: if hasTabAccess('finance', 2);
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /budgets/{budgetId} {
-      allow read: if hasTabAccess('finance', 1);
-      allow write: if hasTabAccess('finance', 2);
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /estimated_expenses/{expId} {
-      allow read: if hasTabAccess('finance', 1);
-      allow write: if hasTabAccess('finance', 2);
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /regimento/{regId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /comunicados/{comId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /documentos/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /absenceResolutions/{resId} {
-      allow read: if hasTabAccess('academic', 1);
+      allow read: if hasTabAccess('academic', 1) || isTeacher();
       allow create: if isAuthenticated() && incoming().teacherId == request.auth.uid;
-      allow update: if isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid);
-      allow delete: if isAdmin();
+      allow update: if isAdmin() || isCoordinator() || (isAuthenticated() && existing().teacherId == request.auth.uid);
+      allow delete: if isAdmin() || isCoordinator();
     }
 
     match /preDefinedResolutions/{resId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /justificationOptions/{optId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /enrollments/{enrollId} {
-      allow read: if hasTabAccess('academic', 1);
-      allow write: if hasTabAccess('academic', 2);
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /ai_actions/{actionId} {
@@ -148,32 +148,32 @@ service cloud.firestore {
 
     match /calendarEvents/{eventId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /planning/{planningId} {
-      allow read: if hasTabAccess('academic', 1);
-      allow write: if hasTabAccess('academic', 2);
+      allow read: if hasTabAccess('academic', 1) || isTeacherOfClass(resource.data.classId);
+      allow write: if hasTabAccess('academic', 2) || isTeacherOfClass(request.resource.data.classId);
     }
 
     match /student_reports/{reportId} {
-      allow read: if hasTabAccess('academic', 1) || hasTabAccess('reports', 1);
-      allow write: if hasTabAccess('academic', 2) || hasTabAccess('reports', 2);
+      allow read: if isAdmin() || isCoordinator() || (isTeacher() && resource.data.get('teacherId', '') == request.auth.uid);
+      allow write: if isAdmin() || isCoordinator() || (isTeacher() && request.resource.data.get('teacherId', '') == request.auth.uid);
     }
 
     match /teacher_reports/{reportId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /manual_reports/{reportId} {
-      allow read: if hasTabAccess('reports', 1);
-      allow write: if hasTabAccess('reports', 2);
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /meetings/{meetingId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isAdmin() || isCoordinator();
+      allow write: if isAdmin() || isCoordinator();
     }
 
     match /general_calendars/{calId} {

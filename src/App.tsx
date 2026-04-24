@@ -146,7 +146,7 @@ export default function App() {
                 role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
                 firstLogin: false,
                 createdAt: new Date().toISOString(),
-                allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
+                allowedTabs: ['dashboard', 'attendance', 'planning', 'regimento', 'calendar', 'comunicados', 'documentos', 'organogram', 'projects']
               };
               await setDoc(userDocRef, newData);
               setUserData(newData);
@@ -267,6 +267,9 @@ export default function App() {
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
         if (isAdmin || isCoordinator) return true;
+        // Teachers cannot see students, teachers, classes or meetings lists
+        if (userData.role === 'teacher' && ['students', 'teachers', 'classes', 'meetings'].includes(sub.id)) return false;
+        
         if (userData.permissions && userData.permissions[sub.id] !== undefined) {
           return userData.permissions[sub.id] > 0;
         }
@@ -287,6 +290,9 @@ export default function App() {
       ].filter(sub => {
         if (isAdmin) return true;
         if (isCoordinator) return sub.id !== 'system';
+        // Teachers cannot access system
+        if (userData.role === 'teacher' && sub.id === 'system') return false;
+        
         if (userData.permissions && userData.permissions[sub.id] !== undefined) {
           return userData.permissions[sub.id] > 0;
         }
@@ -298,6 +304,9 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
   ].filter(item => {
     if (isAdmin || isCoordinator) return true;
+    // Teachers cannot see finance or reports
+    if (userData.role === 'teacher' && ['finance', 'reports'].includes(item.id)) return false;
+
     if (userData.permissions && userData.permissions[item.id] !== undefined) {
       return userData.permissions[item.id] > 0;
     }

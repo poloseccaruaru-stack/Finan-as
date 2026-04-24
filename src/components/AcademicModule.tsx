@@ -663,11 +663,22 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     generalProfile: '',
     role: 'teacher' as 'admin' | 'coordinator' | 'teacher' | 'professor',
     classIds: [] as string[],
-    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
+    allowedTabs: ['dashboard', 'attendance', 'planning', 'regimento', 'calendar', 'comunicados', 'documentos', 'organogram', 'projects'] as string[],
     address: '',
     academicBackground: '',
     theologicalBackground: '',
-    permissions: {} as Record<string, number>
+    permissions: {
+      dashboard: 2,
+      attendance: 2,
+      planning: 2,
+      regimento: 1,
+      calendar: 1,
+      comunicados: 1,
+      documentos: 1,
+      organogram: 1,
+      projects: 1
+    } as Record<string, number>,
+    status: 'ativo' as 'ativo' | 'inativo'
   });
 
   // Sync forms with selectedSchoolYear
@@ -1580,7 +1591,24 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                     } else if (subTab === 'teachers') {
                       setEditingTeacher(null);
-                      setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], permissions: {} });
+                      setTeacherForm({ 
+                        name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', 
+                        startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', 
+                        generalProfile: '', role: 'teacher', classIds: [], 
+                        allowedTabs: ['dashboard', 'attendance', 'planning', 'regimento', 'calendar', 'comunicados', 'documentos', 'organogram', 'projects'], 
+                        permissions: {
+                          dashboard: 2,
+                          attendance: 2,
+                          planning: 2,
+                          regimento: 1,
+                          calendar: 1,
+                          comunicados: 1,
+                          documentos: 1,
+                          organogram: 1,
+                          projects: 1
+                        },
+                        status: 'ativo'
+                      });
                     } else if (subTab === 'classes') {
                       setEditingClass(null);
                       setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });

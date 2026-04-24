@@ -43,6 +43,7 @@ export interface Teacher {
   address?: string;
   academicBackground?: string;
   theologicalBackground?: string;
+  status?: 'ativo' | 'inativo';
 }
 
 export interface Class {
