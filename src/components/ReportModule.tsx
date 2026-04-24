@@ -162,10 +162,13 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
     const unsubStudentReports = onSnapshot(collection(db, 'student_reports'), (snap) => {
       setStudentReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentReport)));
     });
-
-    const unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
-      setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
-    });
+    
+    let unsubTeacherReports = () => {};
+    if (isAdmin || isCoordinator) {
+      unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
+        setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
+      });
+    }
 
     return () => {
       unsubStudents();

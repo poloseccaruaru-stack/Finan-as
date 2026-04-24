@@ -475,9 +475,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setStudentReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentReport)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'student_reports'));
 
-    const unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
-      setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
+    let unsubTeacherReports = () => {};
+    if (isAdmin || isCoordinator) {
+      unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
+        setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
+    }
 
     const unsubMeetings = onSnapshot(collection(db, 'meetings'), (snap) => {
       setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));

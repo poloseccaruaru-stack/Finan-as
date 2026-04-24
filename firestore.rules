@@ -12,10 +12,24 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        ((request.auth.token.email == "poloseccaruaru@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coordinator')) ||
-         (request.auth.token.email == "poloseccaruaru@gmail.com" && request.auth.token.email_verified == true));
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coordinator')));
+    }
+
+    function hasTabAccess(tab, level) {
+      return isAdmin() || 
+             (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+              (
+                (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', null) != null && 
+                 (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.get(tab, 0) >= level || 
+                  (level == 1 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions.get('reports', 0) >= 1 && ['academic', 'projects', 'finance', 'planning', 'attendance', 'students', 'classes'].hasAny([tab])))) ||
+                (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', null) == null && 
+                 (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('allowedTabs', []).hasAny([tab]) || 
+                  (level == 1 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('allowedTabs', []).hasAny(['reports']))))
+              )
+             );
     }
 
     function isTeacher() {
@@ -24,52 +38,65 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
     }
 
+    function isTeacherOfClass(classId) {
+      return isTeacher() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('classIds', []).hasAny([classId]);
+    }
+
+    function isTeacherOfStudent(studentData) {
+      return isTeacher() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('classIds', []).hasAny([studentData.classId]);
+    }
+
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
 
-    // Validation Helpers
-    function isValidAbsenceResolution(data) {
-      return data.studentId is string && data.studentId.size() <= 128 &&
-             data.note is string && data.note.size() <= 5000 &&
-             data.date is string && data.date.size() <= 20 &&
-             data.consecutiveAbsences is number &&
-             (data.teacherId == request.auth.uid || isAdmin());
-    }
-
     // Rules for each collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() || (request.auth == null && resource.data.login != null && resource.data.password != null);
       allow write: if isOwner(userId) || isAdmin();
     }
 
+    match /user_configs/{configId} {
+      allow read, write: if isAuthenticated() && (configId == "dashboard_" + request.auth.uid || isAdmin());
+    }
+
     match /students/{studentId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if hasTabAccess('academic', 1) || isTeacherOfStudent(resource.data);
+      allow write: if hasTabAccess('academic', 2) || isTeacherOfStudent(request.resource.data);
     }
 
     match /teachers/{teacherId} {
-      allow read: if isAuthenticated();
+      allow read: if hasTabAccess('academic', 1) || isTeacher();
       allow write: if isAdmin();
     }
 
     match /classes/{classId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('academic', 1) || isTeacherOfClass(classId);
+      allow write: if hasTabAccess('academic', 2) || isTeacherOfClass(classId);
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if hasTabAccess('academic', 1) || isTeacherOfClass(resource.data.classId);
+      allow write: if hasTabAccess('academic', 2) || isTeacherOfClass(request.resource.data.classId);
     }
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if hasTabAccess('projects', 1) || (isTeacher() && resource.data.get('teacherIds', []).hasAny([request.auth.uid]));
+      allow write: if hasTabAccess('projects', 2) || (isTeacher() && request.resource.data.get('teacherIds', []).hasAny([request.auth.uid]));
     }
 
     match /transactions/{transactionId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('finance', 1);
+      allow write: if hasTabAccess('finance', 2);
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if hasTabAccess('finance', 1);
+      allow write: if hasTabAccess('finance', 2);
+    }
+
+    match /estimated_expenses/{expId} {
+      allow read: if hasTabAccess('finance', 1);
+      allow write: if hasTabAccess('finance', 2);
     }
 
     match /regimento/{regId} {
@@ -77,10 +104,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /comunicados/{comId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /documentos/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     match /absenceResolutions/{resId} {
-      allow read: if isAdmin() || isTeacher();
-      allow create: if isAuthenticated() && isValidAbsenceResolution(incoming());
-      allow update: if (isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid)) && isValidAbsenceResolution(incoming());
+      allow read: if hasTabAccess('academic', 1);
+      allow create: if isAuthenticated() && incoming().teacherId == request.auth.uid;
+      allow update: if isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid);
       allow delete: if isAdmin();
     }
 
@@ -89,9 +126,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /enrollments/{enrollId} {
+    match /justificationOptions/{optId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /enrollments/{enrollId} {
+      allow read: if hasTabAccess('academic', 1);
+      allow write: if hasTabAccess('academic', 2);
     }
 
     match /ai_actions/{actionId} {
@@ -110,18 +152,23 @@ service cloud.firestore {
     }
 
     match /planning/{planningId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if hasTabAccess('academic', 1);
+      allow write: if hasTabAccess('academic', 2);
     }
 
     match /student_reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if hasTabAccess('academic', 1) || hasTabAccess('reports', 1);
+      allow write: if hasTabAccess('academic', 2) || hasTabAccess('reports', 2);
     }
 
     match /teacher_reports/{reportId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
+    }
+
+    match /manual_reports/{reportId} {
+      allow read: if hasTabAccess('reports', 1);
+      allow write: if hasTabAccess('reports', 2);
     }
 
     match /meetings/{meetingId} {

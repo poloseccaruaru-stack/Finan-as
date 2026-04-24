@@ -247,14 +247,23 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   useEffect(() => {
     const isAdmin = user.role === 'admin' || user.role === 'coordinator';
     const classIds = user?.classIds || [];
+    
+    // Tab permissions for guarding listeners
+    const hasAcademic = isAdmin || (user.permissions?.academic ?? (user.allowedTabs?.includes('academic') ? 2 : 0)) >= 1;
+    const hasProjects = isAdmin || (user.permissions?.projects ?? (user.allowedTabs?.includes('projects') ? 2 : 0)) >= 1;
+    const hasFinance = isAdmin || (user.permissions?.finance ?? (user.allowedTabs?.includes('finance') ? 2 : 0)) >= 1;
+    const hasReports = isAdmin || (user.permissions?.reports ?? (user.allowedTabs?.includes('reports') ? 2 : 0)) >= 1;
 
-    const unsubResolutions = onSnapshot(
-      query(collection(db, 'absenceResolutions'), orderBy('createdAt', 'desc')), 
-      (snap) => {
-        setResolutions(snap.docs.map(d => ({ id: d.id, ...d.data() } as AbsenceResolution)));
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'absenceResolutions')
-    );
+    let unsubResolutions = () => {};
+    if (hasAcademic) {
+      unsubResolutions = onSnapshot(
+        query(collection(db, 'absenceResolutions'), orderBy('createdAt', 'desc')), 
+        (snap) => {
+          setResolutions(snap.docs.map(d => ({ id: d.id, ...d.data() } as AbsenceResolution)));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'absenceResolutions')
+      );
+    }
 
     const unsubPreDefined = onSnapshot(
       query(collection(db, 'preDefinedResolutions'), orderBy('createdAt', 'asc')), 
@@ -264,41 +273,52 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       (err) => handleFirestoreError(err, OperationType.LIST, 'preDefinedResolutions')
     );
 
-    const studentsQuery = isAdmin 
-      ? collection(db, 'students') 
-      : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
-    
-    const unsubStudents = onSnapshot(studentsQuery, (snap) => {
-      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
+    let unsubStudents = () => {};
+    if (hasAcademic || hasReports) {
+      const studentsQuery = isAdmin 
+        ? collection(db, 'students') 
+        : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+      
+      unsubStudents = onSnapshot(studentsQuery, (snap) => {
+        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
+    }
 
     const unsubTeachers = onSnapshot(query(collection(db, 'users'), where('role', '==', 'teacher')), (snap) => {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
-    const classesQuery = isAdmin
-      ? collection(db, 'classes')
-      : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+    let unsubClasses = () => {};
+    if (hasAcademic || hasReports) {
+      const classesQuery = isAdmin
+        ? collection(db, 'classes')
+        : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
 
-    const unsubClasses = onSnapshot(classesQuery, (snap) => {
-      setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
+      unsubClasses = onSnapshot(classesQuery, (snap) => {
+        setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
+    }
 
     let unsubTransactions = () => {};
-    if (user.role === 'admin') {
+    if (isAdmin || hasFinance || hasReports) {
       unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
         setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'transactions'));
     }
 
-    const unsubProjects = onSnapshot(collection(db, 'projects'), (snap) => {
-      setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
+    let unsubProjects = () => {};
+    if (hasProjects || hasReports) {
+      unsubProjects = onSnapshot(collection(db, 'projects'), (snap) => {
+        setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
+    }
 
     // Fetch Attendance for absence dates
-    const unsubAttendance = onSnapshot(
-      query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
-      (snap) => {
+    let unsubAttendance = () => {};
+    if (hasAcademic || hasReports) {
+      unsubAttendance = onSnapshot(
+        query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
+        (snap) => {
         const records = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
         setAttendanceRecords(records);
         const datesMap: Record<string, string[]> = {};
@@ -320,6 +340,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       },
       (err) => handleFirestoreError(err, OperationType.LIST, 'attendance')
     );
+    }
     
     return () => {
       unsubStudents();
