@@ -471,8 +471,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   ];
 
   const calculateStudentPeriodAttendance = (studentId: string, startDate?: string, endDate?: string) => {
-    const start = startDate ? parseISO(startDate) : null;
-    const end = endDate ? parseISO(endDate) : null;
+    const start = (startDate && isValid(parseISO(startDate))) ? parseISO(startDate) : null;
+    const end = (endDate && isValid(parseISO(endDate))) ? parseISO(endDate) : null;
 
     const relevantAttendance = attendanceRecords.filter(att => {
       const d = parseISO(att.date);
@@ -490,8 +490,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     return filteredClasses.map(c => {
       const classStudents = filteredStudents.filter(s => s.classId === c.id);
       
-      const start = config.rankStartDate ? parseISO(config.rankStartDate) : null;
-      const end = config.rankEndDate ? parseISO(config.rankEndDate) : null;
+      const start = (config.rankStartDate && isValid(parseISO(config.rankStartDate))) ? parseISO(config.rankStartDate) : null;
+      const end = (config.rankEndDate && isValid(parseISO(config.rankEndDate))) ? parseISO(config.rankEndDate) : null;
 
       const relevantAttendance = attendanceRecords.filter(att => {
         const d = parseISO(att.date);
@@ -520,7 +520,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
   const frequencyClassification = useMemo(() => {
     const periodAttendances = filteredStudents.map(s => {
-      const percent = calculateStudentPeriodAttendance(s.id, config.classificationStartDate, config.classificationEndDate);
+      const start = (config.classificationStartDate && isValid(parseISO(config.classificationStartDate))) ? config.classificationStartDate : undefined;
+      const end = (config.classificationEndDate && isValid(parseISO(config.classificationEndDate))) ? config.classificationEndDate : undefined;
+      const percent = calculateStudentPeriodAttendance(s.id, start, end);
       return percent;
     });
 
@@ -1401,9 +1403,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                   
                   const filteredResolutions = resolutions.filter(r => {
                     const rDate = parseISO(r.date);
-                    const start = parseISO(reportStartDate);
-                    const end = parseISO(reportEndDate);
-                    const matchDate = (!reportStartDate || rDate >= start) && (!reportEndDate || rDate <= end);
+                    const start = (reportStartDate && isValid(parseISO(reportStartDate))) ? parseISO(reportStartDate) : null;
+                    const end = (reportEndDate && isValid(parseISO(reportEndDate))) ? parseISO(reportEndDate) : null;
+                    const matchDate = (!start || rDate >= start) && (!end || rDate <= end);
                     
                     const student = students.find(s => s.id === r.studentId);
                     const matchClass = reportClassId === 'all' || student?.classId === reportClassId;
@@ -1554,9 +1556,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
               {resolutions
                 .filter(r => {
                   const rDate = parseISO(r.date);
-                  const start = parseISO(reportStartDate);
-                  const end = parseISO(reportEndDate);
-                  const matchDate = (!reportStartDate || rDate >= start) && (!reportEndDate || rDate <= end);
+                  const start = (reportStartDate && isValid(parseISO(reportStartDate))) ? parseISO(reportStartDate) : null;
+                  const end = (reportEndDate && isValid(parseISO(reportEndDate))) ? parseISO(reportEndDate) : null;
+                  const matchDate = (!start || rDate >= start) && (!end || rDate <= end);
                   
                   const student = students.find(s => s.id === r.studentId);
                   const matchClass = reportClassId === 'all' || student?.classId === reportClassId;

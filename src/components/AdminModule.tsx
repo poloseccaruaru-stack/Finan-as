@@ -922,7 +922,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
-                {isAdmin && (
+                {hasEditAccess && (
                   <button
                     onClick={() => {
                       setGeneralCalendarForm({ title: '', content: '' });
@@ -945,7 +945,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <CalendarIcon className="w-8 h-8" />
                       </div>
                       <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        {isAdmin && (
+                        {hasEditAccess && (
                           <>
                             <button 
                               onClick={(e) => {
@@ -987,7 +987,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <h3 className="text-lg font-bold text-slate-900 capitalize">
               {activeCalendarType === 'ebd' ? 'Eventos EBD' : activeCalendarType === 'church' ? 'Eventos da Igreja' : 'Eventos da Convenção'}
             </h3>
-            {isAdmin && (
+            {hasEditAccess && (
               <button
                 onClick={() => {
                   setCalendarForm({ title: '', date: '', type: 'event', description: '' });
@@ -1019,7 +1019,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <p className="text-xs text-slate-500">{safeFormat(event.date, 'EEEE', { locale: ptBR })}</p>
                       </div>
                     </div>
-                    {isAdmin && (
+                    {hasEditAccess && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={() => {
@@ -1315,7 +1315,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         {format(parseISO(meeting.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                       </p>
                     </div>
-                    {isAdmin && (
+                    {hasEditAccess && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
@@ -1402,7 +1402,7 @@ export default function AdminModule({ user, subTab }: Props) {
                       )}
                     </div>
                     
-                    {isAdmin && (
+                    {hasEditAccess && (
                       <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => {

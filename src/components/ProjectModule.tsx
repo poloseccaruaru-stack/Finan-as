@@ -99,7 +99,8 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   const hasEditAccess = isAdmin || isCoordinator;
 
   useEffect(() => {
-    const q = hasEditAccess 
+    const isProfessor = user.role === 'professor';
+    const q = (hasEditAccess || isProfessor) 
       ? collection(db, 'projects')
       : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
 

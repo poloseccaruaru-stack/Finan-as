@@ -3021,15 +3021,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               const newRole = e.target.value as 'admin' | 'coordinator' | 'professor';
                               let allowedTabs = teacherForm.allowedTabs;
                               if (newRole === 'admin') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos'];
                               } else if (newRole === 'coordinator') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings', 'comunicados', 'documentos'];
+                              } else if (newRole === 'professor') {
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'planning', 'organogram', 'attendance', 'schoolYear', 'regimento', 'calendar', 'comunicados', 'documentos'];
                               }
                               setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="teacher">Membro da Equipe (Acesso Parcial)</option>
+                            <option value="professor">Professor (Acesso Restrito)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
                           </select>
