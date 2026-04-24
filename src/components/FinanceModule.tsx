@@ -100,7 +100,9 @@ export default function FinanceModule({ user }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator;
+  const tabPermission = user.permissions?.finance ?? (user.allowedTabs?.includes('finance') ? 2 : 0);
+  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
+  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));
@@ -424,7 +426,7 @@ export default function FinanceModule({ user }: Props) {
                 onChange={(e) => setFilterMonth(e.target.value)}
                 className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              {hasFullAccess && (
+              {isFullAccess && (
                 <div className="flex gap-2">
                   <button 
                     onClick={() => window.print()}
@@ -509,7 +511,7 @@ export default function FinanceModule({ user }: Props) {
                       {t.type === 'income' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 text-right print:hidden">
-                      {hasFullAccess && (
+                      {isFullAccess && (
                         <button 
                           onClick={() => handleDeleteTransaction(t.id)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"

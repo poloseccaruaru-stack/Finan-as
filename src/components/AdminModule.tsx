@@ -153,6 +153,10 @@ export default function AdminModule({ user, subTab }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const tabPermission = user.permissions?.[subTab] ?? (user.allowedTabs?.includes(subTab) ? 2 : 0);
+  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
+  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
 
   const COLLECTIONS = [
     'users', 'students', 'classes', 'attendance', 'regimento', 
@@ -597,7 +601,7 @@ export default function AdminModule({ user, subTab }: Props) {
            subTab === 'meetings' ? 'Registro de Reuniões' : 'Configurações do Sistema'}
         </h2>
         <div className="flex items-center gap-3">
-          {isAdmin && subTab === 'regimento' && (
+          {isFullAccess && subTab === 'regimento' && (
             <button
               onClick={() => {
                 setForm({ title: '', content: '', order: regimentos.length + 1 });
@@ -611,7 +615,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'comunicados' && (
+          {isFullAccess && subTab === 'comunicados' && (
             <button
               onClick={() => {
                 setEditingComunicadoId(null);
@@ -625,7 +629,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'documentos' && (
+          {isFullAccess && subTab === 'documentos' && (
             <button
               onClick={() => {
                 setEditingDocumentoId(null);
@@ -639,7 +643,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'meetings' && (
+          {isFullAccess && subTab === 'meetings' && (
             <button
               onClick={() => {
                 setEditingMeetingId(null);
@@ -685,22 +689,26 @@ export default function AdminModule({ user, subTab }: Props) {
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => {
-                        setEditingComunicadoId(c.id);
-                        setComunicadoForm({ target: c.target, text: c.text, date: c.date });
-                        setShowComunicadoForm(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteComunicado(c.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isFullAccess && (
+                      <>
+                        <button 
+                          onClick={() => {
+                            setEditingComunicadoId(c.id);
+                            setComunicadoForm({ target: c.target, text: c.text, date: c.date });
+                            setShowComunicadoForm(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteComunicado(c.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -722,22 +730,26 @@ export default function AdminModule({ user, subTab }: Props) {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{safeFormat(d.date, 'dd/MM/yyyy')}</p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => {
-                        setEditingDocumentoId(d.id);
-                        setDocumentoForm({ title: d.title, content: d.content, date: d.date });
-                        setShowDocumentoForm(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteDocumento(d.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isFullAccess && (
+                      <>
+                        <button 
+                          onClick={() => {
+                            setEditingDocumentoId(d.id);
+                            setDocumentoForm({ title: d.title, content: d.content, date: d.date });
+                            setShowDocumentoForm(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteDocumento(d.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 h-32 overflow-y-auto">
@@ -1034,7 +1046,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
-                {isAdmin && (
+                {isFullAccess && (
                   <button
                     onClick={() => {
                       setGeneralCalendarForm({ title: '', content: '' });
@@ -1057,7 +1069,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <CalendarIcon className="w-8 h-8" />
                       </div>
                       <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        {isAdmin && (
+                        {isFullAccess && (
                           <>
                             <button 
                               onClick={(e) => {
@@ -1099,7 +1111,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <h3 className="text-lg font-bold text-slate-900 capitalize">
               {activeCalendarType === 'ebd' ? 'Eventos EBD' : activeCalendarType === 'church' ? 'Eventos da Igreja' : 'Eventos da Convenção'}
             </h3>
-            {isAdmin && (
+            {isFullAccess && (
               <button
                 onClick={() => {
                   setCalendarForm({ title: '', date: '', type: 'event', description: '' });
@@ -1131,7 +1143,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <p className="text-xs text-slate-500">{safeFormat(event.date, 'EEEE', { locale: ptBR })}</p>
                       </div>
                     </div>
-                    {isAdmin && (
+                    {isFullAccess && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={() => {
@@ -1427,7 +1439,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         {format(parseISO(meeting.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                       </p>
                     </div>
-                    {isAdmin && (
+                    {isFullAccess && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
@@ -1514,7 +1526,7 @@ export default function AdminModule({ user, subTab }: Props) {
                       )}
                     </div>
                     
-                    {isAdmin && (
+                    {isFullAccess && (
                       <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => {

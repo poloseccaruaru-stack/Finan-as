@@ -95,9 +95,15 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const tabPermission = user.permissions?.projects ?? (user.allowedTabs?.includes('projects') ? 2 : 0);
+  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
+  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
 
   useEffect(() => {
-    const q = isAdmin 
+    // If user has view permission (1), allow seeing all projects for the year
+    // or if they are linked (which was the previous behavior)
+    const q = (isAdmin || isCoordinator || tabPermission >= 1)
       ? collection(db, 'projects')
       : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
 
@@ -124,7 +130,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
       unsubStudents();
       unsubTeachers();
     };
-  }, [user, isAdmin]);
+  }, [user, isViewAccess, selectedSchoolYear]);
 
   const handleDelete = async (id: string) => {
     showAdminConfirm('Excluir Projeto', 'Deseja realmente excluir este projeto?', async () => {
@@ -244,7 +250,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
             <Printer className="w-5 h-5" />
             Imprimir
           </button>
-          {isAdmin && (
+          {isFullAccess && (
             <button
               onClick={() => setShowForm(true)}
               className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100 print:hidden"
@@ -278,20 +284,33 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
                     </span>
                   </div>
                 </div>
-                {isAdmin && (
-                  <div className="flex gap-1">
+                {(isFullAccess || isViewAccess) && (
+                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                     <button 
-                      onClick={() => handleEdit(project)}
+                      onClick={() => setViewingProject(project)}
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                      title="Visualizar Detalhes"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Eye className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => handleDelete(project.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isFullAccess && (
+                      <>
+                        <button 
+                          onClick={() => handleEdit(project)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(project.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -601,7 +620,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
                       >
                         <Eye className="w-5 h-5" />
                       </button>
-                      {isAdmin && (
+                      {isFullAccess && (
                         <>
                           <button 
                             onClick={() => handleEdit(project)}

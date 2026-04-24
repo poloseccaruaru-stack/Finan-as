@@ -403,7 +403,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator;
+
+  // Specific permission checks for the current subTab
+  // 0 = no access, 1 = view, 2 = full access
+  const tabPermission = user.permissions?.[subTab] ?? (user.allowedTabs?.includes(subTab) ? 2 : 0);
+  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
+  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
+
+  useEffect(() => {
+    // If user somehow lands on a tab they don't have access to, they shouldn't see content
+    // Though sidebar handles this, it's a safety layer
+  }, [subTab, user]);
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -423,7 +433,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    const studentsQuery = hasFullAccess 
+    // Auto-select class for teachers if they only have one
+    if (!isFullAccess && classIds.length === 1 && !selectedClass) {
+      setSelectedClass(classIds[0]);
+    }
+
+    const studentsQuery = isFullAccess 
       ? query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear))
       : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -436,7 +451,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setLoading(false);
     });
 
-    const classesQuery = hasFullAccess
+    const classesQuery = isFullAccess
       ? collection(db, 'classes')
       : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -489,7 +504,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubMeetings();
       unsubSchoolYear();
     };
-  }, [user?.id, user?.role, JSON.stringify(user?.classIds), hasFullAccess, isAdmin, selectedSchoolYear]);
+  }, [user?.id, user?.role, JSON.stringify(user?.classIds), isFullAccess, isAdmin, selectedSchoolYear]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -588,8 +603,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   }, [students, searchTerm, filterClass, sortField, sortOrder, classes, selectedSchoolYear]);
 
   const filteredClasses = useMemo(() => {
-    return classes.filter(c => c.schoolYear === selectedSchoolYear);
-  }, [classes, selectedSchoolYear]);
+    let result = classes.filter(c => c.schoolYear === selectedSchoolYear);
+    if (!isAdmin && !isCoordinator) {
+      // Filter by teacher's linked classes if they are not admin/coord
+      // This ensures teachers only see their own classes in the selection
+      result = result.filter(c => user.classIds?.includes(c.id));
+    }
+    return result;
+  }, [classes, selectedSchoolYear, user, isAdmin, isCoordinator]);
 
   // Forms State
   const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
@@ -727,7 +748,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
   const handleDeleteTeacher = async (id: string) => {
-    showAdminConfirm('Excluir Colaborador', 'Deseja realmente excluir este colaborador?', async () => {
+    showAdminConfirm('Excluir Membro da Equipe', 'Deseja realmente excluir este membro da equipe?', async () => {
       try {
         await deleteDoc(doc(db, 'users', id));
       } catch (err) {
@@ -877,6 +898,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             allowedTabs: teacherForm.allowedTabs || [],
             role: teacherForm.role || 'teacher',
             permissions: teacherForm.permissions || (defaultPerms[teacherForm.role] || {}),
+            status: teacherForm.status || 'ativo',
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -907,6 +929,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               : (defaultPerms[teacherForm.role] || {}),
             registrationNumber,
             role: teacherForm.role || 'teacher',
+            status: teacherForm.status || 'ativo',
             firstLogin: true,
             createdAt: new Date().toISOString()
           });
@@ -931,7 +954,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           classIds: [], 
           allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], 
           address: '',
-          permissions: {}
+          permissions: {},
+          status: 'ativo'
         });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
@@ -960,7 +984,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
       permissions: teacher.permissions || {},
       password: teacher.password || '',
-      confirmPassword: teacher.password || ''
+      confirmPassword: teacher.password || '',
+      status: (teacher as any).status || 'ativo'
     });
     setShowForm(true);
   };
@@ -1520,12 +1545,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               </button>
             </div>
           )}
-          {hasFullAccess && subTab !== 'attendance' && (
+          {(isFullAccess || isViewAccess) && subTab !== 'attendance' && (
             <div className="flex gap-2">
-              {subTab === 'teachers' && (
+              {(subTab === 'teachers' || subTab === 'students') && (
                 <button 
                   onClick={() => {
-                    setReportType('teacher');
+                    setReportType(subTab === 'teachers' ? 'teacher' : 'student');
                     setShowGeneralReportModal(true);
                   }}
                   className="flex items-center gap-2 bg-amber-50 text-amber-600 px-4 py-2 rounded-xl font-bold hover:bg-amber-100 transition-all print:hidden"
@@ -1541,28 +1566,30 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 <Printer className="w-5 h-5" />
                 Imprimir
               </button>
-              <button
-                onClick={() => {
-                  if (subTab === 'meetings') {
-                    setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
-                    setEditingMeeting(null);
-                  } else if (subTab === 'students') {
-                    setEditingStudent(null);
-                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
-                  } else if (subTab === 'teachers') {
-                    setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], permissions: {} });
-                  } else if (subTab === 'classes') {
-                    setEditingClass(null);
-                    setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
-                  }
-                  setShowForm(true);
-                }}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
-              >
-                <Plus className="w-5 h-5" />
-                {subTab === 'students' ? 'Novo Aluno' : subTab === 'teachers' ? 'Cadastro do novo membro da Equipe EBD' : subTab === 'meetings' ? 'Nova Ata/Reunião' : 'Nova Turma'}
-              </button>
+              {isFullAccess && (
+                <button
+                  onClick={() => {
+                    if (subTab === 'meetings') {
+                      setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+                      setEditingMeeting(null);
+                    } else if (subTab === 'students') {
+                      setEditingStudent(null);
+                      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+                    } else if (subTab === 'teachers') {
+                      setEditingTeacher(null);
+                      setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], permissions: {} });
+                    } else if (subTab === 'classes') {
+                      setEditingClass(null);
+                      setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+                    }
+                    setShowForm(true);
+                  }}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+                >
+                  <Plus className="w-5 h-5" />
+                  {subTab === 'students' ? 'Novo Aluno' : subTab === 'teachers' ? 'Cadastro do novo membro da Equipe EBD' : subTab === 'meetings' ? 'Nova Ata/Reunião' : 'Nova Turma'}
+                </button>
+              )}
             </div>
           )}
           <button 
@@ -1722,7 +1749,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador / Cargo</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro da Equipe / Cargo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Info. Profissional</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email / Contato</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
@@ -1741,11 +1768,21 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           {teacher.name.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
+                            {teacher.status && (
+                              <span className={cn(
+                                "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase",
+                                teacher.status === 'ativo' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                              )}>
+                                {teacher.status}
+                              </span>
+                            )}
+                          </div>
                           <p className={cn(
                             "text-[10px] font-black uppercase tracking-widest",
                             teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
-                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Colaborador'}</p>
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Membro da Equipe'}</p>
                         </div>
                       </div>
                     </td>
@@ -1762,11 +1799,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                        {hasFullAccess && teacher.role !== 'admin' && (
+                        {isAdmin && teacher.role !== 'admin' && (
                           <button 
                             onClick={() => {
                               showConfirm(
-                                'Entrar como Colaborador',
+                                'Entrar como Membro da Equipe',
                                 `Para visualizar a plataforma como "${teacher.name}", digite a senha do sistema:`,
                                 (pass) => {
                                   if (pass === 'SISTEMA') {
@@ -1779,12 +1816,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               );
                             }}
                             className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                            title="Visualizar como Colaborador"
+                            title="Visualizar como Membro da Equipe"
                           >
                             <Eye className="w-5 h-5" />
                           </button>
                         )}
-                        {hasFullAccess && (
+                        {(isFullAccess || isViewAccess) && (
                           <>
                             <button 
                               onClick={() => {
@@ -1810,18 +1847,22 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             </button>
                           </>
                         )}
-                        <button 
-                          onClick={() => handleEditTeacher(teacher)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        >
-                          <Edit className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteTeacher(teacher.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        {isFullAccess && (
+                          <>
+                            <button 
+                              onClick={() => handleEditTeacher(teacher)}
+                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            >
+                              <Edit className="w-5 h-5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteTeacher(teacher.id)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1839,7 +1880,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ano Letivo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Faixa Etária</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador Responsável</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro Responsável</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Alunos</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
@@ -1851,7 +1892,17 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     <td className="px-6 py-4 text-sm text-slate-600">{c.schoolYear || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{c.ageRange}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}
+                      <div className="flex flex-col">
+                        <span className="font-medium">{teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}</span>
+                        {teachers.find(t => t.id === c.teacherId)?.status && (
+                          <span className={cn(
+                            "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase w-fit mt-0.5",
+                            teachers.find(t => t.id === c.teacherId)?.status === 'ativo' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          )}>
+                            {teachers.find(t => t.id === c.teacherId)?.status}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} alunos
@@ -2508,14 +2559,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <tbody className="divide-y divide-slate-100">
                             {attendances
                               .filter(a => {
-                                const matchesClass = hasFullAccess 
+                                const matchesClass = isFullAccess 
                                   ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
                                   : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
                                 
                                 const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
                                                    (!attendanceEndDate || a.date <= attendanceEndDate);
                                 
-                                const matchesAccess = hasFullAccess || user.classIds.includes(a.classId);
+                                const matchesAccess = isFullAccess || user.classIds.includes(a.classId);
                                 return matchesClass && matchesDate && matchesAccess;
                               })
                               .sort((a, b) => a.date.localeCompare(b.date)) // Sort ascending for sequence
@@ -2828,7 +2879,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               <button onClick={() => setViewingMeeting(meeting)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                 <Eye className="w-4 h-4" />
                               </button>
-                              {hasFullAccess && (
+                              {isFullAccess && (
                                 <>
                                   <button onClick={() => { setEditingMeeting(meeting); setMeetingForm({ ...meeting }); setShowForm(true); }} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
                                     <Edit className="w-4 h-4" />
@@ -3063,6 +3114,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             <option value="admin">Administrador (Acesso Total)</option>
                           </select>
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Status do Cadastro</label>
+                          <select
+                            required
+                            value={teacherForm.status}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, status: e.target.value as any })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="ativo">Ativo</option>
+                            <option value="inativo">Inativo</option>
+                            <option value="suspenso">Suspenso</option>
+                            <option value="desligado">Desligado</option>
+                          </select>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
@@ -3159,7 +3224,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Colaborador</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Membro da Equipe</label>
                         <textarea
                           value={teacherForm.generalProfile}
                           onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
@@ -3271,7 +3336,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
-                    {editingTeacher ? 'Atualizar Colaborador' : 'Salvar Colaborador'}
+                    {editingTeacher ? 'Atualizar Membro da Equipe' : 'Salvar Membro da Equipe'}
                   </button>
                 </form>
               )}
@@ -3382,7 +3447,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Colaborador Responsável</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Membro Responsável</label>
                     <select
                       value={classForm.teacherId}
                       onChange={(e) => setClassForm({ ...classForm, teacherId: e.target.value })}
@@ -3506,7 +3571,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Colaborador'})
+                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Membro da Equipe'})
                 </h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <XCircle className="w-5 h-5 text-slate-500" />
