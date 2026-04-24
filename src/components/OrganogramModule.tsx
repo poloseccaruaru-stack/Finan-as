@@ -74,6 +74,8 @@ export default function OrganogramModule({ user }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasEditAccess = isAdmin || isCoordinator;
 
   useEffect(() => {
     const q = query(collection(db, 'organogram'), orderBy('level', 'asc'), orderBy('createdAt', 'asc'));
@@ -164,7 +166,7 @@ export default function OrganogramModule({ user }: Props) {
                   <p className="text-sm text-indigo-600 font-medium uppercase tracking-wider">{entry.role}</p>
                 </div>
               </div>
-              {isAdmin && (
+              {hasEditAccess && (
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                   <button 
                     onClick={() => handleEdit(entry)}
@@ -195,7 +197,7 @@ export default function OrganogramModule({ user }: Props) {
           <h2 className="text-2xl font-bold text-slate-900">Organograma EBD</h2>
           <p className="text-slate-500">Estrutura hierárquica e funções da Escola Bíblica Dominical.</p>
         </div>
-        {isAdmin && (
+        {hasEditAccess && (
           <button
             onClick={() => {
               setForm({ name: '', role: '', level: 0, parentId: '' });

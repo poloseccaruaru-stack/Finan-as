@@ -95,9 +95,11 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasEditAccess = isAdmin || isCoordinator;
 
   useEffect(() => {
-    const q = isAdmin 
+    const q = hasEditAccess 
       ? collection(db, 'projects')
       : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
 
@@ -244,7 +246,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
             <Printer className="w-5 h-5" />
             Imprimir
           </button>
-          {isAdmin && (
+          {hasEditAccess && (
             <button
               onClick={() => setShowForm(true)}
               className="w-full md:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100 print:hidden"
@@ -278,7 +280,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
                     </span>
                   </div>
                 </div>
-                {isAdmin && (
+                {hasEditAccess && (
                   <div className="flex gap-1">
                     <button 
                       onClick={() => handleEdit(project)}
@@ -601,7 +603,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
                       >
                         <Eye className="w-5 h-5" />
                       </button>
-                      {isAdmin && (
+                      {hasEditAccess && (
                         <>
                           <button 
                             onClick={() => handleEdit(project)}

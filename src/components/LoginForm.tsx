@@ -106,7 +106,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         id: user.uid,
         name,
         email,
-        role: 'teacher',
+        role: 'professor',
         firstLogin: false,
         createdAt: new Date().toISOString(),
         allowedTabs: ['dashboard', 'academic', 'projects', 'reports']

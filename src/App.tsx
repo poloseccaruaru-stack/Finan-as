@@ -143,7 +143,7 @@ export default function App() {
                 email: user.email || '',
                 contact: '',
                 classIds: [],
-                role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
+                role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'professor',
                 firstLogin: false,
                 createdAt: new Date().toISOString(),
                 allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
@@ -158,7 +158,7 @@ export default function App() {
               id: user.uid,
               name: user.displayName || 'Usuário',
               email: user.email || '',
-              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'teacher',
+              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'professor',
               classIds: [],
               allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
             } as any);
@@ -235,6 +235,7 @@ export default function App() {
 
   const isAdmin = userData.role === 'admin';
   const isCoordinator = userData.role === 'coordinator';
+  const isProfessor = userData.role === 'professor';
 
   // Handle Detail Report View - Standalone mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -267,6 +268,10 @@ export default function App() {
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
         if (isAdmin || isCoordinator) return true;
+        if (isProfessor) {
+          const excluded = ['students', 'teachers', 'classes', 'meetings'];
+          return !excluded.includes(sub.id);
+        }
         // Teachers can only see sub-items they are allowed to
         return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
       })
@@ -285,6 +290,7 @@ export default function App() {
       ].filter(sub => {
         if (isAdmin) return true;
         if (isCoordinator) return sub.id !== 'system';
+        if (isProfessor) return sub.id !== 'system';
         return userData.allowedTabs?.includes(sub.id);
       })
     },
@@ -293,6 +299,10 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
   ].filter(item => {
     if (isAdmin || isCoordinator) return true;
+    if (isProfessor) {
+      const excluded = ['finance', 'reports'];
+      return !excluded.includes(item.id);
+    }
     // For non-admins, check allowedTabs
     return userData.allowedTabs?.includes(item.id);
   });
@@ -394,7 +404,9 @@ export default function App() {
             {isSidebarOpen && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{userData.name}</p>
-                <p className="text-xs text-slate-500 truncate">{isAdmin ? 'Administrador' : 'Professor'}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {isAdmin ? 'Administrador' : isCoordinator ? 'Coordenador' : 'Professor'}
+                </p>
               </div>
             )}
           </div>

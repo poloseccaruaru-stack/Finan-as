@@ -315,7 +315,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [showRangeReportModal, setShowRangeReportModal] = useState(false);
   const [reportStartDate, setReportStartDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
   const [reportEndDate, setReportEndDate] = useState(safeFormat(new Date(), 'yyyy-MM-dd') || "");
-  const [reportType, setReportType] = useState<'student' | 'teacher'>('student');
+  const [reportType, setReportType] = useState<'student' | 'professor'>('student');
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
   const [viewingAttendance, setViewingAttendance] = useState<Attendance | null>(null);
   const [reportFilterClass, setReportFilterClass] = useState<string>('all');
@@ -403,7 +403,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator;
+  const isProfessor = user.role === 'professor';
+  const hasFullAccess = isAdmin || isCoordinator || isProfessor;
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -637,7 +638,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
+    role: 'professor' as 'admin' | 'coordinator' | 'professor',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
@@ -871,7 +872,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
-            role: teacherForm.role || 'teacher',
+            role: teacherForm.role || 'professor',
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -898,7 +899,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             registrationNumber,
-            role: teacherForm.role || 'teacher',
+            role: teacherForm.role || 'professor',
             firstLogin: true,
             createdAt: new Date().toISOString()
           });
@@ -906,7 +907,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'professor', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -929,7 +930,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       address: teacher.address || '',
       academicBackground: teacher.academicBackground || '',
       theologicalBackground: teacher.theologicalBackground || '',
-      role: teacher.role || 'teacher',
+      role: teacher.role || 'professor',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
       password: teacher.password || '',
@@ -1498,7 +1499,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               {subTab === 'teachers' && (
                 <button 
                   onClick={() => {
-                    setReportType('teacher');
+                    setReportType('professor');
                     setShowGeneralReportModal(true);
                   }}
                   className="flex items-center gap-2 bg-amber-50 text-amber-600 px-4 py-2 rounded-xl font-bold hover:bg-amber-100 transition-all print:hidden"
@@ -1524,7 +1525,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'professor', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -1718,7 +1719,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <p className={cn(
                             "text-[10px] font-black uppercase tracking-widest",
                             teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
-                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Colaborador'}</p>
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Professor'}</p>
                         </div>
                       </div>
                     </td>
@@ -1752,7 +1753,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               );
                             }}
                             className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                            title="Visualizar como Colaborador"
+                            title="Visualizar como Professor"
                           >
                             <Eye className="w-5 h-5" />
                           </button>
@@ -1761,7 +1762,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <>
                             <button 
                               onClick={() => {
-                                setReportType('teacher');
+                                setReportType('professor');
                                 setReportTargetId(teacher.id);
                                 setShowReportModal(true);
                               }}
@@ -1772,7 +1773,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             </button>
                             <button 
                               onClick={() => {
-                                setReportType('teacher');
+                                setReportType('professor');
                                 setReportTargetId(teacher.id);
                                 setShowReportListModal(true);
                               }}
@@ -3017,7 +3018,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher';
+                              const newRole = e.target.value as 'admin' | 'coordinator' | 'professor';
                               let allowedTabs = teacherForm.allowedTabs;
                               if (newRole === 'admin') {
                                 allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
@@ -3363,7 +3364,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">Selecione...</option>
-                      {teachers.filter(t => t.role === 'teacher').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {teachers.filter(t => t.role === 'professor').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
 

@@ -131,6 +131,9 @@ export default function AdminModule({ user, subTab }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const isProfessor = user.role === 'professor';
+  const hasEditAccess = isAdmin || isCoordinator;
 
   const COLLECTIONS = [
     'users', 'students', 'classes', 'attendance', 'regimento', 
@@ -539,7 +542,7 @@ export default function AdminModule({ user, subTab }: Props) {
            subTab === 'meetings' ? 'Registro de Reuniões' : 'Configurações do Sistema'}
         </h2>
         <div className="flex items-center gap-3">
-          {isAdmin && subTab === 'regimento' && (
+          {hasEditAccess && subTab === 'regimento' && (
             <button
               onClick={() => {
                 setForm({ title: '', content: '', order: regimentos.length + 1 });
@@ -553,7 +556,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'comunicados' && (
+          {hasEditAccess && subTab === 'comunicados' && (
             <button
               onClick={() => {
                 setEditingComunicadoId(null);
@@ -567,7 +570,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'documentos' && (
+          {hasEditAccess && subTab === 'documentos' && (
             <button
               onClick={() => {
                 setEditingDocumentoId(null);
@@ -581,7 +584,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isAdmin && subTab === 'meetings' && (
+          {hasEditAccess && subTab === 'meetings' && (
             <button
               onClick={() => {
                 setEditingMeetingId(null);
@@ -626,24 +629,26 @@ export default function AdminModule({ user, subTab }: Props) {
                       {safeFormat(c.date, 'dd/MM/yyyy')}
                     </p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => {
-                        setEditingComunicadoId(c.id);
-                        setComunicadoForm({ target: c.target, text: c.text, date: c.date });
-                        setShowComunicadoForm(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteComunicado(c.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {hasEditAccess && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => {
+                          setEditingComunicadoId(c.id);
+                          setComunicadoForm({ target: c.target, text: c.text, date: c.date });
+                          setShowComunicadoForm(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteComunicado(c.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.text}</p>
@@ -663,24 +668,26 @@ export default function AdminModule({ user, subTab }: Props) {
                     <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">{d.title}</h4>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{safeFormat(d.date, 'dd/MM/yyyy')}</p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button 
-                      onClick={() => {
-                        setEditingDocumentoId(d.id);
-                        setDocumentoForm({ title: d.title, content: d.content, date: d.date });
-                        setShowDocumentoForm(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteDocumento(d.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {hasEditAccess && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => {
+                          setEditingDocumentoId(d.id);
+                          setDocumentoForm({ title: d.title, content: d.content, date: d.date });
+                          setShowDocumentoForm(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteDocumento(d.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 h-32 overflow-y-auto">
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">{d.content}</p>

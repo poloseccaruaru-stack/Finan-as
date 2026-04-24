@@ -18,10 +18,10 @@ service cloud.firestore {
          (request.auth.token.email == "poloseccaruaru@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function isTeacher() {
+    function isProfessor() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'professor';
     }
 
     function incoming() { return request.resource.data; }
@@ -38,33 +38,33 @@ service cloud.firestore {
 
     // Rules for each collection
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin() || isOwner(userId);
       allow write: if isOwner(userId) || isAdmin();
     }
 
     match /students/{studentId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /teachers/{teacherId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
     match /classes/{classId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if isAdmin() || isProfessor();
+      allow write: if isAdmin() || isProfessor();
     }
 
     match /projects/{projectId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow write: if isAdmin();
     }
 
     match /transactions/{transactionId} {
@@ -78,7 +78,7 @@ service cloud.firestore {
     }
 
     match /absenceResolutions/{resId} {
-      allow read: if isAdmin() || isTeacher();
+      allow read: if isAdmin() || isProfessor();
       allow create: if isAuthenticated() && isValidAbsenceResolution(incoming());
       allow update: if (isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid)) && isValidAbsenceResolution(incoming());
       allow delete: if isAdmin();
@@ -100,7 +100,7 @@ service cloud.firestore {
     }
 
     match /config/{configId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
@@ -110,13 +110,13 @@ service cloud.firestore {
     }
 
     match /planning/{planningId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if isAdmin() || isProfessor();
+      allow write: if isAdmin() || isProfessor();
     }
 
     match /student_reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isTeacher();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /teacher_reports/{reportId} {
@@ -125,7 +125,7 @@ service cloud.firestore {
     }
 
     match /meetings/{meetingId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 

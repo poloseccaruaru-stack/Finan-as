@@ -255,7 +255,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
 
-    const unsubTeachers = onSnapshot(query(collection(db, 'users'), where('role', '==', 'teacher')), (snap) => {
+    const unsubTeachers = onSnapshot(query(collection(db, 'users'), where('role', '==', 'professor')), (snap) => {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
