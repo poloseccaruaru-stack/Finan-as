@@ -49,26 +49,6 @@ interface Props {
   subTab: 'regimento' | 'calendar' | 'system' | 'organogram' | 'meetings' | 'comunicados' | 'documentos';
 }
 
-const MODULES = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'students', label: 'Alunos' },
-  { id: 'teachers', label: 'Equipe EBD' },
-  { id: 'classes', label: 'Turmas' },
-  { id: 'attendance', label: 'Chamada' },
-  { id: 'planning', label: 'Planejamento' },
-  { id: 'meetings', label: 'Reuniões' },
-  { id: 'schoolYear', label: 'Ano Letivo' },
-  { id: 'projects', label: 'Projetos' },
-  { id: 'finance', label: 'Financeiro' },
-  { id: 'reports', label: 'Relatórios' },
-  { id: 'regimento', label: 'Regimento' },
-  { id: 'calendar', label: 'Calendário' },
-  { id: 'comunicados', label: 'Comunicados' },
-  { id: 'documentos', label: 'Documentos Gerais' },
-  { id: 'organogram', label: 'Organograma' },
-  { id: 'system', label: 'Sistema' },
-];
-
 export default function AdminModule({ user, subTab }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
@@ -105,8 +85,6 @@ export default function AdminModule({ user, subTab }: Props) {
   const [isRestoring, setIsRestoring] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetType, setResetType] = useState<'total' | 'partial' | 'selective'>('partial');
-  const [defaultPermissions, setDefaultPermissions] = useState<Record<string, any>>({});
-  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   
   // Alert/Confirm State
   const [alertConfig, setAlertConfig] = useState<{ show: boolean, title: string, message: string } | null>(null);
@@ -153,10 +131,6 @@ export default function AdminModule({ user, subTab }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  const tabPermission = user.permissions?.[subTab] ?? (user.allowedTabs?.includes(subTab) ? 2 : 0);
-  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
-  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
 
   const COLLECTIONS = [
     'users', 'students', 'classes', 'attendance', 'regimento', 
@@ -359,17 +333,7 @@ export default function AdminModule({ user, subTab }: Props) {
           setSchoolYearForm({ startDate: data.startDate, endDate: data.endDate });
         }
       }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
-
-      const unsubPermissions = onSnapshot(doc(db, 'config', 'permissions'), (snap) => {
-        if (snap.exists()) {
-          setDefaultPermissions(snap.data());
-        }
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'config/permissions'));
-
-      return () => {
-        unsubYear();
-        unsubPermissions();
-      };
+      return () => unsubYear();
     }
     if (subTab === 'meetings') {
       const q = query(collection(db, 'meetings'), orderBy('date', 'desc'));
@@ -518,32 +482,6 @@ export default function AdminModule({ user, subTab }: Props) {
     });
   };
 
-  const handleSaveDefaultPermissions = async (role: 'professor' | 'teacher', module: string, value: number) => {
-    setIsSavingPermissions(true);
-    try {
-      const currentRolePerms = defaultPermissions[role] || {};
-      const newPermissions = {
-        ...defaultPermissions,
-        [role]: {
-          ...currentRolePerms,
-          [module]: value
-        }
-      };
-      await setDoc(doc(db, 'config', 'permissions'), newPermissions);
-      setDefaultPermissions(newPermissions);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'config/permissions');
-    } finally {
-      setIsSavingPermissions(false);
-    }
-  };
-
-  const getPermissionLabel = (val: number) => {
-    if (val === 1) return 'Visualização';
-    if (val === 2) return 'Acesso Total';
-    return 'Sem Acesso';
-  };
-
   const handleReset = async () => {
     const collectionsToDelete: string[] = [];
 
@@ -601,7 +539,7 @@ export default function AdminModule({ user, subTab }: Props) {
            subTab === 'meetings' ? 'Registro de Reuniões' : 'Configurações do Sistema'}
         </h2>
         <div className="flex items-center gap-3">
-          {isFullAccess && subTab === 'regimento' && (
+          {isAdmin && subTab === 'regimento' && (
             <button
               onClick={() => {
                 setForm({ title: '', content: '', order: regimentos.length + 1 });
@@ -615,7 +553,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isFullAccess && subTab === 'comunicados' && (
+          {isAdmin && subTab === 'comunicados' && (
             <button
               onClick={() => {
                 setEditingComunicadoId(null);
@@ -629,7 +567,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isFullAccess && subTab === 'documentos' && (
+          {isAdmin && subTab === 'documentos' && (
             <button
               onClick={() => {
                 setEditingDocumentoId(null);
@@ -643,7 +581,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           )}
 
-          {isFullAccess && subTab === 'meetings' && (
+          {isAdmin && subTab === 'meetings' && (
             <button
               onClick={() => {
                 setEditingMeetingId(null);
@@ -689,26 +627,22 @@ export default function AdminModule({ user, subTab }: Props) {
                     </p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {isFullAccess && (
-                      <>
-                        <button 
-                          onClick={() => {
-                            setEditingComunicadoId(c.id);
-                            setComunicadoForm({ target: c.target, text: c.text, date: c.date });
-                            setShowComunicadoForm(true);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteComunicado(c.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
+                    <button 
+                      onClick={() => {
+                        setEditingComunicadoId(c.id);
+                        setComunicadoForm({ target: c.target, text: c.text, date: c.date });
+                        setShowComunicadoForm(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteComunicado(c.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -730,26 +664,22 @@ export default function AdminModule({ user, subTab }: Props) {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{safeFormat(d.date, 'dd/MM/yyyy')}</p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {isFullAccess && (
-                      <>
-                        <button 
-                          onClick={() => {
-                            setEditingDocumentoId(d.id);
-                            setDocumentoForm({ title: d.title, content: d.content, date: d.date });
-                            setShowDocumentoForm(true);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteDocumento(d.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
+                    <button 
+                      onClick={() => {
+                        setEditingDocumentoId(d.id);
+                        setDocumentoForm({ title: d.title, content: d.content, date: d.date });
+                        setShowDocumentoForm(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteDocumento(d.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 h-32 overflow-y-auto">
@@ -802,70 +732,8 @@ export default function AdminModule({ user, subTab }: Props) {
             </button>
           </div>
 
-          <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-8">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                <Lock className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Modelo Padrão de Permissões</h3>
-                <p className="text-sm text-slate-500">Defina o acesso base para Professores e Membros da Equipe.</p>
-              </div>
-            </div>
-
-            <div className="space-y-10">
-              {(['professor', 'teacher'] as const).map(role => (
-                <div key={role} className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h4 className="text-md font-black text-slate-900 uppercase tracking-tight">
-                      Perfil: {role === 'professor' ? 'Professor' : 'Membro da Equipe'}
-                    </h4>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Configuração Base</span>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50">
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 italic">Módulo</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 italic text-center">Sem Acesso</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 italic text-center">Visualização</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 italic text-center">Acesso Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {MODULES.map(module => {
-                          const currentVal = defaultPermissions[role]?.[module.id] ?? 0;
-                          return (
-                            <tr key={module.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3 text-sm font-bold text-slate-700 border border-slate-100">{module.label}</td>
-                              {[0, 1, 2].map(val => (
-                                <td key={val} className="px-4 py-3 border border-slate-100 text-center">
-                                  <button
-                                    onClick={() => handleSaveDefaultPermissions(role, module.id, val)}
-                                    className={cn(
-                                      "w-6 h-6 rounded-lg transition-all mx-auto flex items-center justify-center",
-                                      currentVal === val 
-                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100 scale-110" 
-                                        : "bg-slate-100 text-transparent hover:bg-slate-200"
-                                    )}
-                                  >
-                                    <div className="w-2 h-2 rounded-full bg-white" />
-                                  </button>
-                                </td>
-                              ))}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Reset Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Reset Section */}
             <div className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm space-y-6">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
@@ -1000,6 +868,7 @@ export default function AdminModule({ user, subTab }: Props) {
             </div>
           </div>
         </div>
+      </div>
       )}
       {subTab === 'calendar' && (
         <div className="space-y-6">
@@ -1046,7 +915,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
-                {isFullAccess && (
+                {isAdmin && (
                   <button
                     onClick={() => {
                       setGeneralCalendarForm({ title: '', content: '' });
@@ -1069,7 +938,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <CalendarIcon className="w-8 h-8" />
                       </div>
                       <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        {isFullAccess && (
+                        {isAdmin && (
                           <>
                             <button 
                               onClick={(e) => {
@@ -1111,7 +980,7 @@ export default function AdminModule({ user, subTab }: Props) {
             <h3 className="text-lg font-bold text-slate-900 capitalize">
               {activeCalendarType === 'ebd' ? 'Eventos EBD' : activeCalendarType === 'church' ? 'Eventos da Igreja' : 'Eventos da Convenção'}
             </h3>
-            {isFullAccess && (
+            {isAdmin && (
               <button
                 onClick={() => {
                   setCalendarForm({ title: '', date: '', type: 'event', description: '' });
@@ -1143,7 +1012,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <p className="text-xs text-slate-500">{safeFormat(event.date, 'EEEE', { locale: ptBR })}</p>
                       </div>
                     </div>
-                    {isFullAccess && (
+                    {isAdmin && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={() => {
@@ -1439,7 +1308,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         {format(parseISO(meeting.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                       </p>
                     </div>
-                    {isFullAccess && (
+                    {isAdmin && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
@@ -1526,7 +1395,7 @@ export default function AdminModule({ user, subTab }: Props) {
                       )}
                     </div>
                     
-                    {isFullAccess && (
+                    {isAdmin && (
                       <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => {

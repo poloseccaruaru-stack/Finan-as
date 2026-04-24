@@ -112,9 +112,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [showRankConfig, setShowRankConfig] = useState(false);
   const [showClassifConfig, setShowClassifConfig] = useState(false);
   const [showColabBirthConfig, setShowColabBirthConfig] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(() => localStorage.getItem('ebd_dashboard_edit_mode') === 'true');
+  const [isEditMode, setIsEditMode] = useState(false);
   const [localLayout, setLocalLayout] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`ebd_dashboard_layout_${user.id}`);
+    const saved = localStorage.getItem('ebd_dashboard_layout');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -175,22 +175,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     }
   }, [showColabBirthConfig]);
 
-  // User Config effect
-  useEffect(() => {
-    if (!user.id) return;
-    const unsubUserConfig = onSnapshot(doc(db, 'user_configs', `dashboard_${user.id}`), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.layout) {
-          const l = data.layout.includes('stats') ? data.layout : ['stats', ...data.layout];
-          setLocalLayout(l);
-          localStorage.setItem(`ebd_dashboard_layout_${user.id}`, JSON.stringify(l));
-        }
-      }
-    });
-    return () => unsubUserConfig();
-  }, [user.id]);
-
   // Stable Config Listener
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, 'config', 'dashboard'), (snap) => {
@@ -212,6 +196,12 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           layout: data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : DEFAULT_LAYOUT,
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
+        // Sync local layout from DB (DB priority)
+        if (data.layout) {
+          const l = data.layout.includes('stats') ? data.layout : ['stats', ...data.layout];
+          setLocalLayout(l);
+          localStorage.setItem('ebd_dashboard_layout', JSON.stringify(l));
+        }
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard'));
 
@@ -223,21 +213,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     if (!isEditMode || localLayout.length === 0) return;
 
     const timer = setTimeout(() => {
-      updateLayout(localLayout);
+      // Check if actually changed to avoid redundant writes
+      if (JSON.stringify(localLayout) !== JSON.stringify(config.layout)) {
+        updateConfig({ ...config, layout: localLayout });
+      }
     }, 1500); // Debounce delay
 
     return () => clearTimeout(timer);
-  }, [localLayout, isEditMode]);
-
-  const updateLayout = async (newLayout: string[]) => {
-    if (!user.id) return;
-    try {
-      localStorage.setItem(`ebd_dashboard_layout_${user.id}`, JSON.stringify(newLayout));
-      await setDoc(doc(db, 'user_configs', `dashboard_${user.id}`), { layout: newLayout }, { merge: true });
-    } catch (err) {
-      console.error('Error saving user layout:', err);
-    }
-  };
+  }, [localLayout, isEditMode, config.layout]);
 
   // Handle reorder persistence
   const handleReorder = (newLayout: string[]) => {
@@ -247,23 +230,14 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   useEffect(() => {
     const isAdmin = user.role === 'admin' || user.role === 'coordinator';
     const classIds = user?.classIds || [];
-    
-    // Tab permissions for guarding listeners
-    const hasAcademic = isAdmin || (user.permissions?.academic ?? (user.allowedTabs?.includes('academic') ? 2 : 0)) >= 1;
-    const hasProjects = isAdmin || (user.permissions?.projects ?? (user.allowedTabs?.includes('projects') ? 2 : 0)) >= 1;
-    const hasFinance = isAdmin || (user.permissions?.finance ?? (user.allowedTabs?.includes('finance') ? 2 : 0)) >= 1;
-    const hasReports = isAdmin || (user.permissions?.reports ?? (user.allowedTabs?.includes('reports') ? 2 : 0)) >= 1;
 
-    let unsubResolutions = () => {};
-    if (hasAcademic) {
-      unsubResolutions = onSnapshot(
-        query(collection(db, 'absenceResolutions'), orderBy('createdAt', 'desc')), 
-        (snap) => {
-          setResolutions(snap.docs.map(d => ({ id: d.id, ...d.data() } as AbsenceResolution)));
-        },
-        (err) => handleFirestoreError(err, OperationType.LIST, 'absenceResolutions')
-      );
-    }
+    const unsubResolutions = onSnapshot(
+      query(collection(db, 'absenceResolutions'), orderBy('createdAt', 'desc')), 
+      (snap) => {
+        setResolutions(snap.docs.map(d => ({ id: d.id, ...d.data() } as AbsenceResolution)));
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'absenceResolutions')
+    );
 
     const unsubPreDefined = onSnapshot(
       query(collection(db, 'preDefinedResolutions'), orderBy('createdAt', 'asc')), 
@@ -273,52 +247,41 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       (err) => handleFirestoreError(err, OperationType.LIST, 'preDefinedResolutions')
     );
 
-    let unsubStudents = () => {};
-    if (hasAcademic || hasReports) {
-      const studentsQuery = isAdmin 
-        ? collection(db, 'students') 
-        : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
-      
-      unsubStudents = onSnapshot(studentsQuery, (snap) => {
-        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
-    }
+    const studentsQuery = isAdmin 
+      ? collection(db, 'students') 
+      : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+    
+    const unsubStudents = onSnapshot(studentsQuery, (snap) => {
+      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
 
     const unsubTeachers = onSnapshot(query(collection(db, 'users'), where('role', '==', 'teacher')), (snap) => {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
-    let unsubClasses = () => {};
-    if (hasAcademic || hasReports) {
-      const classesQuery = isAdmin
-        ? collection(db, 'classes')
-        : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+    const classesQuery = isAdmin
+      ? collection(db, 'classes')
+      : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
 
-      unsubClasses = onSnapshot(classesQuery, (snap) => {
-        setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
-    }
+    const unsubClasses = onSnapshot(classesQuery, (snap) => {
+      setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
 
     let unsubTransactions = () => {};
-    if (isAdmin || hasFinance || hasReports) {
+    if (user.role === 'admin') {
       unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
         setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'transactions'));
     }
 
-    let unsubProjects = () => {};
-    if (hasProjects || hasReports) {
-      unsubProjects = onSnapshot(collection(db, 'projects'), (snap) => {
-        setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
-    }
+    const unsubProjects = onSnapshot(collection(db, 'projects'), (snap) => {
+      setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
 
     // Fetch Attendance for absence dates
-    let unsubAttendance = () => {};
-    if (hasAcademic || hasReports) {
-      unsubAttendance = onSnapshot(
-        query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
-        (snap) => {
+    const unsubAttendance = onSnapshot(
+      query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
+      (snap) => {
         const records = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
         setAttendanceRecords(records);
         const datesMap: Record<string, string[]> = {};
@@ -340,7 +303,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       },
       (err) => handleFirestoreError(err, OperationType.LIST, 'attendance')
     );
-    }
     
     return () => {
       unsubStudents();
@@ -357,6 +319,13 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const updateConfig = async (newConfig: DashboardConfig) => {
     setIsSavingConfig(true);
     try {
+      // Save to localStorage as fallback
+      if (newConfig.layout) {
+        localStorage.setItem('ebd_dashboard_layout', JSON.stringify(newConfig.layout));
+      }
+      
+      // Use updateDoc to avoid overwriting or creating an incomplete doc if possible
+      // But since we have a complete 'newConfig' object relative to state, we ensure all fields are sent
       await setDoc(doc(db, 'config', 'dashboard'), newConfig, { merge: true });
       setConfig(newConfig);
       setShowQuickAlertConfig(false);
@@ -496,7 +465,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
   const stats = [
     { label: 'Total Alunos', value: filteredStudents.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Equipe EBD', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Colaboradores', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
     { label: 'Turmas Ativas', value: filteredClasses.length, icon: GraduationCap, color: 'bg-green-50 text-green-600' },
     { label: 'Projetos', value: projects.length, icon: Briefcase, color: 'bg-amber-50 text-amber-600' },
   ];
@@ -580,7 +549,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     
     const allPeople: any[] = [
       ...filteredStudents.map(s => ({ ...s, type: 'Aluno' })),
-      ...teachers.map(t => ({ ...t, type: 'Membro da Equipe' }))
+      ...teachers.map(t => ({ ...t, type: 'Colaborador' }))
     ];
 
     return allPeople.filter(person => {
@@ -672,32 +641,31 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-             <button 
-              onClick={() => {
-                const nextMode = !isEditMode;
-                setIsEditMode(nextMode);
-                localStorage.setItem('ebd_dashboard_edit_mode', String(nextMode));
-                if (!nextMode) {
-                  updateLayout(localLayout);
-                }
-              }}
-              title={isEditMode ? "Desativar salvamento automático da ordem" : "Ativar salvamento automático da ordem"}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-sm font-bold border shadow-sm",
-                isEditMode 
-                  ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 ring-offset-2 animate-pulse" 
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-              )}
-            >
-              <div className={cn(
-                "w-3 h-3 rounded-full transition-all",
-                isEditMode ? "bg-white" : "bg-slate-300"
-              )} />
-              <Settings className={cn("w-4 h-4", isEditMode ? "animate-spin-slow" : "")} />
-              Fixar Ordem
-            </button>
-            {user.role === 'admin' && (
+          {user.role === 'admin' && (
+            <div className="flex items-center gap-2">
+               <button 
+                onClick={() => {
+                  if (isEditMode) {
+                    // One final forced sync when turning off edit mode
+                    updateConfig({ ...config, layout: localLayout });
+                  }
+                  setIsEditMode(!isEditMode);
+                }}
+                title={isEditMode ? "Desativar salvamento automático da ordem" : "Ativar salvamento automático da ordem"}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-sm font-bold border shadow-sm",
+                  isEditMode 
+                    ? "bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 ring-offset-2 animate-pulse" 
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                )}
+              >
+                <div className={cn(
+                  "w-3 h-3 rounded-full transition-all",
+                  isEditMode ? "bg-white" : "bg-slate-300"
+                )} />
+                <Settings className={cn("w-4 h-4", isEditMode ? "animate-spin-slow" : "")} />
+                Fixar Ordem
+              </button>
               <button 
                 onClick={() => setShowConfig(!showConfig)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-all text-sm font-bold text-slate-600"
@@ -705,8 +673,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                 <Settings className="w-4 h-4" />
                 Configurar Limites
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all"
@@ -1131,7 +1099,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-5 h-5 text-emerald-500" />
-                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-emerald-700">Aniversariantes - Equipe EBD</h3>
+                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-emerald-700">Aniversariantes - Colaboradores</h3>
                         </div>
                         <div className="relative">
                           <button onClick={() => setShowColabBirthConfig(!showColabBirthConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
@@ -1157,8 +1125,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                         </div>
                       </div>
                       <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[200px]">
-                        {weeklyBirthdays.filter(p => p.type === 'Membro da Equipe').length > 0 ? (
-                          weeklyBirthdays.filter(p => p.type === 'Membro da Equipe').map((person) => (
+                        {weeklyBirthdays.filter(p => p.type === 'Colaborador').length > 0 ? (
+                          weeklyBirthdays.filter(p => p.type === 'Colaborador').map((person) => (
                             <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-emerald-200 transition-all">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">👨‍🏫</div>
@@ -1173,7 +1141,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                             </div>
                           ))
                         ) : (
-                          <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum membro da equipe.</div>
+                          <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum colaborador.</div>
                         )}
                       </div>
                     </div>

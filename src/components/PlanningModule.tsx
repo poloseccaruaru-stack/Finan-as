@@ -115,14 +115,10 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const [showReportModal, setShowReportModal] = useState(false);
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  const tabPermission = user.permissions?.planning ?? (user.allowedTabs?.includes('planning') ? 2 : 0);
-  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
-  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
 
   useEffect(() => {
     const classIds = user.classIds || [];
-    const classesQuery = isViewAccess
+    const classesQuery = isAdmin
       ? collection(db, 'classes')
       : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -139,7 +135,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
       setLoading(false);
     });
 
-    const planningQuery = isViewAccess 
+    const planningQuery = isAdmin 
       ? collection(db, 'planning')
       : query(
           collection(db, 'planning'),
@@ -405,9 +401,9 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                     <button
                       type="button"
                       onClick={handleAISuggest}
-                      disabled={suggesting || !isFullAccess}
+                      disabled={suggesting}
                       className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-bold hover:bg-amber-100 transition-all disabled:opacity-50"
-                      title={isFullAccess ? "Sugerir com Gemini" : "Acesso restrito"}
+                      title="Sugerir com Gemini"
                     >
                       {suggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
                       <span className="hidden md:inline">Sugerir com IA</span>
@@ -423,11 +419,10 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                     <label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Conteúdo a ser ministrado</label>
                     <textarea
                       required
-                      readOnly={!isFullAccess}
                       value={form.content}
                       onChange={(e) => setForm({ ...form, content: e.target.value })}
-                      placeholder={isFullAccess ? "Descreva o tema e os principais pontos da lição..." : "Nenhum conteúdo registrado"}
-                      className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none disabled:bg-slate-100"
+                      placeholder="Descreva o tema e os principais pontos da lição..."
+                      className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
                     />
                   </div>
 
@@ -494,29 +489,27 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                     )}
                   </div>
 
-                  {isFullAccess && (
-                    <div className="flex gap-4 pt-4">
+                  <div className="flex gap-4 pt-4">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Save className="w-5 h-5" />
+                      Salvar Planejamento
+                    </button>
+                    {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
                       <button
-                        type="submit"
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                        type="button"
+                        onClick={() => {
+                          const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
+                          if (p) handleDelete(p.id);
+                        }}
+                        className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
                       >
-                        <Save className="w-5 h-5" />
-                        Salvar Planejamento
+                        <Trash2 className="w-6 h-6" />
                       </button>
-                      {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
-                            if (p) handleDelete(p.id);
-                          }}
-                          className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
-                        >
-                          <Trash2 className="w-6 h-6" />
-                        </button>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </form>
               </motion.div>
             ) : (

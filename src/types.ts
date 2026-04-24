@@ -20,8 +20,6 @@ export interface Student {
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
 }
 
-export type ModulePermission = 0 | 1 | 2; // 0: None, 1: View, 2: Full
-
 export interface Teacher {
   id: string;
   name: string;
@@ -29,7 +27,7 @@ export interface Teacher {
   contact: string;
   birthDate?: string;
   classIds: string[];
-  role: 'admin' | 'coordinator' | 'teacher' | 'professor';
+  role: 'admin' | 'coordinator' | 'teacher';
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;
@@ -38,12 +36,10 @@ export interface Teacher {
   login?: string;
   password?: string;
   allowedTabs?: string[];
-  permissions?: Record<string, ModulePermission>;
   registrationNumber?: string;
   address?: string;
   academicBackground?: string;
   theologicalBackground?: string;
-  status?: 'ativo' | 'inativo';
 }
 
 export interface Class {

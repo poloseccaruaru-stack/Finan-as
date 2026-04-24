@@ -403,17 +403,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-
-  // Specific permission checks for the current subTab
-  // 0 = no access, 1 = view, 2 = full access
-  const tabPermission = user.permissions?.[subTab] ?? (user.allowedTabs?.includes(subTab) ? 2 : 0);
-  const isFullAccess = isAdmin || isCoordinator || tabPermission === 2;
-  const isViewAccess = isAdmin || isCoordinator || tabPermission >= 1;
-
-  useEffect(() => {
-    // If user somehow lands on a tab they don't have access to, they shouldn't see content
-    // Though sidebar handles this, it's a safety layer
-  }, [subTab, user]);
+  const hasFullAccess = isAdmin || isCoordinator;
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -433,12 +423,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    // Auto-select class for teachers if they only have one
-    if (!isFullAccess && classIds.length === 1 && !selectedClass) {
-      setSelectedClass(classIds[0]);
-    }
-
-    const studentsQuery = isFullAccess 
+    const studentsQuery = hasFullAccess 
       ? query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear))
       : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -451,7 +436,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setLoading(false);
     });
 
-    const classesQuery = isFullAccess
+    const classesQuery = hasFullAccess
       ? collection(db, 'classes')
       : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -475,12 +460,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setStudentReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentReport)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'student_reports'));
 
-    let unsubTeacherReports = () => {};
-    if (isAdmin || isCoordinator) {
-      unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
-        setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
-    }
+    const unsubTeacherReports = onSnapshot(collection(db, 'teacher_reports'), (snap) => {
+      setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
 
     const unsubMeetings = onSnapshot(collection(db, 'meetings'), (snap) => {
       setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
@@ -507,7 +489,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubMeetings();
       unsubSchoolYear();
     };
-  }, [user?.id, user?.role, JSON.stringify(user?.classIds), isFullAccess, isAdmin, selectedSchoolYear]);
+  }, [user?.id, user?.role, JSON.stringify(user?.classIds), hasFullAccess, isAdmin, selectedSchoolYear]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -606,14 +588,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   }, [students, searchTerm, filterClass, sortField, sortOrder, classes, selectedSchoolYear]);
 
   const filteredClasses = useMemo(() => {
-    let result = classes.filter(c => c.schoolYear === selectedSchoolYear);
-    if (!isAdmin && !isCoordinator) {
-      // Filter by teacher's linked classes if they are not admin/coord
-      // This ensures teachers only see their own classes in the selection
-      result = result.filter(c => user.classIds?.includes(c.id));
-    }
-    return result;
-  }, [classes, selectedSchoolYear, user, isAdmin, isCoordinator]);
+    return classes.filter(c => c.schoolYear === selectedSchoolYear);
+  }, [classes, selectedSchoolYear]);
 
   // Forms State
   const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
@@ -661,24 +637,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'teacher' as 'admin' | 'coordinator' | 'teacher' | 'professor',
+    role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
     classIds: [] as string[],
-    allowedTabs: ['dashboard', 'attendance', 'planning', 'regimento', 'calendar', 'comunicados', 'documentos', 'organogram', 'projects'] as string[],
+    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
     academicBackground: '',
-    theologicalBackground: '',
-    permissions: {
-      dashboard: 2,
-      attendance: 2,
-      planning: 2,
-      regimento: 1,
-      calendar: 1,
-      comunicados: 1,
-      documentos: 1,
-      organogram: 1,
-      projects: 1
-    } as Record<string, number>,
-    status: 'ativo' as 'ativo' | 'inativo'
+    theologicalBackground: ''
   });
 
   // Sync forms with selectedSchoolYear
@@ -762,7 +726,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
   const handleDeleteTeacher = async (id: string) => {
-    showAdminConfirm('Excluir Membro da Equipe', 'Deseja realmente excluir este membro da equipe?', async () => {
+    showAdminConfirm('Excluir Colaborador', 'Deseja realmente excluir este colaborador?', async () => {
       try {
         await deleteDoc(doc(db, 'users', id));
       } catch (err) {
@@ -892,9 +856,6 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
     const actuallySaveTeacher = async () => {
       try {
-        const defaultPermsDoc = await getDoc(doc(db, 'config', 'permissions'));
-        const defaultPerms = defaultPermsDoc.exists() ? defaultPermsDoc.data() : {};
-        
         if (editingTeacher) {
           await updateDoc(doc(db, 'users', editingTeacher.id), {
             name: teacherForm.name || "",
@@ -911,8 +872,6 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             role: teacherForm.role || 'teacher',
-            permissions: teacherForm.permissions || (defaultPerms[teacherForm.role] || {}),
-            status: teacherForm.status || 'ativo',
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -938,12 +897,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
-            permissions: teacherForm.permissions && Object.keys(teacherForm.permissions).length > 0 
-              ? teacherForm.permissions 
-              : (defaultPerms[teacherForm.role] || {}),
             registrationNumber,
             role: teacherForm.role || 'teacher',
-            status: teacherForm.status || 'ativo',
             firstLogin: true,
             createdAt: new Date().toISOString()
           });
@@ -951,26 +906,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ 
-          name: '', 
-          email: '', 
-          login: '', 
-          password: '', 
-          confirmPassword: '', 
-          contact: '', 
-          profession: '', 
-          startDateEBD: '', 
-          birthDate: '', 
-          generalProfile: '', 
-          academicBackground: '', 
-          theologicalBackground: '', 
-          role: 'teacher', 
-          classIds: [], 
-          allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], 
-          address: '',
-          permissions: {},
-          status: 'ativo'
-        });
+        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -996,10 +932,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
-      permissions: teacher.permissions || {},
       password: teacher.password || '',
-      confirmPassword: teacher.password || '',
-      status: (teacher as any).status || 'ativo'
+      confirmPassword: teacher.password || ''
     });
     setShowForm(true);
   };
@@ -1559,12 +1493,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
               </button>
             </div>
           )}
-          {(isFullAccess || isViewAccess) && subTab !== 'attendance' && (
+          {hasFullAccess && subTab !== 'attendance' && (
             <div className="flex gap-2">
-              {(subTab === 'teachers' || subTab === 'students') && (
+              {subTab === 'teachers' && (
                 <button 
                   onClick={() => {
-                    setReportType(subTab === 'teachers' ? 'teacher' : 'student');
+                    setReportType('teacher');
                     setShowGeneralReportModal(true);
                   }}
                   className="flex items-center gap-2 bg-amber-50 text-amber-600 px-4 py-2 rounded-xl font-bold hover:bg-amber-100 transition-all print:hidden"
@@ -1580,47 +1514,28 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                 <Printer className="w-5 h-5" />
                 Imprimir
               </button>
-              {isFullAccess && (
-                <button
-                  onClick={() => {
-                    if (subTab === 'meetings') {
-                      setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
-                      setEditingMeeting(null);
-                    } else if (subTab === 'students') {
-                      setEditingStudent(null);
-                      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
-                    } else if (subTab === 'teachers') {
-                      setEditingTeacher(null);
-                      setTeacherForm({ 
-                        name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', 
-                        startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', 
-                        generalProfile: '', role: 'teacher', classIds: [], 
-                        allowedTabs: ['dashboard', 'attendance', 'planning', 'regimento', 'calendar', 'comunicados', 'documentos', 'organogram', 'projects'], 
-                        permissions: {
-                          dashboard: 2,
-                          attendance: 2,
-                          planning: 2,
-                          regimento: 1,
-                          calendar: 1,
-                          comunicados: 1,
-                          documentos: 1,
-                          organogram: 1,
-                          projects: 1
-                        },
-                        status: 'ativo'
-                      });
-                    } else if (subTab === 'classes') {
-                      setEditingClass(null);
-                      setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
-                    }
-                    setShowForm(true);
-                  }}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
-                >
-                  <Plus className="w-5 h-5" />
-                  {subTab === 'students' ? 'Novo Aluno' : subTab === 'teachers' ? 'Cadastro do novo membro da Equipe EBD' : subTab === 'meetings' ? 'Nova Ata/Reunião' : 'Nova Turma'}
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (subTab === 'meetings') {
+                    setMeetingForm({ type: 'ADMINISTRATIVA', title: '', content: '', date: safeFormat(new Date(), 'yyyy-MM-dd') || "", participants: '' });
+                    setEditingMeeting(null);
+                  } else if (subTab === 'students') {
+                    setEditingStudent(null);
+                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+                  } else if (subTab === 'teachers') {
+                    setEditingTeacher(null);
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                  } else if (subTab === 'classes') {
+                    setEditingClass(null);
+                    setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+                  }
+                  setShowForm(true);
+                }}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+              >
+                <Plus className="w-5 h-5" />
+                {subTab === 'students' ? 'Novo Aluno' : subTab === 'teachers' ? 'Cadastro do novo membro da Equipe EBD' : subTab === 'meetings' ? 'Nova Ata/Reunião' : 'Nova Turma'}
+              </button>
             </div>
           )}
           <button 
@@ -1780,7 +1695,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro da Equipe / Cargo</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador / Cargo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Info. Profissional</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email / Contato</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
@@ -1799,21 +1714,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           {teacher.name.charAt(0)}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
-                            {teacher.status && (
-                              <span className={cn(
-                                "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase",
-                                teacher.status === 'ativo' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                              )}>
-                                {teacher.status}
-                              </span>
-                            )}
-                          </div>
+                          <p className="text-sm font-semibold text-slate-900">{teacher.name}</p>
                           <p className={cn(
                             "text-[10px] font-black uppercase tracking-widest",
                             teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
-                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Membro da Equipe'}</p>
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Colaborador'}</p>
                         </div>
                       </div>
                     </td>
@@ -1830,11 +1735,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                        {isAdmin && teacher.role !== 'admin' && (
+                        {hasFullAccess && teacher.role !== 'admin' && (
                           <button 
                             onClick={() => {
                               showConfirm(
-                                'Entrar como Membro da Equipe',
+                                'Entrar como Colaborador',
                                 `Para visualizar a plataforma como "${teacher.name}", digite a senha do sistema:`,
                                 (pass) => {
                                   if (pass === 'SISTEMA') {
@@ -1847,12 +1752,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               );
                             }}
                             className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                            title="Visualizar como Membro da Equipe"
+                            title="Visualizar como Colaborador"
                           >
                             <Eye className="w-5 h-5" />
                           </button>
                         )}
-                        {(isFullAccess || isViewAccess) && (
+                        {hasFullAccess && (
                           <>
                             <button 
                               onClick={() => {
@@ -1878,22 +1783,18 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             </button>
                           </>
                         )}
-                        {isFullAccess && (
-                          <>
-                            <button 
-                              onClick={() => handleEditTeacher(teacher)}
-                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                            >
-                              <Edit className="w-5 h-5" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteTeacher(teacher.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </>
-                        )}
+                        <button 
+                          onClick={() => handleEditTeacher(teacher)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteTeacher(teacher.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1911,7 +1812,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ano Letivo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Faixa Etária</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro Responsável</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador Responsável</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Alunos</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
@@ -1923,17 +1824,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     <td className="px-6 py-4 text-sm text-slate-600">{c.schoolYear || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{c.ageRange}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}</span>
-                        {teachers.find(t => t.id === c.teacherId)?.status && (
-                          <span className={cn(
-                            "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase w-fit mt-0.5",
-                            teachers.find(t => t.id === c.teacherId)?.status === 'ativo' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                          )}>
-                            {teachers.find(t => t.id === c.teacherId)?.status}
-                          </span>
-                        )}
-                      </div>
+                      {teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} alunos
@@ -2590,14 +2481,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <tbody className="divide-y divide-slate-100">
                             {attendances
                               .filter(a => {
-                                const matchesClass = isFullAccess 
+                                const matchesClass = hasFullAccess 
                                   ? (attendanceFilterClasses.includes('all') || attendanceFilterClasses.includes(a.classId))
                                   : (attendanceFilterClass === 'all' || a.classId === attendanceFilterClass);
                                 
                                 const matchesDate = (!attendanceStartDate || a.date >= attendanceStartDate) && 
                                                    (!attendanceEndDate || a.date <= attendanceEndDate);
                                 
-                                const matchesAccess = isFullAccess || user.classIds.includes(a.classId);
+                                const matchesAccess = hasFullAccess || user.classIds.includes(a.classId);
                                 return matchesClass && matchesDate && matchesAccess;
                               })
                               .sort((a, b) => a.date.localeCompare(b.date)) // Sort ascending for sequence
@@ -2910,7 +2801,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               <button onClick={() => setViewingMeeting(meeting)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                 <Eye className="w-4 h-4" />
                               </button>
-                              {isFullAccess && (
+                              {hasFullAccess && (
                                 <>
                                   <button onClick={() => { setEditingMeeting(meeting); setMeetingForm({ ...meeting }); setShowForm(true); }} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
                                     <Edit className="w-4 h-4" />
@@ -3126,37 +3017,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher' | 'professor';
+                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher';
                               let allowedTabs = teacherForm.allowedTabs;
                               if (newRole === 'admin') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'meetings', 'comunicados', 'documentos'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
                               } else if (newRole === 'coordinator') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings', 'comunicados', 'documentos'];
-                              } else if (newRole === 'professor') {
-                                allowedTabs = ['dashboard', 'academic', 'attendance', 'students', 'classes', 'reports'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
                               }
                               setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="professor">Professor (Acesso por Turma)</option>
                             <option value="teacher">Membro da Equipe (Acesso Parcial)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Status do Cadastro</label>
-                          <select
-                            required
-                            value={teacherForm.status}
-                            onChange={(e) => setTeacherForm({ ...teacherForm, status: e.target.value as any })}
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                          >
-                            <option value="ativo">Ativo</option>
-                            <option value="inativo">Inativo</option>
-                            <option value="suspenso">Suspenso</option>
-                            <option value="desligado">Desligado</option>
                           </select>
                         </div>
                       </div>
@@ -3255,7 +3129,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Membro da Equipe</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Colaborador</label>
                         <textarea
                           value={teacherForm.generalProfile}
                           onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
@@ -3309,57 +3183,61 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Permissões de Módulo (Específicas)</label>
-                        <div className="p-4 border border-slate-200 rounded-xl bg-slate-50 space-y-4">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Personalizar Acesso</p>
-                          <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
+                        <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-64 overflow-y-auto">
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Módulos Principais</p>
                             {[
                               { id: 'dashboard', label: 'Dashboard' },
+                              { id: 'academic', label: 'Acadêmico' },
+                              { id: 'projects', label: 'Projetos' },
+                              { id: 'finance', label: 'Financeiro' },
+                              { id: 'reports', label: 'Relatórios' },
+                            ].map(tab => (
+                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                <input 
+                                  type="checkbox"
+                                  checked={teacherForm.allowedTabs.includes(tab.id)}
+                                  onChange={(e) => {
+                                    const tabs = e.target.checked 
+                                      ? [...teacherForm.allowedTabs, tab.id]
+                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
+                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                {tab.label}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
+                            {[
                               { id: 'students', label: 'Alunos' },
                               { id: 'teachers', label: 'Equipe EBD' },
                               { id: 'classes', label: 'Turmas' },
                               { id: 'attendance', label: 'Chamada' },
                               { id: 'planning', label: 'Planejamento' },
-                              { id: 'projects', label: 'Projetos' },
-                              { id: 'finance', label: 'Financeiro' },
-                              { id: 'reports', label: 'Relatórios' },
-                              { id: 'meetings', label: 'Reuniões' },
                               { id: 'schoolYear', label: 'Ano Letivo' },
                               { id: 'regimento', label: 'Regimento' },
                               { id: 'calendar', label: 'Calendário' },
                               { id: 'organogram', label: 'Organograma' },
-                              { id: 'comunicados', label: 'Comunicados' },
-                              { id: 'documentos', label: 'Documentos Gerais' },
-                            ].map(module => (
-                              <div key={module.id} className="flex flex-col gap-1 border-b border-slate-200 pb-2 last:border-0">
-                                <span className="text-xs font-bold text-slate-700">{module.label}</span>
-                                <div className="flex items-center gap-4">
-                                  {[
-                                    { value: 0, label: 'Nenhum' },
-                                    { value: 1, label: 'Visualizar' },
-                                    { value: 2, label: 'Acesso Total' },
-                                  ].map(opt => (
-                                    <label key={opt.value} className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
-                                      <input
-                                        type="radio"
-                                        name={`perm-${module.id}`}
-                                        value={opt.value}
-                                        checked={(teacherForm.permissions?.[module.id] || 0) === opt.value}
-                                        onChange={() => {
-                                          const newPerms = { ...teacherForm.permissions, [module.id]: opt.value as any };
-                                          // Sync allowedTabs for backward compatibility if needed, though permissions should be primary
-                                          const newTabs = opt.value > 0 
-                                            ? Array.from(new Set([...teacherForm.allowedTabs, module.id]))
-                                            : teacherForm.allowedTabs.filter(t => t !== module.id);
-                                          setTeacherForm({ ...teacherForm, permissions: newPerms, allowedTabs: newTabs });
-                                        }}
-                                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500"
-                                      />
-                                      {opt.label}
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
+                              { id: 'system', label: 'Sistema' },
+                            ].map(tab => (
+                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
+                                <input 
+                                  type="checkbox"
+                                  checked={teacherForm.allowedTabs.includes(tab.id)}
+                                  onChange={(e) => {
+                                    const tabs = e.target.checked 
+                                      ? [...teacherForm.allowedTabs, tab.id]
+                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
+                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                {tab.label}
+                              </label>
                             ))}
                           </div>
                         </div>
@@ -3367,7 +3245,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
-                    {editingTeacher ? 'Atualizar Membro da Equipe' : 'Salvar Membro da Equipe'}
+                    {editingTeacher ? 'Atualizar Colaborador' : 'Salvar Colaborador'}
                   </button>
                 </form>
               )}
@@ -3478,7 +3356,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Membro Responsável</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Colaborador Responsável</label>
                     <select
                       value={classForm.teacherId}
                       onChange={(e) => setClassForm({ ...classForm, teacherId: e.target.value })}
@@ -3602,7 +3480,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Membro da Equipe'})
+                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Colaborador'})
                 </h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <XCircle className="w-5 h-5 text-slate-500" />
