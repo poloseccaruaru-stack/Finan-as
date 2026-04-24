@@ -637,12 +637,13 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'teacher' as 'admin' | 'coordinator' | 'teacher',
+    role: 'teacher' as 'admin' | 'coordinator' | 'teacher' | 'professor',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
     academicBackground: '',
-    theologicalBackground: ''
+    theologicalBackground: '',
+    permissions: {} as Record<string, number>
   });
 
   // Sync forms with selectedSchoolYear
@@ -856,6 +857,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
     const actuallySaveTeacher = async () => {
       try {
+        const defaultPermsDoc = await getDoc(doc(db, 'config', 'permissions'));
+        const defaultPerms = defaultPermsDoc.exists() ? defaultPermsDoc.data() : {};
+        
         if (editingTeacher) {
           await updateDoc(doc(db, 'users', editingTeacher.id), {
             name: teacherForm.name || "",
@@ -872,6 +876,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
             role: teacherForm.role || 'teacher',
+            permissions: teacherForm.permissions || (defaultPerms[teacherForm.role] || {}),
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -897,6 +902,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: teacherForm.classIds || [],
             allowedTabs: teacherForm.allowedTabs || [],
+            permissions: teacherForm.permissions && Object.keys(teacherForm.permissions).length > 0 
+              ? teacherForm.permissions 
+              : (defaultPerms[teacherForm.role] || {}),
             registrationNumber,
             role: teacherForm.role || 'teacher',
             firstLogin: true,
@@ -906,7 +914,25 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
         setShowForm(false);
         setEditingTeacher(null);
-        setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], address: '' });
+        setTeacherForm({ 
+          name: '', 
+          email: '', 
+          login: '', 
+          password: '', 
+          confirmPassword: '', 
+          contact: '', 
+          profession: '', 
+          startDateEBD: '', 
+          birthDate: '', 
+          generalProfile: '', 
+          academicBackground: '', 
+          theologicalBackground: '', 
+          role: 'teacher', 
+          classIds: [], 
+          allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], 
+          address: '',
+          permissions: {}
+        });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
       }
@@ -932,6 +958,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       role: teacher.role || 'teacher',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || ['dashboard', 'academic', 'projects', 'reports'],
+      permissions: teacher.permissions || {},
       password: teacher.password || '',
       confirmPassword: teacher.password || ''
     });
@@ -1524,7 +1551,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
-                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] });
+                    setTeacherForm({ name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', address: '', academicBackground: '', theologicalBackground: '', generalProfile: '', role: 'teacher', classIds: [], allowedTabs: ['dashboard', 'academic', 'projects', 'reports'], permissions: {} });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
                     setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
@@ -3017,17 +3044,20 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher';
+                              const newRole = e.target.value as 'admin' | 'coordinator' | 'teacher' | 'professor';
                               let allowedTabs = teacherForm.allowedTabs;
                               if (newRole === 'admin') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'meetings', 'comunicados', 'documentos'];
                               } else if (newRole === 'coordinator') {
-                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings'];
+                                allowedTabs = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings', 'comunicados', 'documentos'];
+                              } else if (newRole === 'professor') {
+                                allowedTabs = ['dashboard', 'academic', 'attendance', 'students', 'classes', 'reports'];
                               }
                               setTeacherForm({ ...teacherForm, role: newRole, allowedTabs });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
+                            <option value="professor">Professor (Acesso por Turma)</option>
                             <option value="teacher">Membro da Equipe (Acesso Parcial)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
@@ -3183,61 +3213,57 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
-                        <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-64 overflow-y-auto">
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Módulos Principais</p>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Permissões de Módulo (Específicas)</label>
+                        <div className="p-4 border border-slate-200 rounded-xl bg-slate-50 space-y-4">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Personalizar Acesso</p>
+                          <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                             {[
                               { id: 'dashboard', label: 'Dashboard' },
-                              { id: 'academic', label: 'Acadêmico' },
-                              { id: 'projects', label: 'Projetos' },
-                              { id: 'finance', label: 'Financeiro' },
-                              { id: 'reports', label: 'Relatórios' },
-                            ].map(tab => (
-                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
-                                <input 
-                                  type="checkbox"
-                                  checked={teacherForm.allowedTabs.includes(tab.id)}
-                                  onChange={(e) => {
-                                    const tabs = e.target.checked 
-                                      ? [...teacherForm.allowedTabs, tab.id]
-                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
-                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
-                                  }}
-                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                />
-                                {tab.label}
-                              </label>
-                            ))}
-                          </div>
-                          <div className="space-y-2">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
-                            {[
                               { id: 'students', label: 'Alunos' },
                               { id: 'teachers', label: 'Equipe EBD' },
                               { id: 'classes', label: 'Turmas' },
                               { id: 'attendance', label: 'Chamada' },
                               { id: 'planning', label: 'Planejamento' },
+                              { id: 'projects', label: 'Projetos' },
+                              { id: 'finance', label: 'Financeiro' },
+                              { id: 'reports', label: 'Relatórios' },
+                              { id: 'meetings', label: 'Reuniões' },
                               { id: 'schoolYear', label: 'Ano Letivo' },
                               { id: 'regimento', label: 'Regimento' },
                               { id: 'calendar', label: 'Calendário' },
                               { id: 'organogram', label: 'Organograma' },
-                              { id: 'system', label: 'Sistema' },
-                            ].map(tab => (
-                              <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
-                                <input 
-                                  type="checkbox"
-                                  checked={teacherForm.allowedTabs.includes(tab.id)}
-                                  onChange={(e) => {
-                                    const tabs = e.target.checked 
-                                      ? [...teacherForm.allowedTabs, tab.id]
-                                      : teacherForm.allowedTabs.filter(id => id !== tab.id);
-                                    setTeacherForm({ ...teacherForm, allowedTabs: tabs });
-                                  }}
-                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                />
-                                {tab.label}
-                              </label>
+                              { id: 'comunicados', label: 'Comunicados' },
+                              { id: 'documentos', label: 'Documentos Gerais' },
+                            ].map(module => (
+                              <div key={module.id} className="flex flex-col gap-1 border-b border-slate-200 pb-2 last:border-0">
+                                <span className="text-xs font-bold text-slate-700">{module.label}</span>
+                                <div className="flex items-center gap-4">
+                                  {[
+                                    { value: 0, label: 'Nenhum' },
+                                    { value: 1, label: 'Visualizar' },
+                                    { value: 2, label: 'Acesso Total' },
+                                  ].map(opt => (
+                                    <label key={opt.value} className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name={`perm-${module.id}`}
+                                        value={opt.value}
+                                        checked={(teacherForm.permissions?.[module.id] || 0) === opt.value}
+                                        onChange={() => {
+                                          const newPerms = { ...teacherForm.permissions, [module.id]: opt.value as any };
+                                          // Sync allowedTabs for backward compatibility if needed, though permissions should be primary
+                                          const newTabs = opt.value > 0 
+                                            ? Array.from(new Set([...teacherForm.allowedTabs, module.id]))
+                                            : teacherForm.allowedTabs.filter(t => t !== module.id);
+                                          setTeacherForm({ ...teacherForm, permissions: newPerms, allowedTabs: newTabs });
+                                        }}
+                                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      {opt.label}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>

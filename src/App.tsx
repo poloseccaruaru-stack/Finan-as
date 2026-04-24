@@ -267,8 +267,10 @@ export default function App() {
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
         if (isAdmin || isCoordinator) return true;
-        // Teachers can only see sub-items they are allowed to
-        return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
+        if (userData.permissions && userData.permissions[sub.id] !== undefined) {
+          return userData.permissions[sub.id] > 0;
+        }
+        return userData.allowedTabs?.includes(sub.id);
       })
     },
     { 
@@ -285,6 +287,9 @@ export default function App() {
       ].filter(sub => {
         if (isAdmin) return true;
         if (isCoordinator) return sub.id !== 'system';
+        if (userData.permissions && userData.permissions[sub.id] !== undefined) {
+          return userData.permissions[sub.id] > 0;
+        }
         return userData.allowedTabs?.includes(sub.id);
       })
     },
@@ -293,7 +298,9 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
   ].filter(item => {
     if (isAdmin || isCoordinator) return true;
-    // For non-admins, check allowedTabs
+    if (userData.permissions && userData.permissions[item.id] !== undefined) {
+      return userData.permissions[item.id] > 0;
+    }
     return userData.allowedTabs?.includes(item.id);
   });
 
