@@ -685,7 +685,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
   startDateEBD: '',
   birthDate: '',
   generalProfile: '',
-  role: 'professor',
+  role: '',
   classIds: [] as string[],
   allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
   address: '',
@@ -946,7 +946,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
         let finalTeacherId = editingTeacher?.id || "";
         
         if (editingTeacher) {
-          await updateDoc(doc(db, 'users', editingTeacher.id), {
+          const updateData: any = {
             name: teacherForm.name || "",
             email: teacherForm.email || "",
             login: teacherForm.login || teacherForm.email || "",
@@ -961,9 +961,14 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
             classIds: classIds,
             allowedTabs: allowedTabs,
             role: teacherForm.role || 'professor',
-            password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
-          });
+          };
+
+          if (teacherForm.password && teacherForm.password.trim() !== "") {
+            updateData.password = teacherForm.password;
+          }
+
+          await updateDoc(doc(db, 'users', editingTeacher.id), updateData);
         } else {
           // Create Auth User
           const userCredential = await createUserWithEmailAndPassword(auth, teacherForm.email, teacherForm.password);

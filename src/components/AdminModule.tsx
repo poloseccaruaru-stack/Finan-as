@@ -119,10 +119,10 @@ export default function AdminModule({ user, subTab }: Props) {
 
   const showAdminConfirm = (title: string, message: string, onConfirm: () => void) => {
     showConfirm(title, message, (password) => {
-      if (password?.toUpperCase() === 'SISTEMA') {
+      if (password?.toLowerCase() === 'sistema') {
         onConfirm();
       } else {
-        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "SISTEMA" é obrigatória para esta ação.');
+        showAlert('Senha Incorreta', 'Operação cancelada. A senha do administrador "sistema" é obrigatória para esta ação.');
       }
     }, true);
   };
@@ -813,13 +813,22 @@ export default function AdminModule({ user, subTab }: Props) {
               </div>
 
               {profiles.filter(p => p.name.toLowerCase() !== 'administrador').map(profile => (
-                <div key={profile.id} className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all group flex flex-col justify-between">
+                <div 
+                  key={profile.id} 
+                  onClick={() => {
+                    setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs });
+                    setEditingProfileId(profile.id);
+                    setShowProfileForm(true);
+                  }}
+                  className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all group flex flex-col justify-between cursor-pointer"
+                >
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-bold text-slate-900 uppercase">{profile.name}</h4>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs });
                             setEditingProfileId(profile.id);
                             setShowProfileForm(true);
@@ -829,7 +838,10 @@ export default function AdminModule({ user, subTab }: Props) {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleDeleteProfile(profile)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteProfile(profile)
+                          }}
                           className="p-1 text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1615,7 +1627,28 @@ export default function AdminModule({ user, subTab }: Props) {
                 </div>
                 
                 <div className="space-y-3">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Definir Acessos (Módulos e Sub-áreas)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Definir Acessos (Módulos e Sub-áreas)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allTabs = [
+                          'dashboard', 'academic', 'students', 'teachers', 'classes', 'attendance',
+                          'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
+                          'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+                        ];
+                        const current = profileForm.allowedTabs || [];
+                        if (current.length === allTabs.length) {
+                          setProfileForm({ ...profileForm, allowedTabs: [] });
+                        } else {
+                          setProfileForm({ ...profileForm, allowedTabs: allTabs });
+                        }
+                      }}
+                      className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase underline"
+                    >
+                      {profileForm.allowedTabs?.length === 18 ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 max-h-[300px] overflow-y-auto">
                     {[
                       { id: 'dashboard', label: 'Dashboard' },
