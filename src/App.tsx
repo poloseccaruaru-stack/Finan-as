@@ -144,7 +144,7 @@ export default function App() {
                 email: user.email || '',
                 contact: '',
                 classIds: [],
-                role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'coordinator',
+                role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'professor',
                 firstLogin: false,
                 createdAt: new Date().toISOString(),
                 allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
@@ -159,7 +159,7 @@ export default function App() {
               id: user.uid,
               name: user.displayName || 'Usuário',
               email: user.email || '',
-              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'coordinator',
+              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'professor',
               classIds: [],
               allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
             } as any);
@@ -235,8 +235,8 @@ export default function App() {
   }
 
   const isAdmin = userData.role === 'admin';
-  const isCoordinator = userData.role === 'coordinator';
-  // Standard roles use specific IDs, others are dynamic
+  const isCoordinator = userData.role === 'coordinator' || userData.role === 'professor_ebd';
+  const isProfessor = userData.role === 'professor';
 
   // Handle Detail Report View - Standalone mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -273,6 +273,10 @@ export default function App() {
           return userData.allowedTabs.includes(sub.id);
         }
         if (isCoordinator) return true;
+        if (isProfessor) {
+          const excluded = ['students', 'teachers', 'classes', 'meetings'];
+          return !excluded.includes(sub.id);
+        }
         return true;
       })
     },
@@ -294,6 +298,7 @@ export default function App() {
         }
         if (isAdmin) return true;
         if (isCoordinator) return sub.id !== 'system';
+        if (isProfessor) return sub.id !== 'system';
         return true;
       })
     },
@@ -308,6 +313,10 @@ export default function App() {
     }
     if (isAdmin) return true;
     if (isCoordinator) return true;
+    if (isProfessor) {
+      const excluded = ['finance', 'reports'];
+      return !excluded.includes(item.id);
+    }
     return true;
   });
 
@@ -321,6 +330,12 @@ export default function App() {
     
     if (isAdmin) return true;
     if (isCoordinator) return tabId !== 'system';
+    
+    if (isProfessor) {
+      if (['finance', 'reports', 'meetings'].includes(tabId)) return false;
+      if (['students', 'teachers', 'classes', 'system'].includes(tabId)) return false;
+      return true;
+    }
     
     return true;
   };
@@ -484,7 +499,7 @@ export default function App() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{userData.name}</p>
                 <p className="text-xs text-slate-500 truncate">
-                  {isAdmin ? 'Administrador' : userData.role === 'coordinator' ? 'Coordenador' : 'Perfil Externo'}
+                  {isAdmin ? 'Administrador' : userData.role === 'coordinator' ? 'Coordenador' : userData.role === 'professor_ebd' ? 'Professor EBD' : 'Professor'}
                 </p>
               </div>
             )}
@@ -512,7 +527,7 @@ export default function App() {
                 className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-xl font-bold hover:bg-amber-200 transition-all"
               >
                 <X className="w-4 h-4" />
-                Sair do Modo Visualização
+                Sair do Modo Professor
               </button>
             )}
             <span className="text-sm text-slate-500 hidden md:block">{new Date().toLocaleDateString('pt-BR', { dateStyle: 'full' })}</span>

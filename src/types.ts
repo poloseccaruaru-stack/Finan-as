@@ -27,7 +27,7 @@ export interface Teacher {
   contact: string;
   birthDate?: string;
   classIds: string[];
-  role: string;
+  role: 'admin' | 'coordinator' | 'professor' | 'professor_ebd';
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;
@@ -40,13 +40,6 @@ export interface Teacher {
   address?: string;
   academicBackground?: string;
   theologicalBackground?: string;
-}
-
-export interface Role {
-  id: string;
-  name: string;
-  allowedTabs: string[];
-  createdAt: string;
 }
 
 export interface Class {
