@@ -58,7 +58,7 @@ import BirthdayBanner from './components/BirthdayBanner';
 import { cn } from './lib/utils';
 import { Teacher, DashboardConfig } from './types';
 
-type TabId = 'dashboard' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings';
+type TabId = 'dashboard' | 'academic' | 'admin' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -319,6 +319,87 @@ export default function App() {
     return true;
   });
 
+  const hasAccess = (tabId: string): boolean => {
+    // Check if the tab (or its parent) is in allowedTabs
+    if (userData.allowedTabs && userData.allowedTabs.length > 0) {
+      // For sub-items, we need to check if they are in allowedTabs as well
+      // But based on App structure, we check the tabId directly
+      return userData.allowedTabs.includes(tabId);
+    }
+    
+    if (isAdmin) return true;
+    if (isCoordinator) return tabId !== 'system';
+    
+    if (isProfessor) {
+      if (['finance', 'reports', 'meetings'].includes(tabId)) return false;
+      if (['students', 'teachers', 'classes', 'system'].includes(tabId)) return false;
+      return true;
+    }
+    
+    return true;
+  };
+
+  const AccessDenied = () => (
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+      <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mb-6">
+        <AlertCircle className="w-10 h-10 text-rose-600" />
+      </div>
+      <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight mb-2">Acesso Negado</h2>
+      <p className="text-slate-500 max-w-md mx-auto">
+        Você não tem permissão para acessar este módulo. Se você acredita que isso deve ser diferente, entre em contato com o administrador do sistema.
+      </p>
+      <button 
+        onClick={() => setActiveTab('dashboard')}
+        className="mt-8 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+      >
+        Voltar para o Dashboard
+      </button>
+    </div>
+  );
+
+  const renderContent = () => {
+    if (!hasAccess(activeTab)) {
+      return <AccessDenied />;
+    }
+
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />;
+      case 'academic': // This handles nested subtabs as well if they share the module
+      case 'students':
+      case 'teachers':
+      case 'classes':
+      case 'attendance':
+      case 'schoolYear':
+      case 'meetings':
+        return (
+          <AcademicModule 
+            user={userData} 
+            subTab={activeTab === 'academic' ? 'students' : activeTab as any} 
+            selectedSchoolYear={selectedSchoolYear} 
+            onImpersonate={handleImpersonate}
+          />
+        );
+      case 'regimento':
+      case 'calendar':
+      case 'system':
+      case 'organogram':
+      case 'comunicados':
+      case 'documentos':
+        return <AdminModule user={userData} subTab={activeTab as any} />;
+      case 'projects':
+        return <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+      case 'finance':
+        return <FinanceModule user={userData} />;
+      case 'reports':
+        return <ReportModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+      case 'planning':
+        return <PlanningModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+      default:
+        return <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
         {/* Sidebar */}
@@ -473,22 +554,7 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />}
-              {(['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'meetings'].includes(activeTab)) && (
-                <AcademicModule 
-                  user={userData} 
-                  subTab={activeTab as any} 
-                  selectedSchoolYear={selectedSchoolYear} 
-                  onImpersonate={handleImpersonate}
-                />
-              )}
-              {(['regimento', 'calendar', 'system', 'organogram', 'comunicados', 'documentos'].includes(activeTab)) && (
-                <AdminModule user={userData} subTab={activeTab as any} />
-              )}
-              {activeTab === 'projects' && <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
-              {activeTab === 'finance' && <FinanceModule user={userData} />}
-              {activeTab === 'reports' && <ReportModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
-              {activeTab === 'planning' && <PlanningModule user={userData} selectedSchoolYear={selectedSchoolYear} />}
+              {renderContent()}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -529,5 +595,6 @@ export default function App() {
         )}
       </div>
     </div>
+
   );
 }

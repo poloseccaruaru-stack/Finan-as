@@ -101,10 +101,7 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
     : (isAdmin || isCoordinator);
 
   useEffect(() => {
-    const isProfessor = user.role === 'professor';
-    const q = (hasEditAccess || isProfessor) 
-      ? collection(db, 'projects')
-      : query(collection(db, 'projects'), where('teacherIds', 'array-contains', user.id));
+    const q = collection(db, 'projects');
 
     const unsub = onSnapshot(q, (snap) => {
       const allProjects = snap.docs.map(d => ({ id: d.id, ...d.data() } as Project));

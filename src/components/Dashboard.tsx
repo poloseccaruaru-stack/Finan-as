@@ -263,9 +263,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       (err) => handleFirestoreError(err, OperationType.LIST, 'preDefinedResolutions')
     );
 
-    const studentsQuery = hasFullAccess 
-      ? collection(db, 'students') 
-      : query(collection(db, 'students'), where('classId', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+    const studentsQuery = collection(db, 'students');
     
     const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
@@ -275,20 +273,15 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
-    const classesQuery = hasFullAccess
-      ? collection(db, 'classes')
-      : query(collection(db, 'classes'), where('id', 'in', (classIds && classIds.length > 0) ? classIds : ['none']));
+    const classesQuery = collection(db, 'classes');
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'classes'));
 
-    let unsubTransactions = () => {};
-    if (hasFinanceAccess) {
-      unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
-        setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'transactions'));
-    }
+    const unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
+      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'transactions'));
 
     const unsubProjects = onSnapshot(collection(db, 'projects'), (snap) => {
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));

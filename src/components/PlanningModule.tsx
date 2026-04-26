@@ -122,9 +122,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
 
   useEffect(() => {
     const classIds = user.classIds || [];
-    const classesQuery = hasFullAccess
-      ? collection(db, 'classes')
-      : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
+    const classesQuery = collection(db, 'classes');
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       const classesData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Class));
@@ -139,12 +137,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
       setLoading(false);
     });
 
-    const planningQuery = hasFullAccess 
-      ? collection(db, 'planning')
-      : query(
-          collection(db, 'planning'),
-          where('teacherId', '==', user.id)
-        );
+    const planningQuery = collection(db, 'planning');
 
     const unsubPlanning = onSnapshot(planningQuery, (snap) => {
       setPlannings(snap.docs.map(d => {

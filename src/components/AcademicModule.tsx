@@ -437,9 +437,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       return;
     }
 
-    const studentsQuery = hasFullAccess 
-      ? query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear))
-      : query(collection(db, 'students'), where('classId', 'in', classIds.length > 0 ? classIds : ['none']));
+    const studentsQuery = query(collection(db, 'students'), where('schoolYear', '==', selectedSchoolYear));
 
     const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
@@ -450,9 +448,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setLoading(false);
     });
 
-    const classesQuery = hasFullAccess
-      ? collection(db, 'classes')
-      : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
+    const classesQuery = collection(db, 'classes');
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
