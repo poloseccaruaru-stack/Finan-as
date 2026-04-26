@@ -27,7 +27,7 @@ export interface Teacher {
   contact: string;
   birthDate?: string;
   classIds: string[];
-  role: 'admin' | 'coordinator' | 'professor';
+  role: 'admin' | 'coordinator' | 'professor' | 'professor_ebd';
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;
@@ -47,6 +47,7 @@ export interface Class {
   name: string;
   ageRange: string;
   teacherId?: string;
+  teacherIds?: string[];
   studentIds: string[];
   studentOrder?: string[];
   isOrderFixed?: boolean;
@@ -198,6 +199,7 @@ export interface DashboardConfig {
   colabBirthdayEndDate?: string;
   layout?: string[];
   eventBarPosition: 'top' | 'bottom';
+  eventBarVisibility?: 'both' | 'sidebar' | 'bottom' | 'none';
 }
 
 export interface AbsenceResolution {

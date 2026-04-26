@@ -414,10 +414,11 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
+  const isProfessorEBD = user.role === 'professor_ebd';
   const isProfessor = user.role === 'professor';
   const hasFullAccess = user.allowedTabs 
     ? (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))
-    : (isAdmin || isCoordinator);
+    : (isAdmin || isCoordinator || isProfessorEBD);
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -601,6 +602,15 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     return classes.filter(c => c.schoolYear === selectedSchoolYear);
   }, [classes, selectedSchoolYear]);
 
+  const filteredClassesForAttendance = useMemo(() => {
+    if (isAdmin || isCoordinator) return filteredClasses;
+    return filteredClasses.filter(c => 
+      c.teacherIds?.includes(user.id) || 
+      c.teacherId === user.id ||
+      user.classIds?.includes(c.id)
+    );
+  }, [filteredClasses, isAdmin, isCoordinator, user.id, user.classIds]);
+
   // Forms State
   const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
   const [selectedOrderStudentId, setSelectedOrderStudentId] = useState<string | null>(null);
@@ -647,7 +657,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'professor' as 'admin' | 'coordinator' | 'professor',
+    role: 'professor' as 'admin' | 'coordinator' | 'professor' | 'professor_ebd',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
@@ -700,6 +710,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     name: '',
     ageRange: '',
     teacherId: '',
+    teacherIds: [] as string[],
     schoolYear: selectedSchoolYear,
     gradeLevel: 0,
     isFinalGrade: false
@@ -891,7 +902,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     const actuallySaveTeacher = async () => {
       try {
         // Convert structured state back to arrays for persistence
-        const classIds = Object.keys(teacherForm.turmas).filter(id => teacherForm.turmas[id]);
+        const classIds = teacherForm.classIds.filter(id => id !== "");
         
         const allowedTabsSet = new Set<string>();
         Object.keys(teacherForm.modulos).forEach(m => {
@@ -902,6 +913,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         });
         const allowedTabs = Array.from(allowedTabsSet);
 
+        const currentTeacherId = editingTeacher ? editingTeacher.id : "";
+        
+        let finalTeacherId = editingTeacher?.id || "";
+        
         if (editingTeacher) {
           await updateDoc(doc(db, 'users', editingTeacher.id), {
             name: teacherForm.name || "",
@@ -925,6 +940,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
           // Create Auth User
           const userCredential = await createUserWithEmailAndPassword(auth, teacherForm.email, teacherForm.password);
           const newUser = userCredential.user;
+          finalTeacherId = newUser.uid;
 
           const registrationNumber = await generateRegistrationNumber('users');
           // Create User Doc
@@ -949,6 +965,28 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             createdAt: new Date().toISOString()
           });
         }
+
+        // Bidirectional Sync: Update Classes to include/exclude this teacher
+        // (This is the requested sync logic for "Turma Responsável")
+        const classUpdatePromises = classes.map(async (cls) => {
+          const isLinked = classIds.includes(cls.id);
+          const currentTeacherIds = cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []);
+          
+          if (isLinked) {
+            if (!currentTeacherIds.includes(finalTeacherId)) {
+              await updateDoc(doc(db, 'classes', cls.id), {
+                teacherIds: [...currentTeacherIds, finalTeacherId]
+              });
+            }
+          } else {
+            if (currentTeacherIds.includes(finalTeacherId)) {
+              await updateDoc(doc(db, 'classes', cls.id), {
+                teacherIds: currentTeacherIds.filter(id => id !== finalTeacherId)
+              });
+            }
+          }
+        });
+        await Promise.all(classUpdatePromises);
 
         setShowForm(false);
         setEditingTeacher(null);
@@ -1027,28 +1065,52 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const teacherIds = classForm.teacherIds.filter(id => id !== "");
       const sanitizedForm = {
         name: classForm.name || "",
         ageRange: classForm.ageRange || "",
-        teacherId: classForm.teacherId || "",
+        teacherId: teacherIds[0] || "",
+        teacherIds: teacherIds,
         schoolYear: classForm.schoolYear || selectedSchoolYear,
         gradeLevel: Number(classForm.gradeLevel) || 0,
         isFinalGrade: classForm.isFinalGrade || false,
         status: 'ATIVA' as const
       };
 
-      if (editingClass) {
-        await updateDoc(doc(db, 'classes', editingClass.id), sanitizedForm);
-      } else {
-        await addDoc(collection(db, 'classes'), {
+      // Bidirectional Sync: Update Teachers to include/exclude this class
+      // Actually, it's easier to just handle it on save.
+      if (!editingClass) {
+        const newDoc = await addDoc(collection(db, 'classes'), {
           ...sanitizedForm,
           studentIds: [],
           createdAt: new Date().toISOString()
         });
+        // Sync for new class
+        for (const tid of teacherIds) {
+          const t = teachers.find(x => x.id === tid);
+          if (t && !(t.classIds || []).includes(newDoc.id)) {
+            await updateDoc(doc(db, 'users', tid), {
+              classIds: [...(t.classIds || []), newDoc.id]
+            });
+          }
+        }
+      } else {
+        await updateDoc(doc(db, 'classes', editingClass.id), sanitizedForm);
+        // Sync for edited class
+        for (const t of teachers) {
+          const shouldHave = teacherIds.includes(t.id);
+          const has = (t.classIds || []).includes(editingClass.id);
+          if (shouldHave && !has) {
+            await updateDoc(doc(db, 'users', t.id), { classIds: [...(t.classIds || []), editingClass.id] });
+          } else if (!shouldHave && has) {
+            await updateDoc(doc(db, 'users', t.id), { classIds: (t.classIds || []).filter(id => id !== editingClass.id) });
+          }
+        }
       }
+
       setShowForm(false);
       setEditingClass(null);
-      setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+      setClassForm({ name: '', ageRange: '', teacherId: '', teacherIds: [], schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
     } catch (err) {
       handleFirestoreError(err, editingClass ? OperationType.UPDATE : OperationType.CREATE, 'classes');
     }
@@ -1064,6 +1126,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       name: cls.name,
       ageRange: cls.ageRange,
       teacherId: cls.teacherId || '',
+      teacherIds: cls.teacherIds || (cls.teacherId ? [cls.teacherId] : []),
       schoolYear: cls.schoolYear || selectedSchoolYear,
       gradeLevel: cls.gradeLevel || 0,
       isFinalGrade: cls.isFinalGrade || false
@@ -1633,7 +1696,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
-                    setClassForm({ name: '', ageRange: '', teacherId: '', schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
+                    setClassForm({ name: '', ageRange: '', teacherId: '', teacherIds: [], schoolYear: selectedSchoolYear, gradeLevel: 0, isFinalGrade: false });
                   }
                   setShowForm(true);
                 }}
@@ -2007,7 +2070,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
                   <option value="">Selecione uma turma...</option>
-                  {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {filteredClassesForAttendance.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="flex-1 space-y-1">
@@ -3131,38 +3194,36 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin' | 'coordinator' | 'professor';
+                              const newRole = e.target.value as 'admin'|'coordinator'|'professor'|'professor_ebd';
                               let allowedTabsList: string[] = [];
                               const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
                               const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                               
                               if (newRole === 'admin') {
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
-                              } else if (newRole === 'coordinator') {
+                              } else if (newRole === 'coordinator' || newRole === 'professor_ebd') {
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
                               } else if (newRole === 'professor') {
-                                // User requested PROFESSOR (ACESSO TOTAL) as well
                                 allowedTabsList = [...allModules, ...allSubAreas].filter(tab => tab !== 'system');
                               }
                               
-                              // Update organized objects based on the standard role lists
                               const modulos = { ...teacherForm.modulos };
                               Object.keys(modulos).forEach(k => modulos[k] = allowedTabsList.includes(k));
                               
                               const subAreas = { ...teacherForm.subAreas };
                               Object.keys(subAreas).forEach(k => subAreas[k] = allowedTabsList.includes(k));
 
-                              // Also auto-link all classes for Admin/Coordinator if it's a new teacher
-                              const turmas = { ...teacherForm.turmas };
+                              let turmasList = [...teacherForm.classIds];
                               if (newRole === 'admin' || newRole === 'coordinator') {
-                                classes.forEach(c => turmas[c.id] = true);
+                                turmasList = classes.map(c => c.id);
                               }
                               
-                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, turmas });
+                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, classIds: turmasList });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
                             <option value="professor">Professor (Acesso Restrito)</option>
+                            <option value="professor_ebd">Professor EBD (Acesso Total exceto Sistema)</option>
                             <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
                           </select>
@@ -3296,26 +3357,42 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     {/* Right Column: Permissions & Classes */}
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Vincular Turmas</label>
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-3 border border-slate-200 rounded-xl bg-slate-50">
-                          {classes.map(c => (
-                            <label key={c.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
-                              <input 
-                                type="checkbox"
-                                checked={!!teacherForm.turmas[c.id]}
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Turma Responsável</label>
+                          <button 
+                            type="button"
+                            onClick={() => setTeacherForm({ ...teacherForm, classIds: [...teacherForm.classIds, ""] })}
+                            className="p-1 hover:bg-indigo-50 text-indigo-600 rounded-lg transition-all"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2 p-3 border border-slate-200 rounded-xl bg-slate-50 max-h-48 overflow-y-auto">
+                          {(teacherForm.classIds.length > 0 ? teacherForm.classIds : [""]).map((cid, idx) => (
+                            <div key={idx} className="flex gap-2">
+                              <select
+                                value={cid}
                                 onChange={(e) => {
-                                  setTeacherForm({
-                                    ...teacherForm,
-                                    turmas: {
-                                      ...teacherForm.turmas,
-                                      [c.id]: e.target.checked
-                                    }
-                                  });
+                                  const newIds = [...(teacherForm.classIds.length > 0 ? teacherForm.classIds : [""])];
+                                  newIds[idx] = e.target.value;
+                                  setTeacherForm({ ...teacherForm, classIds: newIds });
                                 }}
-                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                              />
-                              {c.name}
-                            </label>
+                                className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              >
+                                <option value="">Selecione a turma...</option>
+                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  const newIds = teacherForm.classIds.filter((_, i) => i !== idx);
+                                  setTeacherForm({ ...teacherForm, classIds: newIds });
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -3510,16 +3587,43 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                       </select>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Membro da Equipe Responsável</label>
-                    <select
-                      value={classForm.teacherId}
-                      onChange={(e) => setClassForm({ ...classForm, teacherId: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">Selecione...</option>
-                      {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Membros da Equipe Responsáveis</label>
+                      <button 
+                        type="button"
+                        onClick={() => setClassForm({ ...classForm, teacherIds: [...classForm.teacherIds, ""] })}
+                        className="p-1 hover:bg-indigo-50 text-indigo-600 rounded-lg transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {(classForm.teacherIds.length > 0 ? classForm.teacherIds : [""]).map((tid, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <select
+                          value={tid}
+                          onChange={(e) => {
+                            const newIds = [...(classForm.teacherIds.length > 0 ? classForm.teacherIds : [""])];
+                            newIds[idx] = e.target.value;
+                            setClassForm({ ...classForm, teacherIds: newIds });
+                          }}
+                          className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">Selecione...</option>
+                          {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const newIds = classForm.teacherIds.filter((_, i) => i !== idx);
+                            setClassForm({ ...classForm, teacherIds: newIds });
+                          }}
+                          className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -3920,7 +4024,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold"
                   >
                     <option value="all">Todas as Turmas</option>
-                    {filteredClasses.map(c => (
+                    {filteredClassesForAttendance.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>

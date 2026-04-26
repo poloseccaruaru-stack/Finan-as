@@ -55,6 +55,7 @@ import OrganogramModule from './components/OrganogramModule';
 import LoginForm from './components/LoginForm';
 import AISidebarSearch from './components/AISidebarSearch';
 import BirthdayBanner from './components/BirthdayBanner';
+import HorizontalEventTicker from './components/HorizontalEventTicker';
 import { cn } from './lib/utils';
 import { Teacher, DashboardConfig } from './types';
 
@@ -234,7 +235,7 @@ export default function App() {
   }
 
   const isAdmin = userData.role === 'admin';
-  const isCoordinator = userData.role === 'coordinator';
+  const isCoordinator = userData.role === 'coordinator' || userData.role === 'professor_ebd';
   const isProfessor = userData.role === 'professor';
 
   // Handle Detail Report View - Standalone mode
@@ -498,7 +499,7 @@ export default function App() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{userData.name}</p>
                 <p className="text-xs text-slate-500 truncate">
-                  {isAdmin ? 'Administrador' : isCoordinator ? 'Coordenador' : 'Professor'}
+                  {isAdmin ? 'Administrador' : userData.role === 'coordinator' ? 'Coordenador' : userData.role === 'professor_ebd' ? 'Professor EBD' : 'Professor'}
                 </p>
               </div>
             )}
@@ -540,8 +541,13 @@ export default function App() {
 
         {/* Events Bar - Positioned based on config */}
         {userData && config?.eventBarPosition === 'top' && (
-          <div className="px-4 md:px-8 pt-4">
-            <SidebarEvents user={userData} compact />
+          <div className="px-4 md:px-8 pt-4 space-y-4">
+            {(config?.eventBarVisibility === 'both' || config?.eventBarVisibility === 'sidebar' || !config?.eventBarVisibility) && (
+              <SidebarEvents user={userData} compact />
+            )}
+            {(config?.eventBarVisibility === 'both' || config?.eventBarVisibility === 'bottom') && (
+              <HorizontalEventTicker config={config} />
+            )}
           </div>
         )}
 
@@ -561,8 +567,13 @@ export default function App() {
         
         {/* Compact Events at Bottom (Default/Config) */}
         {userData && (!config || config?.eventBarPosition === 'bottom') && (
-          <div className="px-4 md:px-8 pb-4">
-            <SidebarEvents user={userData} compact />
+          <div className="px-4 md:px-8 pb-4 space-y-4">
+            {(config?.eventBarVisibility === 'both' || config?.eventBarVisibility === 'sidebar' || !config?.eventBarVisibility) && (
+              <SidebarEvents user={userData} compact />
+            )}
+            {(config?.eventBarVisibility === 'both' || config?.eventBarVisibility === 'bottom') && (
+              <HorizontalEventTicker config={config} />
+            )}
           </div>
         )}
 

@@ -49,9 +49,10 @@ export default function SidebarEvents({ user, compact }: Props) {
       (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard')
     );
 
+    const todayStr = safeFormat(new Date(), 'yyyy-MM-dd') || "";
     const q = query(
       collection(db, 'calendarEvents'),
-      where('date', '>=', startOfDay(new Date()).toISOString()),
+      where('date', '>=', todayStr),
       orderBy('date', 'asc'),
       limit(compact ? 8 : 20)
     );
@@ -166,12 +167,12 @@ export default function SidebarEvents({ user, compact }: Props) {
                 onClick={() => setSelectedEvent(event)}
                 className={cn(
                   "flex items-center gap-3 p-3 rounded-xl border transition-all hover:border-indigo-200 hover:shadow-sm text-left group",
-                  isToday(new Date(event.date)) ? "bg-indigo-50 border-indigo-100" : "bg-white border-slate-100"
+                  isToday(new Date(event.date)) ? "bg-indigo-50 border-indigo-100 animate-pulse-slow shadow-md ring-1 ring-indigo-500/20" : "bg-white border-slate-100"
                 )}
               >
                 <div className={cn(
                   "w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 font-bold",
-                  isToday(new Date(event.date)) ? "bg-indigo-600 text-white" : "bg-slate-50 text-slate-500"
+                  isToday(new Date(event.date)) ? "bg-indigo-600 text-white animate-blink-fast" : "bg-slate-50 text-slate-500"
                 )}>
                   <span className="text-[8px] uppercase leading-none">{safeFormat(event.date, 'MMM', { locale: ptBR })}</span>
                   <span className="text-sm leading-none">{safeFormat(event.date, 'dd')}</span>
@@ -358,16 +359,16 @@ export default function SidebarEvents({ user, compact }: Props) {
                 className={cn(
                   "w-full text-left p-4 rounded-xl border transition-all hover:shadow-md group",
                   isToday(new Date(event.date)) 
-                    ? "bg-indigo-50 border-indigo-100" 
+                    ? "bg-indigo-50 border-indigo-100 animate-pulse-slow ring-1 ring-indigo-500/20" 
                     : "bg-white border-slate-100 hover:border-indigo-200"
                 )}
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className={cn(
                     "text-[10px] font-bold uppercase px-2 py-0.5 rounded",
-                    event.type === 'holiday' ? "bg-red-100 text-red-600" :
+                    (isToday(new Date(event.date)) ? "bg-rose-500 text-white animate-blink-fast" : (event.type === 'holiday' ? "bg-red-100 text-red-600" :
                     event.type === 'meeting' ? "bg-blue-100 text-blue-600" :
-                    "bg-indigo-100 text-indigo-600"
+                    "bg-indigo-100 text-indigo-600"))
                   )}>
                     {event.type}
                   </span>
