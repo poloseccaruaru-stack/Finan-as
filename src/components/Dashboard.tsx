@@ -150,10 +150,70 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     id: string;
   } | null>(null);
 
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [absenceDates, setAbsenceDates] = useState<Record<string, string[]>>({});
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
 
-  // Sync temp values only when modal OPENS to avoid overwriting user edits while typing
+  useEffect(() => {
+    // ... previous listeners ...
+    const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snap) => {
+      setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'calendarEvents'));
+
+    return () => {
+      unsubEvents();
+      // ... other returns ...
+    };
+  }, [user]);
+
+  const activeEvents = useMemo(() => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    return calendarEvents.filter(event => {
+      const eventDateStr = event.date;
+      // Disappear day after: means Today <= EventDate
+      return todayStr <= eventDateStr;
+    }).sort((a, b) => a.date.localeCompare(b.date));
+  }, [calendarEvents]);
+
+  const EventBar = () => {
+    if (activeEvents.length === 0) return null;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+    return (
+      <div className={cn(
+        "w-full bg-slate-900 text-white overflow-hidden py-2 px-4 flex items-center gap-6",
+        config.eventBarPosition === 'top' ? "mb-6 rounded-2xl" : "fixed bottom-0 left-0 right-0 z-[100] h-12"
+      )}>
+        <div className="flex items-center gap-2 shrink-0">
+          <Calendar className="w-4 h-4 text-amber-400" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Novos Eventos:</span>
+        </div>
+        <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-6">
+          {activeEvents.map(event => {
+            const isToday = event.date === todayStr;
+            return (
+              <div 
+                key={event.id} 
+                className={cn(
+                  "flex items-center gap-2 whitespace-nowrap px-3 py-1 rounded-lg border border-white/10 transition-all",
+                  isToday ? "bg-rose-500/20 border-rose-500/50 text-rose-100 animate-pulse-slow shadow-[0_0_15px_rgba(244,63,94,0.3)]" : "text-slate-300"
+                )}
+              >
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  isToday ? "bg-rose-500 animate-blink-fast shadow-[0_0_8px_rgba(244,63,94,0.8)]" : "bg-slate-500"
+                )} />
+                <span className="text-xs font-black uppercase tracking-tight">{event.title}</span>
+                <span className="text-[10px] font-bold text-slate-400">
+                  {safeFormat(event.date, "dd 'de' MMM", { locale: ptBR })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   useEffect(() => {
     if (showQuickAlertConfig) {
       setTempConsecutiveLimit(config.consecutiveAbsencesLimit || 2);
@@ -287,6 +347,10 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'projects'));
 
+    const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snap) => {
+      setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'calendarEvents'));
+
     // Fetch Attendance for absence dates
     const unsubAttendance = onSnapshot(
       query(collection(db, 'attendance'), orderBy('date', 'desc'), limit(300)), 
@@ -322,6 +386,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       unsubResolutions();
       unsubPreDefined();
       unsubAttendance();
+      unsubEvents();
     };
   }, [user]);
 
@@ -639,7 +704,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20 relative">
+      {config.eventBarPosition === 'top' && <EventBar />}
       {/* Header with Config */}
       <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-4">
@@ -1793,6 +1859,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       </motion.div>
     )}
   </AnimatePresence>
+  {config.eventBarPosition === 'bottom' && <EventBar />}
 </div>
 );
 }

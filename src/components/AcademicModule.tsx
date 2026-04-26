@@ -3141,7 +3141,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               } else if (newRole === 'coordinator') {
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
                               } else if (newRole === 'professor') {
-                                allowedTabsList = ['dashboard', 'academic', 'projects', 'planning', 'organogram', 'attendance', 'schoolYear', 'regimento', 'calendar', 'comunicados', 'documentos'];
+                                // User requested PROFESSOR (ACESSO TOTAL) as well
+                                allowedTabsList = [...allModules, ...allSubAreas].filter(tab => tab !== 'system');
                               }
                               
                               // Update organized objects based on the standard role lists
@@ -3151,7 +3152,13 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               const subAreas = { ...teacherForm.subAreas };
                               Object.keys(subAreas).forEach(k => subAreas[k] = allowedTabsList.includes(k));
 
-                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList });
+                              // Also auto-link all classes for Admin/Coordinator if it's a new teacher
+                              const turmas = { ...teacherForm.turmas };
+                              if (newRole === 'admin' || newRole === 'coordinator') {
+                                classes.forEach(c => turmas[c.id] = true);
+                              }
+                              
+                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, turmas });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
