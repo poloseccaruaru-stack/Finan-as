@@ -1638,7 +1638,7 @@ export default function AdminModule({ user, subTab }: Props) {
                           'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
                         ];
                         const current = profileForm.allowedTabs || [];
-                        if (current.length === allTabs.length) {
+                        if (current.length >= allTabs.length) {
                           setProfileForm({ ...profileForm, allowedTabs: [] });
                         } else {
                           setProfileForm({ ...profileForm, allowedTabs: allTabs });
@@ -1646,50 +1646,80 @@ export default function AdminModule({ user, subTab }: Props) {
                       }}
                       className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase underline"
                     >
-                      {profileForm.allowedTabs?.length === 18 ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                      {profileForm.allowedTabs?.length && profileForm.allowedTabs.length >= 18 ? 'Desmarcar Todos' : 'Selecionar Todos'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 max-h-[300px] overflow-y-auto">
+                  
+                  <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 max-h-[400px] overflow-y-auto">
                     {[
-                      { id: 'dashboard', label: 'Dashboard' },
-                      { id: 'academic', label: 'Acadêmico (Geral)' },
-                      { id: 'administrative', label: 'Administrativo (Geral)' },
-                      { id: 'students', label: 'Alunos' },
-                      { id: 'teachers', label: 'Equipe EBD' },
-                      { id: 'classes', label: 'Turmas' },
-                      { id: 'attendance', label: 'Chamada' },
-                      { id: 'schoolYear', label: 'Ano Letivo' },
-                      { id: 'projects', label: 'Projetos' },
-                      { id: 'finance', label: 'Financeiro' },
-                      { id: 'reports', label: 'Relatórios' },
-                      { id: 'planning', label: 'Planejamento' },
-                      { id: 'admin', label: 'Configurações' },
-                      { id: 'regimento', label: 'Regimento' },
-                      { id: 'calendar', label: 'Calendário' },
-                      { id: 'comunicados', label: 'Comunicados' },
-                      { id: 'documentos', label: 'Documentos' },
-                      { id: 'meetings', label: 'Reuniões' },
-                      { id: 'organogram', label: 'Organograma' },
-                    ].map(tab => (
-                      <label key={tab.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
-                        <input
-                          type="checkbox"
-                          checked={profileForm.allowedTabs?.includes(tab.id)}
-                          onChange={(e) => {
-                            const current = profileForm.allowedTabs || [];
-                            if (e.target.checked) {
-                              setProfileForm({ ...profileForm, allowedTabs: [...current, tab.id] });
-                            } else {
-                              setProfileForm({ ...profileForm, allowedTabs: current.filter(t => t !== tab.id) });
-                            }
-                          }}
-                          className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                        />
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{tab.label}</span>
-                      </label>
+                      { 
+                        module: 'Geral', 
+                        items: [{ id: 'dashboard', label: 'Dashboard' }] 
+                      },
+                      { 
+                        module: 'Acadêmico', 
+                        items: [
+                          { id: 'academic', label: 'Módulo Acadêmico' },
+                          { id: 'students', label: 'Alunos' },
+                          { id: 'teachers', label: 'Equipe EBD' },
+                          { id: 'classes', label: 'Turmas' },
+                          { id: 'attendance', label: 'Chamada' },
+                          { id: 'planning', label: 'Planejamento' },
+                          { id: 'schoolYear', label: 'Ano Letivo' },
+                          { id: 'regimento', label: 'Regimento' },
+                          { id: 'calendar', label: 'Calendário' },
+                        ] 
+                      },
+                      { 
+                        module: 'Projetos', 
+                        items: [{ id: 'projects', label: 'Módulo Projetos' }] 
+                      },
+                      { 
+                        module: 'Financeiro', 
+                        items: [{ id: 'finance', label: 'Módulo Financeiro' }] 
+                      },
+                      { 
+                        module: 'Relatórios', 
+                        items: [{ id: 'reports', label: 'Módulo Relatórios' }] 
+                      },
+                      { 
+                        module: 'Administrativo', 
+                        items: [
+                          { id: 'administrative', label: 'Módulo Administrativo' },
+                          { id: 'admin', label: 'Configurações' },
+                          { id: 'comunicados', label: 'Comunicados' },
+                          { id: 'documentos', label: 'Documentos' },
+                          { id: 'meetings', label: 'Reuniões' },
+                          { id: 'organogram', label: 'Organograma' },
+                        ] 
+                      },
+                    ].map(group => (
+                      <div key={group.module} className="space-y-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{group.module}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {group.items.map(tab => (
+                            <label key={tab.id} className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
+                              <input
+                                type="checkbox"
+                                checked={profileForm.allowedTabs?.includes(tab.id)}
+                                onChange={(e) => {
+                                  const current = profileForm.allowedTabs || [];
+                                  if (e.target.checked) {
+                                    setProfileForm({ ...profileForm, allowedTabs: [...current, tab.id] });
+                                  } else {
+                                    setProfileForm({ ...profileForm, allowedTabs: current.filter(t => t !== tab.id) });
+                                  }
+                                }}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                              />
+                              <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">{tab.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400 italic">O módulo "Sistema" é exclusivo para administradores e não pode ser atribuído a outros perfis.</p>
+                  <p className="text-[10px] text-slate-400 italic">O acesso total é garantido apenas ao perfil Administrador raiz.</p>
                 </div>
 
                 <div className="pt-4">
