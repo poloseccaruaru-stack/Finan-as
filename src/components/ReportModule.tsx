@@ -112,7 +112,9 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('reports');
+  const hasFullAccess = user.allowedTabs 
+    ? user.allowedTabs.includes('reports') 
+    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const classIds = (user.classIds && user.classIds.length > 0) ? user.classIds : ['none'];

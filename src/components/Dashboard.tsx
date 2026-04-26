@@ -230,8 +230,12 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   useEffect(() => {
     const isAdmin = user.role === 'admin';
     const isCoordinator = user.role === 'coordinator';
-    const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('dashboard');
-    const hasFinanceAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('finance');
+    const hasFullAccess = user.allowedTabs 
+      ? user.allowedTabs.includes('dashboard') 
+      : (isAdmin || isCoordinator);
+    const hasFinanceAccess = user.allowedTabs 
+      ? user.allowedTabs.includes('finance') 
+      : (isAdmin || isCoordinator);
 
     const classIds = user?.classIds || [];
 
@@ -259,7 +263,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'students'));
 
-    const unsubTeachers = onSnapshot(query(collection(db, 'users'), where('role', '==', 'professor')), (snap) => {
+    const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
@@ -469,7 +473,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
   const stats = [
     { label: 'Total Alunos', value: filteredStudents.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Colaboradores', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Membros da Equipe', value: teachers.length, icon: BookOpen, color: 'bg-indigo-50 text-indigo-600' },
     { label: 'Turmas Ativas', value: filteredClasses.length, icon: GraduationCap, color: 'bg-green-50 text-green-600' },
     { label: 'Projetos', value: projects.length, icon: Briefcase, color: 'bg-amber-50 text-amber-600' },
   ];
@@ -555,7 +559,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     
     const allPeople: any[] = [
       ...filteredStudents.map(s => ({ ...s, type: 'Aluno' })),
-      ...teachers.map(t => ({ ...t, type: 'Colaborador' }))
+      ...teachers.map(t => ({ ...t, type: 'Membro da Equipe' }))
     ];
 
     return allPeople.filter(person => {
@@ -1105,7 +1109,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-5 h-5 text-emerald-500" />
-                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-emerald-700">Aniversariantes - Colaboradores</h3>
+                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-emerald-700">Aniversariantes - Membros da Equipe</h3>
                         </div>
                         <div className="relative">
                           <button onClick={() => setShowColabBirthConfig(!showColabBirthConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
@@ -1131,8 +1135,8 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                         </div>
                       </div>
                       <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[200px]">
-                        {weeklyBirthdays.filter(p => p.type === 'Colaborador').length > 0 ? (
-                          weeklyBirthdays.filter(p => p.type === 'Colaborador').map((person) => (
+                        {weeklyBirthdays.filter(p => p.type === 'Membro da Equipe').length > 0 ? (
+                          weeklyBirthdays.filter(p => p.type === 'Membro da Equipe').map((person) => (
                             <div key={person.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group hover:border-emerald-200 transition-all">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm shadow-sm shrink-0">👨‍🏫</div>

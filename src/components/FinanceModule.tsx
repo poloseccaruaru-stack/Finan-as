@@ -100,7 +100,9 @@ export default function FinanceModule({ user }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('finance');
+  const hasFullAccess = user.allowedTabs 
+    ? user.allowedTabs.includes('finance') 
+    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));

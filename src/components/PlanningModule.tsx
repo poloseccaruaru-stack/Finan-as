@@ -116,7 +116,9 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('planning');
+  const hasFullAccess = user.allowedTabs 
+    ? user.allowedTabs.includes('planning') 
+    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const classIds = user.classIds || [];

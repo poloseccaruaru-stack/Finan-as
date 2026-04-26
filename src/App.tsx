@@ -291,10 +291,11 @@ export default function App() {
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
-        if (isAdmin) return true;
+        // If allowedTabs are defined, they are the source of truth for granular permissions
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
         }
+        if (isAdmin) return true;
         if (isCoordinator) return sub.id !== 'system';
         if (isProfessor) return sub.id !== 'system';
         return true;
@@ -305,10 +306,11 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
   ].filter(item => {
-    if (isAdmin) return true;
+    // If allowedTabs are defined, they are the source of truth for granular permissions
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(item.id);
     }
+    if (isAdmin) return true;
     if (isCoordinator) return true;
     if (isProfessor) {
       const excluded = ['finance', 'reports'];

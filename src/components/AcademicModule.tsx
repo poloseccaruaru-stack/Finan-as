@@ -415,7 +415,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
   const isProfessor = user.role === 'professor';
-  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('admin') || user.allowedTabs?.includes('system');
+  const hasFullAccess = user.allowedTabs 
+    ? (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))
+    : (isAdmin || isCoordinator);
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -762,7 +764,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     });
   };
   const handleDeleteTeacher = async (id: string) => {
-    showAdminConfirm('Excluir Colaborador', 'Deseja realmente excluir este colaborador?', async () => {
+    showAdminConfirm('Excluir Membro da Equipe', 'Deseja realmente excluir este membro?', async () => {
       try {
         await deleteDoc(doc(db, 'users', id));
       } catch (err) {
@@ -1807,7 +1809,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador / Cargo</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro da Equipe / Cargo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Info. Profissional</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email / Contato</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Matrícula</th>
@@ -1851,7 +1853,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <button 
                             onClick={() => {
                               showConfirm(
-                                'Entrar como Colaborador',
+                                'Entrar como Membro',
                                 `Para visualizar a plataforma como "${teacher.name}", digite a senha do sistema:`,
                                 (pass) => {
                                   if (pass === 'SISTEMA') {
@@ -1924,7 +1926,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Turma</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ano Letivo</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Faixa Etária</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Colaborador Responsável</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Membro da Equipe Responsável</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Alunos</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
@@ -3135,10 +3137,13 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             onChange={(e) => {
                               const newRole = e.target.value as 'admin' | 'coordinator' | 'professor';
                               let allowedTabsList: string[] = [];
+                              const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
+                              const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
+                              
                               if (newRole === 'admin') {
-                                allowedTabsList = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
+                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
                               } else if (newRole === 'coordinator') {
-                                allowedTabsList = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'admin', 'students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'meetings', 'comunicados', 'documentos'];
+                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
                               } else if (newRole === 'professor') {
                                 allowedTabsList = ['dashboard', 'academic', 'projects', 'planning', 'organogram', 'attendance', 'schoolYear', 'regimento', 'calendar', 'comunicados', 'documentos'];
                               }
@@ -3255,7 +3260,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Colaborador</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Perfil Geral do Membro</label>
                         <textarea
                           value={teacherForm.generalProfile}
                           onChange={(e) => setTeacherForm({ ...teacherForm, generalProfile: e.target.value })}
@@ -3322,6 +3327,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                                { id: 'projects', label: 'Projetos' },
                                { id: 'finance', label: 'Financeiro' },
                                { id: 'reports', label: 'Relatórios' },
+                               { id: 'planning', label: 'Planejamento' },
+                               { id: 'organogram', label: 'Organograma' },
                              ].map(tab => (
                                <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
                                  <input 
@@ -3390,7 +3397,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 mt-4">
-                    {editingTeacher ? 'Atualizar Colaborador' : 'Salvar Colaborador'}
+                    {editingTeacher ? 'Atualizar Membro' : 'Salvar Membro'}
                   </button>
                 </form>
               )}
@@ -3501,14 +3508,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Colaborador Responsável</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Membro da Equipe Responsável</label>
                     <select
                       value={classForm.teacherId}
                       onChange={(e) => setClassForm({ ...classForm, teacherId: e.target.value })}
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">Selecione...</option>
-                      {teachers.filter(t => t.role === 'professor').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
 
@@ -3625,7 +3632,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
-                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Colaborador'})
+                  Criar Relatório Individual ({reportType === 'student' ? 'Aluno' : 'Membro da Equipe'})
                 </h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <XCircle className="w-5 h-5 text-slate-500" />

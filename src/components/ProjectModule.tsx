@@ -96,7 +96,9 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const hasEditAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('projects');
+  const hasEditAccess = user.allowedTabs 
+    ? user.allowedTabs.includes('projects') 
+    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const isProfessor = user.role === 'professor';
