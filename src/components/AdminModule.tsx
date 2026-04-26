@@ -37,7 +37,15 @@ import {
   ChevronDown,
   Eye
 } from 'lucide-react';
-import { Regimento, OrganogramEntry, Teacher, CalendarEvent, SchoolYearConfig, GeneralCalendar } from '../types';
+import { 
+  Regimento, 
+  OrganogramEntry, 
+  Teacher, 
+  CalendarEvent, 
+  SchoolYearConfig, 
+  GeneralCalendar,
+  AccessProfile 
+} from '../types';
 import OrganogramModule from './OrganogramModule';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -85,6 +93,11 @@ export default function AdminModule({ user, subTab }: Props) {
   const [isRestoring, setIsRestoring] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetType, setResetType] = useState<'total' | 'partial' | 'selective'>('partial');
+  
+  const [profiles, setProfiles] = useState<AccessProfile[]>([]);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [profileForm, setProfileForm] = useState<Partial<AccessProfile>>({ name: '', allowedTabs: [] });
   
   // Alert/Confirm State
   const [alertConfig, setAlertConfig] = useState<{ show: boolean, title: string, message: string } | null>(null);
@@ -140,7 +153,7 @@ export default function AdminModule({ user, subTab }: Props) {
     'projects', 'transactions', 'budgets', 'planning', 'justificationOptions',
     'calendarEvents', 'events', 'organogram', 'student_reports', 'teacher_reports',
     'manual_reports', 'estimated_expenses', 'config', 'enrollments', 'ai_actions',
-    'meetings', 'general_calendars'
+    'meetings', 'general_calendars', 'profiles'
   ];
 
   const handleSaveMeeting = async (e: React.FormEvent) => {
@@ -336,7 +349,15 @@ export default function AdminModule({ user, subTab }: Props) {
           setSchoolYearForm({ startDate: data.startDate, endDate: data.endDate });
         }
       }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
-      return () => unsubYear();
+
+      const unsubProfiles = onSnapshot(collection(db, 'profiles'), (snap) => {
+        setProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccessProfile)));
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'profiles'));
+
+      return () => {
+        unsubYear();
+        unsubProfiles();
+      };
     }
     if (subTab === 'meetings') {
       const q = query(collection(db, 'meetings'), orderBy('date', 'desc'));
@@ -360,6 +381,58 @@ export default function AdminModule({ user, subTab }: Props) {
       return () => unsub();
     }
   }, [subTab]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    showAdminConfirm(
+      editingProfileId ? 'Confirmar Alteração' : 'Confirmar Criação',
+      `Para ${editingProfileId ? 'alterar' : 'criar'} um perfil de acesso, a senha do administrador é obrigatória.`,
+      async () => {
+        try {
+          const profileData = {
+            name: profileForm.name,
+            allowedTabs: profileForm.allowedTabs,
+            updatedAt: new Date().toISOString()
+          };
+
+          if (editingProfileId) {
+            await updateDoc(doc(db, 'profiles', editingProfileId), profileData);
+          } else {
+            await addDoc(collection(db, 'profiles'), {
+              ...profileData,
+              createdAt: new Date().toISOString()
+            });
+          }
+          setShowProfileForm(false);
+          setEditingProfileId(null);
+          setProfileForm({ name: '', allowedTabs: [] });
+          showAlert('Sucesso', 'Perfil salvo com sucesso!');
+        } catch (err) {
+          handleFirestoreError(err, editingProfileId ? OperationType.UPDATE : OperationType.CREATE, 'profiles');
+        }
+      }
+    );
+  };
+
+  const handleDeleteProfile = (profile: AccessProfile) => {
+    if (profile.isImmutable) {
+      showAlert('Ação Negada', 'Este perfil não pode ser excluído por ser um perfil fundamental do sistema.');
+      return;
+    }
+
+    showAdminConfirm(
+      'Confirmar Exclusão',
+      `Deseja realmente excluir o perfil "${profile.name}"? Esta ação é irreversível.`,
+      async () => {
+        try {
+          await deleteDoc(doc(db, 'profiles', profile.id));
+          showAlert('Sucesso', 'Perfil excluído com sucesso!');
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `profiles/${profile.id}`);
+        }
+      }
+    );
+  };
 
   const handleSaveSchoolYear = async () => {
     try {
@@ -699,6 +772,84 @@ export default function AdminModule({ user, subTab }: Props) {
 
       {subTab === 'system' && isAdmin && (
         <div className="space-y-6">
+          {/* Profile Management */}
+          <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Gerenciamento de Perfis de Acesso</h3>
+                  <p className="text-sm text-slate-500">Crie e gerencie os cargos e permissões da plataforma.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setProfileForm({ name: '', allowedTabs: [] });
+                  setEditingProfileId(null);
+                  setShowProfileForm(true);
+                }}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+              >
+                <Plus className="w-5 h-5" />
+                Novo Perfil
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Default Admin Profile (Virtual or from DB) */}
+              <div className="p-6 bg-slate-50 rounded-2xl border-2 border-indigo-100 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-bold text-slate-900 uppercase">Administrador</h4>
+                    <Lock className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">Acesso total a todos os módulos e configurações.</p>
+                  <div className="flex flex-wrap gap-1">
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded uppercase">TOTAL</span>
+                  </div>
+                </div>
+              </div>
+
+              {profiles.filter(p => p.name.toLowerCase() !== 'administrador').map(profile => (
+                <div key={profile.id} className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all group flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-bold text-slate-900 uppercase">{profile.name}</h4>
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={() => {
+                            setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs });
+                            setEditingProfileId(profile.id);
+                            setShowProfileForm(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-indigo-600"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteProfile(profile)}
+                          className="p-1 text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-4">{profile.allowedTabs.length} módulos permitidos.</p>
+                    <div className="flex flex-wrap gap-1">
+                      {profile.allowedTabs.slice(0, 3).map(tab => (
+                        <span key={tab} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[8px] font-bold rounded uppercase">{tab}</span>
+                      ))}
+                      {profile.allowedTabs.length > 3 && (
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[8px] font-bold rounded uppercase">+{profile.allowedTabs.length - 3}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           {/* School Year Config */}
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
             <div className="flex items-center gap-4">
@@ -1432,6 +1583,92 @@ export default function AdminModule({ user, subTab }: Props) {
         </div>
       )}
     </motion.div>
+
+      <AnimatePresence>
+        {showProfileForm && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900 uppercase">
+                  {editingProfileId ? 'Editar Perfil' : 'Novo Perfil de Acesso'}
+                </h3>
+                <button onClick={() => setShowProfileForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveProfile} className="p-6 space-y-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nome do Perfil / Cargo</label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="Ex: Auxiliar, Tesoureiro, Professor Regular..."
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                  />
+                </div>
+                
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Definir Acessos (Módulos e Sub-áreas)</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 max-h-[300px] overflow-y-auto">
+                    {[
+                      { id: 'dashboard', label: 'Dashboard' },
+                      { id: 'academic', label: 'Acadêmico (Geral)' },
+                      { id: 'students', label: 'Alunos' },
+                      { id: 'teachers', label: 'Equipe EBD' },
+                      { id: 'classes', label: 'Turmas' },
+                      { id: 'attendance', label: 'Chamada' },
+                      { id: 'schoolYear', label: 'Ano Letivo' },
+                      { id: 'projects', label: 'Projetos' },
+                      { id: 'finance', label: 'Financeiro' },
+                      { id: 'reports', label: 'Relatórios' },
+                      { id: 'planning', label: 'Planejamento' },
+                      { id: 'admin', label: 'Administrativo (Geral)' },
+                      { id: 'regimento', label: 'Regimento' },
+                      { id: 'calendar', label: 'Calendário' },
+                      { id: 'comunicados', label: 'Comunicados' },
+                      { id: 'documentos', label: 'Documentos' },
+                      { id: 'meetings', label: 'Reuniões' },
+                      { id: 'organogram', label: 'Organograma' },
+                    ].map(tab => (
+                      <label key={tab.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
+                        <input
+                          type="checkbox"
+                          checked={profileForm.allowedTabs?.includes(tab.id)}
+                          onChange={(e) => {
+                            const current = profileForm.allowedTabs || [];
+                            if (e.target.checked) {
+                              setProfileForm({ ...profileForm, allowedTabs: [...current, tab.id] });
+                            } else {
+                              setProfileForm({ ...profileForm, allowedTabs: current.filter(t => t !== tab.id) });
+                            }
+                          }}
+                          className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{tab.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic">O módulo "Sistema" é exclusivo para administradores e não pode ser atribuído a outros perfis.</p>
+                </div>
+
+                <div className="pt-4">
+                  <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 uppercase tracking-widest">
+                    <Save className="w-5 h-5" />
+                    Finalizar e Salvar Perfil
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Regimento Form Modal */}
       <AnimatePresence>

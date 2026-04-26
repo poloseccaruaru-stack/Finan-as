@@ -50,7 +50,7 @@ import {
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
+import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment, AccessProfile } from '../types';
 import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import { DiaryReportModal } from './DiaryReportModal';
@@ -312,6 +312,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [justificationOptions, setJustificationOptions] = useState<JustificationOption[]>([]);
+  const [profiles, setProfiles] = useState<AccessProfile[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [studentReports, setStudentReports] = useState<StudentReport[]>([]);
   const [teacherReports, setTeacherReports] = useState<TeacherReport[]>([]);
@@ -475,6 +476,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'teacher_reports'));
 
+    const unsubProfiles = onSnapshot(collection(db, 'profiles'), (snap) => {
+      setProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccessProfile)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'profiles'));
+
     const unsubMeetings = onSnapshot(collection(db, 'meetings'), (snap) => {
       setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'meetings'));
@@ -497,6 +502,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubAttendances();
       unsubStudentReports();
       unsubTeacherReports();
+      unsubProfiles();
       unsubMeetings();
       unsubSchoolYear();
     };
@@ -646,48 +652,70 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido'
   });
 
-  const [teacherForm, setTeacherForm] = useState({
-    name: '',
-    email: '',
-    login: '',
-    password: '',
-    confirmPassword: '',
-    contact: '',
-    profession: '',
-    startDateEBD: '',
-    birthDate: '',
-    generalProfile: '',
-    role: 'professor' as 'admin' | 'coordinator' | 'professor' | 'professor_ebd',
-    classIds: [] as string[],
-    allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
-    address: '',
-    academicBackground: '',
-    theologicalBackground: '',
-    // Organized state for checkboxes
-    turmas: {} as Record<string, boolean>,
-    modulos: {
-      dashboard: false,
-      academic: false,
-      projects: false,
-      finance: false,
-      reports: false
-    } as Record<string, boolean>,
-    subAreas: {
-      students: false,
-      teachers: false,
-      classes: false,
-      attendance: false,
-      planning: false,
-      schoolYear: false,
-      regimento: false,
-      calendar: false,
-      organogram: false,
-      system: false,
-      comunicados: false,
-      documentos: false,
-      meetings: false
-    } as Record<string, boolean>
-  });
+interface TeacherFormState {
+  name: string;
+  email: string;
+  login: string;
+  password?: string;
+  confirmPassword?: string;
+  contact: string;
+  profession: string;
+  startDateEBD: string;
+  birthDate: string;
+  generalProfile: string;
+  role: string;
+  classIds: string[];
+  allowedTabs: string[];
+  address: string;
+  academicBackground: string;
+  theologicalBackground: string;
+  turmas: Record<string, boolean>;
+  modulos: Record<string, boolean>;
+  subAreas: Record<string, boolean>;
+}
+
+const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
+  name: '',
+  email: '',
+  login: '',
+  password: '',
+  confirmPassword: '',
+  contact: '',
+  profession: '',
+  startDateEBD: '',
+  birthDate: '',
+  generalProfile: '',
+  role: 'professor',
+  classIds: [] as string[],
+  allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
+  address: '',
+  academicBackground: '',
+  theologicalBackground: '',
+  // Organized state for checkboxes
+  turmas: {} as Record<string, boolean>,
+  modulos: {
+    dashboard: false,
+    academic: false,
+    projects: false,
+    finance: false,
+    reports: false
+  } as Record<string, boolean>,
+  subAreas: {
+    students: false,
+    teachers: false,
+    classes: false,
+    attendance: false,
+    planning: false,
+    schoolYear: false,
+    regimento: false,
+    calendar: false,
+    organogram: false,
+    system: false,
+    comunicados: false,
+    documentos: false,
+    meetings: false
+  } as Record<string, boolean>
+});
 
   // Sync forms with selectedSchoolYear
   useEffect(() => {
@@ -3194,17 +3222,18 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <select
                             value={teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin'|'coordinator'|'professor'|'professor_ebd';
+                              const newRole = e.target.value;
                               let allowedTabsList: string[] = [];
-                              const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
-                              const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                               
                               if (newRole === 'admin') {
+                                const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
+                                const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
-                              } else if (newRole === 'coordinator' || newRole === 'professor_ebd') {
-                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
-                              } else if (newRole === 'professor') {
-                                allowedTabsList = [...allModules, ...allSubAreas].filter(tab => tab !== 'system');
+                              } else {
+                                const profile = profiles.find(p => p.id === newRole || p.name === newRole);
+                                if (profile) {
+                                  allowedTabsList = profile.allowedTabs;
+                                }
                               }
                               
                               const modulos = { ...teacherForm.modulos };
@@ -3220,12 +3249,14 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                               
                               setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, classIds: turmasList });
                             }}
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                           >
-                            <option value="professor">Professor (Acesso Restrito)</option>
-                            <option value="professor_ebd">Professor EBD (Acesso Total exceto Sistema)</option>
-                            <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
-                            <option value="admin">Administrador (Acesso Total)</option>
+                            <option value="">Selecione um perfil...</option>
+                            <option value="admin" className="font-bold text-indigo-600">ADMINISTRADOR</option>
+                            <option value="coordinator">COORDENADOR</option>
+                            {profiles.filter(p => !['admin', 'coordenador', 'professor', 'professor ebd'].includes(p.name.toLowerCase())).map(profile => (
+                              <option key={profile.id} value={profile.id}>{profile.name.toUpperCase()}</option>
+                            ))}
                           </select>
                         </div>
                       </div>

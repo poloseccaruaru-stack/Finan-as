@@ -235,8 +235,6 @@ export default function App() {
   }
 
   const isAdmin = userData.role === 'admin';
-  const isCoordinator = userData.role === 'coordinator' || userData.role === 'professor_ebd';
-  const isProfessor = userData.role === 'professor';
 
   // Handle Detail Report View - Standalone mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -272,12 +270,7 @@ export default function App() {
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
         }
-        if (isCoordinator) return true;
-        if (isProfessor) {
-          const excluded = ['students', 'teachers', 'classes', 'meetings'];
-          return !excluded.includes(sub.id);
-        }
-        return true;
+        return false;
       })
     },
     { 
@@ -292,13 +285,14 @@ export default function App() {
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
+        // SYSTEM is exclusive to ADMIN role
+        if (sub.id === 'system') return isAdmin;
+
         // If allowedTabs are defined, they are the source of truth for granular permissions
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
         }
         if (isAdmin) return true;
-        if (isCoordinator) return sub.id !== 'system';
-        if (isProfessor) return sub.id !== 'system';
         return true;
       })
     },
@@ -307,37 +301,27 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
   ].filter(item => {
+    if (item.id === 'system') return isAdmin;
+    
     // If allowedTabs are defined, they are the source of truth for granular permissions
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(item.id);
     }
     if (isAdmin) return true;
-    if (isCoordinator) return true;
-    if (isProfessor) {
-      const excluded = ['finance', 'reports'];
-      return !excluded.includes(item.id);
-    }
-    return true;
+    return false;
   });
 
   const hasAccess = (tabId: string): boolean => {
+    // SYSTEM is exclusive to ADMIN role
+    if (tabId === 'system') return isAdmin;
+
     // Check if the tab (or its parent) is in allowedTabs
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
-      // For sub-items, we need to check if they are in allowedTabs as well
-      // But based on App structure, we check the tabId directly
       return userData.allowedTabs.includes(tabId);
     }
     
     if (isAdmin) return true;
-    if (isCoordinator) return tabId !== 'system';
-    
-    if (isProfessor) {
-      if (['finance', 'reports', 'meetings'].includes(tabId)) return false;
-      if (['students', 'teachers', 'classes', 'system'].includes(tabId)) return false;
-      return true;
-    }
-    
-    return true;
+    return false; // Default to no access if not admin and no allowedTabs
   };
 
   const AccessDenied = () => (
@@ -499,7 +483,7 @@ export default function App() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{userData.name}</p>
                 <p className="text-xs text-slate-500 truncate">
-                  {isAdmin ? 'Administrador' : userData.role === 'coordinator' ? 'Coordenador' : userData.role === 'professor_ebd' ? 'Professor EBD' : 'Professor'}
+                  {isAdmin ? 'Administrador' : (userData.role === 'coordinator' ? 'Coordenador' : userData.role.toUpperCase())}
                 </p>
               </div>
             )}
