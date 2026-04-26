@@ -56,6 +56,9 @@ export default function AdminModule({ user, subTab }: Props) {
   const [meetings, setMeetings] = useState<any[]>([]);
   const [comunicados, setComunicados] = useState<any[]>([]);
   const [documentos, setDocumentos] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [showRoleForm, setShowRoleForm] = useState(false);
+  const [roleForm, setRoleForm] = useState({ name: '', allowedTabs: [] as string[] });
   const [schoolYear, setSchoolYear] = useState<SchoolYearConfig | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCalendarForm, setShowCalendarForm] = useState(false);
@@ -78,23 +81,6 @@ export default function AdminModule({ user, subTab }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
   const [expandedRegimentoId, setExpandedRegimentoId] = useState<string | null>(null);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [showRoleForm, setShowRoleForm] = useState(false);
-  const [roleForm, setRoleForm] = useState<Partial<Role>>({
-    nome: '',
-    permissoes: {
-      dashboard: 'none',
-      academic: 'none',
-      projects: 'none',
-      finance: 'none',
-      reports: 'none',
-      planning: 'none',
-      organogram: 'none',
-      system: 'none'
-    }
-  });
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [editingRole, setEditingRole] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', order: 0 });
   const [calendarForm, setCalendarForm] = useState({ title: '', date: '', type: 'event' as any, description: '' });
   const [schoolYearForm, setSchoolYearForm] = useState({ startDate: '', endDate: '' });
@@ -149,7 +135,6 @@ export default function AdminModule({ user, subTab }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const isProfessor = user.role === 'professor';
   const hasEditAccess = isAdmin || isCoordinator;
 
   const COLLECTIONS = [
@@ -459,77 +444,6 @@ export default function AdminModule({ user, subTab }: Props) {
     }
   };
 
-  const handleSaveRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roleForm.nome || !adminPasswordInput) {
-      showAlert('Erro', 'Nome do perfil e senha do administrador são obrigatórios.');
-      return;
-    }
-
-    if (adminPasswordInput !== '123456') {
-      showAlert('Erro', 'Senha do administrador incorreta.');
-      return;
-    }
-
-    try {
-      const data = {
-        ...roleForm,
-        permissoes: {
-          ...roleForm.permissoes,
-          system: 'none'
-        },
-        createdAt: new Date().toISOString()
-      };
-
-      if (editingRole) {
-        await updateDoc(doc(db, 'roles', editingRole), data);
-      } else {
-        await addDoc(collection(db, 'roles'), data);
-      }
-
-      setShowRoleForm(false);
-      setEditingRole(null);
-      setRoleForm({
-        nome: '',
-        permissoes: {
-          dashboard: 'none',
-          academic: 'none',
-          projects: 'none',
-          finance: 'none',
-          reports: 'none',
-          planning: 'none',
-          organogram: 'none',
-          system: 'none'
-        }
-      });
-      setAdminPasswordInput('');
-    } catch (err) {
-      handleFirestoreError(err, editingRole ? OperationType.UPDATE : OperationType.CREATE, 'roles');
-    }
-  };
-
-  const handleDeleteRole = async (id: string, name: string) => {
-    if (name.toLowerCase() === 'admin') {
-      showAlert('Erro', 'O perfil administrador não pode ser excluído.');
-      return;
-    }
-
-    showConfirm('Senha do Administrador', 'Digite a senha do administrador para excluir este perfil:', async (pass) => {
-      if (pass !== '123456') {
-        showAlert('Erro', 'Senha incorreta.');
-        return;
-      }
-
-      if (confirm(`Deseja realmente excluir o perfil "${name}"?`)) {
-        try {
-          await deleteDoc(doc(db, 'roles', id));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, 'roles');
-        }
-      }
-    }, true);
-  };
-
   const handleDeleteCalendarEvent = (id: string) => {
     showAdminConfirm('Excluir Evento', 'Deseja realmente excluir este evento?', async () => {
       try {
@@ -537,6 +451,43 @@ export default function AdminModule({ user, subTab }: Props) {
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, 'calendarEvents');
       }
+    });
+  };
+
+  const handleSaveRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleForm.name) return;
+
+    showAdminConfirm('Criar Perfil', 'Deseja realmente criar este novo perfil de acesso?', async () => {
+      try {
+        await addDoc(collection(db, 'roles'), {
+          ...roleForm,
+          createdAt: new Date().toISOString()
+        });
+        setShowRoleForm(false);
+        setRoleForm({ name: '', allowedTabs: [] });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, 'roles');
+      }
+    });
+  };
+
+  const handleDeleteRole = (id: string) => {
+    showAdminConfirm('Excluir Perfil', 'Deseja realmente excluir este perfil de acesso?', async () => {
+      try {
+        await deleteDoc(doc(db, 'roles', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `roles/${id}`);
+      }
+    });
+  };
+
+  const toggleTabInRole = (tabId: string) => {
+    setRoleForm(prev => {
+      const allowedTabs = prev.allowedTabs.includes(tabId)
+        ? prev.allowedTabs.filter(id => id !== tabId)
+        : [...prev.allowedTabs, tabId];
+      return { ...prev, allowedTabs };
     });
   };
 
@@ -795,21 +746,21 @@ export default function AdminModule({ user, subTab }: Props) {
 
       {subTab === 'system' && isAdmin && (
         <div className="space-y-6">
-          {/* Roles Management Section */}
+          {/* Access Profiles Section */}
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600">
-                  <ShieldAlert className="w-6 h-6" />
+                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <Lock className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Perfis de Acesso / Cargos</h3>
-                  <p className="text-sm text-slate-500">Gerencie os níveis de acesso dos membros da equipe.</p>
+                  <h3 className="text-lg font-bold text-slate-900">Perfis de Acesso (Cargos)</h3>
+                  <p className="text-sm text-slate-500">Gerencie os perfis e limites de acesso à plataforma.</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowRoleForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-bold text-sm"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition-all"
               >
                 <Plus className="w-4 h-4" />
                 Novo Perfil
@@ -818,177 +769,155 @@ export default function AdminModule({ user, subTab }: Props) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {roles.map(role => (
-                <div key={role.id} className="p-4 border border-slate-100 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition-all group">
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className="font-bold text-slate-900 capitalize">{role.nome}</h4>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button 
-                        onClick={() => {
-                          setEditingRole(role.id);
-                          setRoleForm(role);
-                          setShowRoleForm(true);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteRole(role.id, role.nome)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <div key={role.id} className="p-4 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-indigo-600">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700">{role.name}</p>
+                      <p className="text-[10px] text-slate-500 font-medium uppercase">{role.allowedTabs.length} Permissões</p>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    {Object.entries(role.permissoes).map(([mod, level]) => {
-                      if (level === 'none') return null;
-                      return (
-                        <div key={mod} className="flex items-center justify-between text-[10px] uppercase font-bold text-slate-500">
-                          <span className="truncate mr-2">{mod}</span>
-                          <span className={cn(
-                            "px-1.5 py-0.5 rounded",
-                            level === 'full' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
-                          )}>
-                            {level === 'full' ? 'Total' : 'Ver'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <button
+                    onClick={() => handleDeleteRole(role.id)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                    title="Excluir Perfil"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
+              {roles.length === 0 && (
+                <div className="col-span-full py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                  <p className="text-sm text-slate-500">Nenhum perfil personalizado criado.</p>
+                </div>
+              )}
             </div>
-          </div>
 
-          <AnimatePresence>
-            {showRoleForm && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 lg:p-6"
-                onClick={() => setShowRoleForm(false)}
-              >
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                  onClick={(e) => e.stopPropagation()}
+            <AnimatePresence>
+              {showRoleForm && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
                 >
-                  <div className="p-6 bg-slate-900 text-white flex justify-between items-center flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                        <Plus className="w-5 h-5 text-indigo-400" />
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
+                          <Plus className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Novo Perfil de Acesso</h3>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Defina as permissões</p>
+                        </div>
                       </div>
-                      <div>
-                        <h2 className="text-xl font-black uppercase tracking-tight">
-                          {editingRole ? 'Editar Perfil' : 'Novo Perfil'}
-                        </h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Configuração de Permissões</p>
-                      </div>
+                      <button onClick={() => setShowRoleForm(false)} className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-400 hover:text-slate-600">
+                        <X className="w-6 h-6" />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => setShowRoleForm(false)}
-                      className="p-2 hover:bg-white/10 rounded-xl transition-all"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleSaveRole} className="p-8 space-y-6 overflow-y-auto no-scrollbar">
-                    <div className="space-y-4">
+                    <form onSubmit={handleSaveRole} className="flex-1 overflow-y-auto p-8 space-y-6">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Nome do Perfil</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Nome do Perfil / Cargo</label>
                         <input
-                          type="text"
                           required
-                          value={roleForm.nome}
-                          onChange={(e) => setRoleForm({ ...roleForm, nome: e.target.value })}
-                          placeholder="Ex: Professor de Música, Coordenador Pedagógico..."
-                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          type="text"
+                          value={roleForm.name}
+                          onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold"
+                          placeholder="EX: PROFESSOR RESTRITO, AUXILIAR..."
                         />
                       </div>
 
-                      <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Níveis de Acesso por Módulo</label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {[
-                            { id: 'dashboard', label: 'Dashboard' },
-                            { id: 'academic', label: 'Acadêmico (Alunos/Turmas/Chamada)' },
-                            { id: 'projects', label: 'Projetos' },
-                            { id: 'finance', label: 'Financeiro' },
-                            { id: 'reports', label: 'Relatórios' },
-                            { id: 'planning', label: 'Planejamento' },
-                            { id: 'organogram', label: 'Organograma' },
-                            { id: 'system', label: 'Sistema', disabled: true }
-                          ].map((mod) => (
-                            <div key={mod.id} className="p-3 border border-slate-100 rounded-xl bg-slate-50/50 space-y-2">
-                              <span className="text-xs font-bold text-slate-700">{mod.label}</span>
-                              <div className="flex gap-2">
-                                {['none', 'view', 'full'].map((level) => {
-                                  if (mod.disabled && level !== 'none') return null;
-                                  return (
-                                    <button
-                                      key={level}
-                                      type="button"
-                                      disabled={mod.disabled}
-                                      onClick={() => setRoleForm({
-                                        ...roleForm,
-                                        permissoes: {
-                                          ...roleForm.permissoes,
-                                          [mod.id]: level
-                                        }
-                                      })}
-                                      className={cn(
-                                        "flex-1 py-1 px-2 rounded-lg text-[10px] font-black uppercase transition-all",
-                                        (roleForm.permissoes?.[mod.id as keyof Role['permissoes']] || 'none') === level
-                                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 scale-105"
-                                          : "bg-white text-slate-400 border border-slate-200 hover:border-indigo-300"
-                                      )}
-                                    >
-                                      {level === 'none' ? 'Bloqueado' : level === 'view' ? 'Ver' : 'Total'}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
+                      <div className="space-y-4">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Definir Limites de Acesso</label>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Módulos</p>
+                            {[
+                              { id: 'dashboard', label: 'Dashboard' },
+                              { id: 'academic', label: 'Acadêmico' },
+                              { id: 'projects', label: 'Projetos' },
+                              { id: 'finance', label: 'Financeiro' },
+                              { id: 'reports', label: 'Relatórios' },
+                              { id: 'planning', label: 'Planejamento' },
+                              { id: 'organogram', label: 'Organograma' },
+                            ].map(tab => (
+                              <label key={tab.id} className="flex items-center gap-3 text-sm text-slate-700 cursor-pointer group">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTabInRole(tab.id)}
+                                  className={cn(
+                                    "w-5 h-5 rounded flex items-center justify-center transition-all",
+                                    roleForm.allowedTabs.includes(tab.id) ? "bg-indigo-600 text-white" : "bg-slate-100 border border-slate-300"
+                                  )}
+                                >
+                                  {roleForm.allowedTabs.includes(tab.id) && <CheckSquare className="w-4 h-4" />}
+                                </button>
+                                <span className={cn("transition-colors", roleForm.allowedTabs.includes(tab.id) ? "font-bold text-indigo-600" : "group-hover:text-indigo-600")}>
+                                  {tab.label}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="space-y-3">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ferramentas</p>
+                            {[
+                              { id: 'students', label: 'Alunos' },
+                              { id: 'teachers', label: 'Equipe EBD' },
+                              { id: 'classes', label: 'Turmas' },
+                              { id: 'attendance', label: 'Chamada' },
+                              { id: 'planning', label: 'Planejamento (Sub)' },
+                              { id: 'schoolYear', label: 'Ano Letivo' },
+                              { id: 'regimento', label: 'Regimento' },
+                              { id: 'calendar', label: 'Calendário' },
+                              { id: 'comunicados', label: 'Comunicados' },
+                              { id: 'documentos', label: 'Documentos' },
+                              { id: 'meetings', label: 'Reuniões' },
+                            ].map(tab => (
+                               <label key={tab.id} className="flex items-center gap-3 text-sm text-slate-700 cursor-pointer group">
+                               <button
+                                 type="button"
+                                 onClick={() => toggleTabInRole(tab.id)}
+                                 className={cn(
+                                   "w-5 h-5 rounded flex items-center justify-center transition-all",
+                                   roleForm.allowedTabs.includes(tab.id) ? "bg-indigo-600 text-white" : "bg-slate-100 border border-slate-300"
+                                 )}
+                               >
+                                 {roleForm.allowedTabs.includes(tab.id) && <CheckSquare className="w-4 h-4" />}
+                               </button>
+                               <span className={cn("transition-colors", roleForm.allowedTabs.includes(tab.id) ? "font-bold text-indigo-600" : "group-hover:text-indigo-600")}>
+                                 {tab.label}
+                               </span>
+                             </label>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex gap-4 items-center mt-6">
-                        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 text-amber-600">
-                          <Lock className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-xs font-black text-amber-900 uppercase">Senha do Administrador</label>
-                          <p className="text-[10px] text-amber-700 mt-1">Obrigatória para salvar ou editar perfis.</p>
-                          <input
-                            type="password"
-                            required
-                            value={adminPasswordInput}
-                            onChange={(e) => setAdminPasswordInput(e.target.value)}
-                            placeholder="Digite a senha..."
-                            className="w-full mt-2 px-4 py-2 bg-white border border-amber-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
-                          />
-                        </div>
+                      <div className="flex gap-4 pt-6 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setShowRoleForm(false)}
+                          className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                        >
+                          Confirmar Criação
+                        </button>
                       </div>
-                    </div>
-
-                    <button 
-                      type="submit"
-                      className="w-full py-4 bg-indigo-600 text-white font-black uppercase tracking-widest rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-5 h-5" />
-                      {editingRole ? 'Salvar Alterações' : 'Criar Perfil'}
-                    </button>
-                  </form>
+                    </form>
+                  </div>
                 </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* School Year Config */}
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">

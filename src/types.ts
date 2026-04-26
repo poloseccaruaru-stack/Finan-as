@@ -20,23 +20,6 @@ export interface Student {
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
 }
 
-export interface Role {
-  id: string;
-  nome: string;
-  permissoes: {
-    dashboard: 'none' | 'view' | 'full';
-    academic: 'none' | 'view' | 'full';
-    projects: 'none' | 'view' | 'full';
-    finance: 'none' | 'view' | 'full';
-    reports: 'none' | 'view' | 'full';
-    planning: 'none' | 'view' | 'full';
-    organogram: 'none' | 'view' | 'full';
-    system: 'none';
-  };
-  isAdminOnly: boolean;
-  createdAt: string;
-}
-
 export interface Teacher {
   id: string;
   name: string;
@@ -45,7 +28,6 @@ export interface Teacher {
   birthDate?: string;
   classIds: string[];
   role: string;
-  roleId?: string;
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;
@@ -58,6 +40,13 @@ export interface Teacher {
   address?: string;
   academicBackground?: string;
   theologicalBackground?: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  allowedTabs: string[];
+  createdAt: string;
 }
 
 export interface Class {

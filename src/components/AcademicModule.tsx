@@ -50,7 +50,7 @@ import {
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment } from '../types';
+import { Student, Teacher, Class, Attendance, Planning, JustificationOption, StudentReport, TeacherReport, Enrollment, Role } from '../types';
 import { cn, safeFormat } from '../lib/utils';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import { DiaryReportModal } from './DiaryReportModal';
@@ -300,9 +300,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -415,11 +415,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
-  const isProfessorEBD = user.role === 'professor_ebd';
-  const isProfessor = user.role === 'professor';
   const hasFullAccess = user.allowedTabs 
     ? (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))
-    : (isAdmin || isCoordinator || isProfessorEBD);
+    : (isAdmin || isCoordinator);
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -576,43 +574,6 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     }
   };
 
-  // Migração de Perfis Legados
-  useEffect(() => {
-    if (!isAdmin || teachers.length === 0 || roles.length === 0) return;
-
-    const migration = async () => {
-      const legacyRolesNames = [
-        "Professor EBD (acesso total exceto sistema)",
-        "Professor (acesso restrito)",
-        "professor_ebd",
-        "professor",
-        "coordinator"
-      ];
-
-      // Encontrar usuários com roles legadas (strings)
-      const usersToMigrate = teachers.filter(t => legacyRolesNames.includes(t.role));
-      
-      if (usersToMigrate.length > 0) {
-        console.log(`Migrando ${usersToMigrate.length} usuários de perfis legados...`);
-        // Criar um perfil padrão se necessário ou usar o primeiro disponível
-        const defaultRole = roles.find(r => r.nome === "Membro da Equipe") || roles[0];
-        
-        for (const u of usersToMigrate) {
-          try {
-            await updateDoc(doc(db, 'users', u.id), {
-              role: defaultRole ? defaultRole.nome : "Membro da Equipe",
-              roleId: defaultRole ? defaultRole.id : ""
-            });
-          } catch (e) {
-            console.error(`Erro ao migrar usuário ${u.id}:`, e);
-          }
-        }
-      }
-    };
-
-    migration();
-  }, [isAdmin, teachers.length, roles.length]);
-
   // Sorting and Filtering Logic
   const filteredStudents = useMemo(() => {
     let result = students.filter(s => 
@@ -700,8 +661,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'professor' as string,
-    roleId: '',
+    role: 'coordinator',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
@@ -976,8 +936,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: classIds,
             allowedTabs: allowedTabs,
-            role: teacherForm.role || 'professor',
-            roleId: teacherForm.roleId || "",
+            role: teacherForm.role || 'coordinator',
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -1005,8 +964,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             classIds: classIds,
             allowedTabs: allowedTabs,
             registrationNumber,
-            role: teacherForm.role || 'professor',
-            roleId: teacherForm.roleId || "",
+            role: teacherForm.role || 'coordinator',
             firstLogin: true,
             createdAt: new Date().toISOString()
           });
@@ -1037,7 +995,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         setShowForm(false);
         setEditingTeacher(null);
         setTeacherForm({ 
-          name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'professor', roleId: '', classIds: [], allowedTabs: [], address: '',
+          name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'coordinator', classIds: [], allowedTabs: [], address: '',
           turmas: {},
           modulos: { dashboard: false, academic: false, projects: false, finance: false, reports: false },
           subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false }
@@ -1096,8 +1054,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       address: teacher.address || '',
       academicBackground: teacher.academicBackground || '',
       theologicalBackground: teacher.theologicalBackground || '',
-      role: teacher.role || 'professor',
-      roleId: teacher.roleId || '',
+      role: teacher.role || 'coordinator',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || [],
       password: teacher.password || '',
@@ -1938,7 +1895,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                           <p className={cn(
                             "text-[10px] font-black uppercase tracking-widest",
                             teacher.role === 'admin' ? "text-red-500" : teacher.role === 'coordinator' ? "text-amber-500" : "text-slate-400"
-                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Professor'}</p>
+                          )}>{teacher.role === 'admin' ? 'Administrador' : teacher.role === 'coordinator' ? 'Coordenador' : 'Perfil Externo'}</p>
                         </div>
                       </div>
                     </td>
@@ -3235,60 +3192,47 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-                                                 <select
-                            value={teacherForm.roleId || teacherForm.role}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Perfil de Acesso (Cargo)</label>
+                          <select
+                            value={teacherForm.role}
                             onChange={(e) => {
-                              const selectedRoleId = e.target.value;
-                              const selectedRole = roles.find(r => r.id === selectedRoleId);
+                              const newRole = e.target.value;
+                              let allowedTabsList: string[] = [];
+                              const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
+                              const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                               
-                              if (selectedRole) {
-                                // Map Role permissions to allowedTabs format
-                                const newAllowedTabs: string[] = [];
-                                const newModulos = { ...teacherForm.modulos };
-                                const newSubAreas = { ...teacherForm.subAreas };
-
-                                Object.entries(selectedRole.permissoes).forEach(([mod, level]) => {
-                                  if (level !== 'none') {
-                                    newAllowedTabs.push(mod);
-                                    if (mod in newModulos) newModulos[mod] = true;
-                                    if (mod in newSubAreas) newSubAreas[mod] = true;
-                                  } else {
-                                    if (mod in newModulos) newModulos[mod] = false;
-                                    if (mod in newSubAreas) newSubAreas[mod] = false;
-                                  }
-                                });
-
-                                setTeacherForm({ 
-                                  ...teacherForm, 
-                                  role: selectedRole.nome, 
-                                  roleId: selectedRoleId,
-                                  allowedTabs: newAllowedTabs,
-                                  modulos: newModulos,
-                                  subAreas: newSubAreas
-                                });
-                              } else if (selectedRoleId === 'admin') {
-                                // Admin gets all permissions
-                                const adminModulos = { ...teacherForm.modulos };
-                                const adminSubAreas = { ...teacherForm.subAreas };
-                                Object.keys(adminModulos).forEach(k => adminModulos[k] = true);
-                                Object.keys(adminSubAreas).forEach(k => adminSubAreas[k] = true);
-
-                                setTeacherForm({ 
-                                  ...teacherForm, 
-                                  role: 'admin', 
-                                  roleId: '', 
-                                  allowedTabs: ['admin', 'dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'system'],
-                                  modulos: adminModulos,
-                                  subAreas: adminSubAreas
-                                });
+                              if (newRole === 'admin') {
+                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
+                              } else if (newRole === 'coordinator') {
+                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
+                              } else {
+                                const selectedRole = roles.find(r => r.id === newRole);
+                                if (selectedRole) {
+                                  allowedTabsList = selectedRole.allowedTabs || [];
+                                }
                               }
+                              
+                              const modulos = { ...teacherForm.modulos };
+                              Object.keys(modulos).forEach(k => modulos[k] = allowedTabsList.includes(k));
+                              
+                              const subAreas = { ...teacherForm.subAreas };
+                              Object.keys(subAreas).forEach(k => subAreas[k] = allowedTabsList.includes(k));
+
+                              let turmasList = [...teacherForm.classIds];
+                              if (newRole === 'admin' || newRole === 'coordinator') {
+                                turmasList = classes.map(c => c.id);
+                              }
+                              
+                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, classIds: turmasList });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="">Selecione um perfil...</option>
+                            <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
                             <option value="admin">Administrador (Acesso Total)</option>
                             {roles.map(r => (
-                              <option key={r.id} value={r.id}>{r.nome}</option>
+                              <option key={r.id} value={r.id}>{r.name}</option>
                             ))}
                           </select>
                         </div>
