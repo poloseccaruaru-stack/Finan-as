@@ -274,7 +274,7 @@ export default function App() {
       })
     },
     { 
-      id: 'admin', 
+      id: 'administrative', 
       label: 'Administrativo', 
       icon: Briefcase,
       subItems: [
@@ -299,7 +299,6 @@ export default function App() {
     { id: 'projects', label: 'Projetos', icon: Briefcase },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'reports', label: 'Relatórios', icon: Printer },
-    { id: 'planning', label: 'Planejamento', icon: BookOpen },
   ].filter(item => {
     if (item.id === 'system') return isAdmin;
     

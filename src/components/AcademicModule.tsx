@@ -286,14 +286,12 @@ function AttendanceStudentCard({
 }
 
 const MODULES_SUB_AREAS_LINKING: Record<string, string[]> = {
-  academic: ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar'],
+  academic: ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'planning'],
   projects: ['projects'],
   dashboard: ['dashboard'],
   finance: ['finance'],
   reports: ['reports'],
-  planning: ['planning'],
-  organogram: ['organogram'],
-  admin: ['admin', 'system', 'comunicados', 'documentos', 'meetings']
+  administrative: ['admin', 'system', 'comunicados', 'documentos', 'meetings', 'organogram']
 };
 
 export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate }: Props) {
@@ -696,6 +694,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
   modulos: {
     dashboard: false,
     academic: false,
+    administrative: false,
     projects: false,
     finance: false,
     reports: false
@@ -3433,18 +3432,53 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
-                        <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-64 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Áreas de Acesso</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newMods = { ...teacherForm.modulos };
+                                Object.keys(newMods).forEach(k => newMods[k] = true);
+                                // Trigger auto-linking
+                                const newSubAreas = { ...teacherForm.subAreas };
+                                Object.keys(newMods).forEach(modId => {
+                                  if (newMods[modId] && MODULES_SUB_AREAS_LINKING[modId]) {
+                                    MODULES_SUB_AREAS_LINKING[modId].forEach(sub => {
+                                      if (sub in newSubAreas) newSubAreas[sub] = true;
+                                    });
+                                  }
+                                });
+                                setTeacherForm({ ...teacherForm, modulos: newMods, subAreas: newSubAreas });
+                              }}
+                              className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100 transition-colors uppercase tracking-widest"
+                            >
+                              TODOS MÓDULOS
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newSubs = { ...teacherForm.subAreas };
+                                Object.keys(newSubs).forEach(k => newSubs[k] = true);
+                                setTeacherForm({ ...teacherForm, subAreas: newSubs });
+                              }}
+                              className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded hover:bg-emerald-100 transition-colors uppercase tracking-widest"
+                            >
+                              TODAS SUBÁREAS
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-80 overflow-y-auto">
                           <div className="space-y-2">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Módulos Principais</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1">Módulos Principais</p>
                             {[
                                { id: 'dashboard', label: 'Dashboard' },
                                { id: 'academic', label: 'Acadêmico' },
+                               { id: 'administrative', label: 'Administrativo' },
                                { id: 'projects', label: 'Projetos' },
                                { id: 'finance', label: 'Financeiro' },
                                { id: 'reports', label: 'Relatórios' },
-                               { id: 'planning', label: 'Planejamento' },
-                               { id: 'organogram', label: 'Organograma' },
                              ].map(tab => (
                                <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
                                  <input 
@@ -3471,42 +3505,41 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                    }}
                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
                                  />
-                                 {tab.label}
+                                 <span className="text-xs font-bold uppercase">{tab.label}</span>
                                </label>
                              ))}
                           </div>
                           <div className="space-y-2">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sub-Áreas / Ferramentas</p>
-                            {[
-                               { id: 'students', label: 'Alunos' },
-                               { id: 'teachers', label: 'Equipe EBD' },
-                               { id: 'classes', label: 'Turmas' },
-                               { id: 'attendance', label: 'Chamada' },
-                               { id: 'planning', label: 'Planejamento' },
-                               { id: 'schoolYear', label: 'Ano Letivo' },
-                               { id: 'regimento', label: 'Regimento' },
-                               { id: 'calendar', label: 'Calendário' },
-                               { id: 'organogram', label: 'Organograma' },
-                               { id: 'system', label: 'Sistema' },
-                               { id: 'comunicados', label: 'Comunicados' },
-                               { id: 'documentos', label: 'Documentos' },
-                               { id: 'meetings', label: 'Reuniões/Atas' },
-                             ].map(tab => (
-                               <label key={tab.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-indigo-600 transition-colors">
-                                 <input 
-                                   type="checkbox"
-                                   checked={!!teacherForm.subAreas[tab.id]}
-                                   onChange={(e) => {
-                                     setTeacherForm({ 
-                                       ...teacherForm, 
-                                       subAreas: { ...teacherForm.subAreas, [tab.id]: e.target.checked }
-                                     });
-                                   }}
-                                   className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                 />
-                                 {tab.label}
-                               </label>
-                             ))}
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1">Sub-Áreas</p>
+                             {[
+                                { id: 'students', label: 'Alunos' },
+                                { id: 'teachers', label: 'Equipe' },
+                                { id: 'classes', label: 'Turmas' },
+                                { id: 'attendance', label: 'Chamada' },
+                                { id: 'planning', label: 'Planejamento' },
+                                { id: 'schoolYear', label: 'Ano Letivo' },
+                                { id: 'calendar', label: 'Calendário' },
+                                { id: 'meetings', label: 'Reuniões' },
+                                { id: 'comunicados', label: 'Comunicados' },
+                                { id: 'documentos', label: 'Documentos' },
+                                { id: 'organogram', label: 'Organograma' },
+                                { id: 'regimento', label: 'Regimento' }
+                              ].map(sub => (
+                                <label key={sub.id} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-emerald-600 transition-colors">
+                                  <input 
+                                    type="checkbox"
+                                    checked={!!teacherForm.subAreas[sub.id]}
+                                    onChange={(e) => {
+                                      setTeacherForm({ 
+                                        ...teacherForm, 
+                                        subAreas: { ...teacherForm.subAreas, [sub.id]: e.target.checked }
+                                      });
+                                    }}
+                                    className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                                  />
+                                  <span className="text-[10px] font-medium uppercase italic">{sub.label}</span>
+                                </label>
+                              ))}
                           </div>
                         </div>
                       </div>

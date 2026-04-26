@@ -1633,7 +1633,7 @@ export default function AdminModule({ user, subTab }: Props) {
                       type="button"
                       onClick={() => {
                         const allTabs = [
-                          'dashboard', 'academic', 'students', 'teachers', 'classes', 'attendance',
+                          'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
                           'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
                           'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
                         ];
@@ -1653,6 +1653,7 @@ export default function AdminModule({ user, subTab }: Props) {
                     {[
                       { id: 'dashboard', label: 'Dashboard' },
                       { id: 'academic', label: 'Acadêmico (Geral)' },
+                      { id: 'administrative', label: 'Administrativo (Geral)' },
                       { id: 'students', label: 'Alunos' },
                       { id: 'teachers', label: 'Equipe EBD' },
                       { id: 'classes', label: 'Turmas' },
@@ -1662,7 +1663,7 @@ export default function AdminModule({ user, subTab }: Props) {
                       { id: 'finance', label: 'Financeiro' },
                       { id: 'reports', label: 'Relatórios' },
                       { id: 'planning', label: 'Planejamento' },
-                      { id: 'admin', label: 'Administrativo (Geral)' },
+                      { id: 'admin', label: 'Configurações' },
                       { id: 'regimento', label: 'Regimento' },
                       { id: 'calendar', label: 'Calendário' },
                       { id: 'comunicados', label: 'Comunicados' },
