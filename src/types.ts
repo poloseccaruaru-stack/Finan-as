@@ -20,6 +20,23 @@ export interface Student {
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
 }
 
+export interface Role {
+  id: string;
+  nome: string;
+  permissoes: {
+    dashboard: 'none' | 'view' | 'full';
+    academic: 'none' | 'view' | 'full';
+    projects: 'none' | 'view' | 'full';
+    finance: 'none' | 'view' | 'full';
+    reports: 'none' | 'view' | 'full';
+    planning: 'none' | 'view' | 'full';
+    organogram: 'none' | 'view' | 'full';
+    system: 'none';
+  };
+  isAdminOnly: boolean;
+  createdAt: string;
+}
+
 export interface Teacher {
   id: string;
   name: string;
@@ -27,7 +44,8 @@ export interface Teacher {
   contact: string;
   birthDate?: string;
   classIds: string[];
-  role: 'admin' | 'coordinator' | 'professor' | 'professor_ebd';
+  role: string;
+  roleId?: string;
   profession?: string;
   startDateEBD?: string;
   generalProfile?: string;

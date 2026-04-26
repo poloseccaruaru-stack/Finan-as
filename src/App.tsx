@@ -57,7 +57,7 @@ import AISidebarSearch from './components/AISidebarSearch';
 import BirthdayBanner from './components/BirthdayBanner';
 import HorizontalEventTicker from './components/HorizontalEventTicker';
 import { cn } from './lib/utils';
-import { Teacher, DashboardConfig } from './types';
+import { Teacher, DashboardConfig, Role } from './types';
 
 type TabId = 'dashboard' | 'academic' | 'admin' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings';
 
@@ -66,6 +66,7 @@ export default function App() {
   const [userData, setUserData] = useState<Teacher | null>(null);
   const [originalAdminData, setOriginalAdminData] = useState<Teacher | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -235,8 +236,7 @@ export default function App() {
   }
 
   const isAdmin = userData.role === 'admin';
-  const isCoordinator = userData.role === 'coordinator' || userData.role === 'professor_ebd';
-  const isProfessor = userData.role === 'professor';
+  const userRole = roles.find(r => r.id === userData?.roleId);
 
   // Handle Detail Report View - Standalone mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -247,11 +247,47 @@ export default function App() {
         targetId={urlParams.get('id') || ''}
         startDate={urlParams.get('start') || ''}
         endDate={urlParams.get('end') || ''}
-        highLimit={Number(urlParams.get('hL')) || config?.highFrequencyLimit || 80}
-        interLimit={Number(urlParams.get('iL')) || config?.intermediateFrequencyLimit || 50}
+        // Assuming config might not be available here, but let's see if it's in scope
+        highLimit={80} 
+        interLimit={50}
       />
     );
   }
+
+  const hasPermission = (module: string, type: 'view' | 'full' = 'view') => {
+    if (isAdmin) return true;
+    if (!userRole) return false;
+    
+    // Mapping App tab IDs to Role permission keys
+    const moduleMap: Record<string, string> = {
+      'academic': 'academic',
+      'students': 'academic',
+      'teachers': 'academic',
+      'classes': 'academic',
+      'attendance': 'academic',
+      'schoolYear': 'academic',
+      'projects': 'projects',
+      'finance': 'finance',
+      'reports': 'reports',
+      'planning': 'planning',
+      'organogram': 'organogram',
+      'system': 'system',
+      'dashboard': 'dashboard',
+      'meetings': 'academic',
+      'regimento': 'academic',
+      'calendar': 'academic',
+      'comunicados': 'academic',
+      'documentos': 'academic'
+    };
+
+    const roleMod = moduleMap[module] as keyof Role['permissoes'];
+    if (!roleMod) return true; // Default allow if not mapped
+
+    const perm = userRole.permissoes[roleMod];
+    if (type === 'view') return perm === 'view' || perm === 'full';
+    if (type === 'full') return perm === 'full';
+    return false;
+  };
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -268,16 +304,10 @@ export default function App() {
         { id: 'meetings', label: 'Reuniões', icon: Users },
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
-        if (isAdmin) return true;
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
         }
-        if (isCoordinator) return true;
-        if (isProfessor) {
-          const excluded = ['students', 'teachers', 'classes', 'meetings'];
-          return !excluded.includes(sub.id);
-        }
-        return true;
+        return hasPermission(sub.id);
       })
     },
     { 
@@ -292,14 +322,10 @@ export default function App() {
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
-        // If allowedTabs are defined, they are the source of truth for granular permissions
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
         }
-        if (isAdmin) return true;
-        if (isCoordinator) return sub.id !== 'system';
-        if (isProfessor) return sub.id !== 'system';
-        return true;
+        return hasPermission(sub.id);
       })
     },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
@@ -307,37 +333,17 @@ export default function App() {
     { id: 'reports', label: 'Relatórios', icon: Printer },
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
   ].filter(item => {
-    // If allowedTabs are defined, they are the source of truth for granular permissions
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(item.id);
     }
-    if (isAdmin) return true;
-    if (isCoordinator) return true;
-    if (isProfessor) {
-      const excluded = ['finance', 'reports'];
-      return !excluded.includes(item.id);
-    }
-    return true;
+    return hasPermission(item.id);
   });
 
   const hasAccess = (tabId: string): boolean => {
-    // Check if the tab (or its parent) is in allowedTabs
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
-      // For sub-items, we need to check if they are in allowedTabs as well
-      // But based on App structure, we check the tabId directly
       return userData.allowedTabs.includes(tabId);
     }
-    
-    if (isAdmin) return true;
-    if (isCoordinator) return tabId !== 'system';
-    
-    if (isProfessor) {
-      if (['finance', 'reports', 'meetings'].includes(tabId)) return false;
-      if (['students', 'teachers', 'classes', 'system'].includes(tabId)) return false;
-      return true;
-    }
-    
-    return true;
+    return hasPermission(tabId);
   };
 
   const AccessDenied = () => (

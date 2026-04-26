@@ -300,6 +300,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -479,6 +480,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       setMeetings(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'meetings'));
 
+    const unsubRoles = onSnapshot(collection(db, 'roles'), (snap) => {
+      setRoles(snap.docs.map(d => ({ id: d.id, ...d.data() } as Role)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'roles'));
+
     const unsubSchoolYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -498,6 +503,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       unsubStudentReports();
       unsubTeacherReports();
       unsubMeetings();
+      unsubRoles();
       unsubSchoolYear();
     };
   }, [user?.id, user?.role, JSON.stringify(user?.classIds), hasFullAccess, isAdmin, selectedSchoolYear]);
@@ -569,6 +575,43 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       handleFirestoreError(err, OperationType.UPDATE, `classes/${selectedClass}`);
     }
   };
+
+  // Migração de Perfis Legados
+  useEffect(() => {
+    if (!isAdmin || teachers.length === 0 || roles.length === 0) return;
+
+    const migration = async () => {
+      const legacyRolesNames = [
+        "Professor EBD (acesso total exceto sistema)",
+        "Professor (acesso restrito)",
+        "professor_ebd",
+        "professor",
+        "coordinator"
+      ];
+
+      // Encontrar usuários com roles legadas (strings)
+      const usersToMigrate = teachers.filter(t => legacyRolesNames.includes(t.role));
+      
+      if (usersToMigrate.length > 0) {
+        console.log(`Migrando ${usersToMigrate.length} usuários de perfis legados...`);
+        // Criar um perfil padrão se necessário ou usar o primeiro disponível
+        const defaultRole = roles.find(r => r.nome === "Membro da Equipe") || roles[0];
+        
+        for (const u of usersToMigrate) {
+          try {
+            await updateDoc(doc(db, 'users', u.id), {
+              role: defaultRole ? defaultRole.nome : "Membro da Equipe",
+              roleId: defaultRole ? defaultRole.id : ""
+            });
+          } catch (e) {
+            console.error(`Erro ao migrar usuário ${u.id}:`, e);
+          }
+        }
+      }
+    };
+
+    migration();
+  }, [isAdmin, teachers.length, roles.length]);
 
   // Sorting and Filtering Logic
   const filteredStudents = useMemo(() => {
@@ -657,7 +700,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     startDateEBD: '',
     birthDate: '',
     generalProfile: '',
-    role: 'professor' as 'admin' | 'coordinator' | 'professor' | 'professor_ebd',
+    role: 'professor' as string,
+    roleId: '',
     classIds: [] as string[],
     allowedTabs: ['dashboard', 'academic', 'projects', 'reports'] as string[],
     address: '',
@@ -933,6 +977,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             classIds: classIds,
             allowedTabs: allowedTabs,
             role: teacherForm.role || 'professor',
+            roleId: teacherForm.roleId || "",
             password: teacherForm.password, // Update password if provided
             updatedAt: new Date().toISOString()
           });
@@ -961,6 +1006,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
             allowedTabs: allowedTabs,
             registrationNumber,
             role: teacherForm.role || 'professor',
+            roleId: teacherForm.roleId || "",
             firstLogin: true,
             createdAt: new Date().toISOString()
           });
@@ -991,7 +1037,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
         setShowForm(false);
         setEditingTeacher(null);
         setTeacherForm({ 
-          name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'professor', classIds: [], allowedTabs: [], address: '',
+          name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'professor', roleId: '', classIds: [], allowedTabs: [], address: '',
           turmas: {},
           modulos: { dashboard: false, academic: false, projects: false, finance: false, reports: false },
           subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false }
@@ -1051,6 +1097,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
       academicBackground: teacher.academicBackground || '',
       theologicalBackground: teacher.theologicalBackground || '',
       role: teacher.role || 'professor',
+      roleId: teacher.roleId || '',
       classIds: teacher.classIds || [],
       allowedTabs: teacher.allowedTabs || [],
       password: teacher.password || '',
@@ -3188,44 +3235,61 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                             onChange={(e) => setTeacherForm({ ...teacherForm, name: e.target.value })}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Perfil de Acesso (Cargo)</label>
-                          <select
-                            value={teacherForm.role}
+                                                 <select
+                            value={teacherForm.roleId || teacherForm.role}
                             onChange={(e) => {
-                              const newRole = e.target.value as 'admin'|'coordinator'|'professor'|'professor_ebd';
-                              let allowedTabsList: string[] = [];
-                              const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
-                              const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
+                              const selectedRoleId = e.target.value;
+                              const selectedRole = roles.find(r => r.id === selectedRoleId);
                               
-                              if (newRole === 'admin') {
-                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
-                              } else if (newRole === 'coordinator' || newRole === 'professor_ebd') {
-                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'].filter(tab => tab !== 'system');
-                              } else if (newRole === 'professor') {
-                                allowedTabsList = [...allModules, ...allSubAreas].filter(tab => tab !== 'system');
-                              }
-                              
-                              const modulos = { ...teacherForm.modulos };
-                              Object.keys(modulos).forEach(k => modulos[k] = allowedTabsList.includes(k));
-                              
-                              const subAreas = { ...teacherForm.subAreas };
-                              Object.keys(subAreas).forEach(k => subAreas[k] = allowedTabsList.includes(k));
+                              if (selectedRole) {
+                                // Map Role permissions to allowedTabs format
+                                const newAllowedTabs: string[] = [];
+                                const newModulos = { ...teacherForm.modulos };
+                                const newSubAreas = { ...teacherForm.subAreas };
 
-                              let turmasList = [...teacherForm.classIds];
-                              if (newRole === 'admin' || newRole === 'coordinator') {
-                                turmasList = classes.map(c => c.id);
+                                Object.entries(selectedRole.permissoes).forEach(([mod, level]) => {
+                                  if (level !== 'none') {
+                                    newAllowedTabs.push(mod);
+                                    if (mod in newModulos) newModulos[mod] = true;
+                                    if (mod in newSubAreas) newSubAreas[mod] = true;
+                                  } else {
+                                    if (mod in newModulos) newModulos[mod] = false;
+                                    if (mod in newSubAreas) newSubAreas[mod] = false;
+                                  }
+                                });
+
+                                setTeacherForm({ 
+                                  ...teacherForm, 
+                                  role: selectedRole.nome, 
+                                  roleId: selectedRoleId,
+                                  allowedTabs: newAllowedTabs,
+                                  modulos: newModulos,
+                                  subAreas: newSubAreas
+                                });
+                              } else if (selectedRoleId === 'admin') {
+                                // Admin gets all permissions
+                                const adminModulos = { ...teacherForm.modulos };
+                                const adminSubAreas = { ...teacherForm.subAreas };
+                                Object.keys(adminModulos).forEach(k => adminModulos[k] = true);
+                                Object.keys(adminSubAreas).forEach(k => adminSubAreas[k] = true);
+
+                                setTeacherForm({ 
+                                  ...teacherForm, 
+                                  role: 'admin', 
+                                  roleId: '', 
+                                  allowedTabs: ['admin', 'dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram', 'system'],
+                                  modulos: adminModulos,
+                                  subAreas: adminSubAreas
+                                });
                               }
-                              
-                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, classIds: turmasList });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                           >
-                            <option value="professor">Professor (Acesso Restrito)</option>
-                            <option value="professor_ebd">Professor EBD (Acesso Total exceto Sistema)</option>
-                            <option value="coordinator">Coordenador (Acesso Total exceto Sistema)</option>
+                            <option value="">Selecione um perfil...</option>
                             <option value="admin">Administrador (Acesso Total)</option>
+                            {roles.map(r => (
+                              <option key={r.id} value={r.id}>{r.nome}</option>
+                            ))}
                           </select>
                         </div>
                       </div>
