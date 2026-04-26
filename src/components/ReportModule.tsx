@@ -111,11 +111,13 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('reports');
 
   useEffect(() => {
     const classIds = (user.classIds && user.classIds.length > 0) ? user.classIds : ['none'];
 
-    const studentsQuery = isAdmin ? collection(db, 'students') : query(collection(db, 'students'), where('classId', 'in', classIds));
+    const studentsQuery = hasFullAccess ? collection(db, 'students') : query(collection(db, 'students'), where('classId', 'in', classIds));
     const unsubStudents = onSnapshot(studentsQuery, (snap) => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
       setLoading(false);
@@ -128,12 +130,12 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
       setTeachers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Teacher)));
     });
 
-    const attendanceQuery = isAdmin ? collection(db, 'attendance') : query(collection(db, 'attendance'), where('classId', 'in', classIds));
+    const attendanceQuery = hasFullAccess ? collection(db, 'attendance') : query(collection(db, 'attendance'), where('classId', 'in', classIds));
     const unsubAttendance = onSnapshot(attendanceQuery, (snap) => {
       setAttendances(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
     });
 
-    const planningQuery = isAdmin ? collection(db, 'planning') : query(collection(db, 'planning'), where('classId', 'in', classIds));
+    const planningQuery = hasFullAccess ? collection(db, 'planning') : query(collection(db, 'planning'), where('classId', 'in', classIds));
     const unsubPlanning = onSnapshot(planningQuery, (snap) => {
       setPlannings(snap.docs.map(d => ({ id: d.id, ...d.data() } as Planning)));
     });
@@ -146,7 +148,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
       setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
     });
 
-    const classesQuery = isAdmin ? collection(db, 'classes') : query(collection(db, 'classes'), where('id', 'in', classIds));
+    const classesQuery = hasFullAccess ? collection(db, 'classes') : query(collection(db, 'classes'), where('id', 'in', classIds));
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
     });
@@ -175,7 +177,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
       unsubStudentReports();
       unsubTeacherReports();
     };
-  }, [user, isAdmin, selectedSchoolYear]);
+  }, [user, hasFullAccess, selectedSchoolYear]);
 
   const filteredData = useMemo(() => {
     const filterByDate = (dateStr: string) => {

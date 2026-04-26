@@ -115,10 +115,12 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const [showReportModal, setShowReportModal] = useState(false);
 
   const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+  const hasFullAccess = isAdmin || isCoordinator || user.allowedTabs?.includes('planning');
 
   useEffect(() => {
     const classIds = user.classIds || [];
-    const classesQuery = isAdmin
+    const classesQuery = hasFullAccess
       ? collection(db, 'classes')
       : query(collection(db, 'classes'), where('id', 'in', classIds.length > 0 ? classIds : ['none']));
 
@@ -135,7 +137,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
       setLoading(false);
     });
 
-    const planningQuery = isAdmin 
+    const planningQuery = hasFullAccess 
       ? collection(db, 'planning')
       : query(
           collection(db, 'planning'),
@@ -159,7 +161,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
       unsubClasses();
       unsubPlanning();
     };
-  }, [user, isAdmin, selectedClassId]);
+  }, [user, hasFullAccess, selectedClassId]);
 
   const monthSundays = useMemo(() => {
     const start = startOfMonth(currentMonth);

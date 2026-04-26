@@ -267,13 +267,16 @@ export default function App() {
         { id: 'meetings', label: 'Reuniões', icon: Users },
         { id: 'schoolYear', label: 'Ano Letivo', icon: Calendar },
       ].filter(sub => {
-        if (isAdmin || isCoordinator) return true;
+        if (isAdmin) return true;
+        if (userData.allowedTabs && userData.allowedTabs.length > 0) {
+          return userData.allowedTabs.includes(sub.id);
+        }
+        if (isCoordinator) return true;
         if (isProfessor) {
           const excluded = ['students', 'teachers', 'classes', 'meetings'];
           return !excluded.includes(sub.id);
         }
-        // Teachers can only see sub-items they are allowed to
-        return !userData.allowedTabs || userData.allowedTabs.includes(sub.id);
+        return true;
       })
     },
     { 
@@ -289,22 +292,29 @@ export default function App() {
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
         if (isAdmin) return true;
+        if (userData.allowedTabs && userData.allowedTabs.length > 0) {
+          return userData.allowedTabs.includes(sub.id);
+        }
         if (isCoordinator) return sub.id !== 'system';
         if (isProfessor) return sub.id !== 'system';
-        return userData.allowedTabs?.includes(sub.id);
+        return true;
       })
     },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'reports', label: 'Relatórios', icon: Printer },
+    { id: 'planning', label: 'Planejamento', icon: BookOpen },
   ].filter(item => {
-    if (isAdmin || isCoordinator) return true;
+    if (isAdmin) return true;
+    if (userData.allowedTabs && userData.allowedTabs.length > 0) {
+      return userData.allowedTabs.includes(item.id);
+    }
+    if (isCoordinator) return true;
     if (isProfessor) {
       const excluded = ['finance', 'reports'];
       return !excluded.includes(item.id);
     }
-    // For non-admins, check allowedTabs
-    return userData.allowedTabs?.includes(item.id);
+    return true;
   });
 
   return (
