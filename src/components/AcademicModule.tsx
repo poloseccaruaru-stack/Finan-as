@@ -3148,7 +3148,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
                                 allowedTabsList = ['dashboard', 'academic', 'projects', 'planning', 'organogram', 'attendance', 'schoolYear', 'regimento', 'calendar', 'comunicados', 'documentos'];
                               }
                               
-                              // Update organized objects
+                              // Update organized objects based on the standard role lists
                               const modulos = { ...teacherForm.modulos };
                               Object.keys(modulos).forEach(k => modulos[k] = allowedTabsList.includes(k));
                               

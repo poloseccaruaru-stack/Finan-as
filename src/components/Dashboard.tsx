@@ -44,7 +44,9 @@ import {
   Save,
   Clock,
   RefreshCw,
-  X
+  X,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -70,7 +72,7 @@ interface Props {
   selectedSchoolYear: string;
 }
 
-const DEFAULT_LAYOUT = ['stats', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
+const DEFAULT_LAYOUT = ['stats', 'attendanceMonitoring', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
 
 export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -136,6 +138,12 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
 
   const [tempColabBirthStart, setTempColabBirthStart] = useState('');
   const [tempColabBirthEnd, setTempColabBirthEnd] = useState('');
+
+  const [attendanceMonitoringStart, setAttendanceMonitoringStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [attendanceMonitoringEnd, setAttendanceMonitoringEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [showAttendanceMonitoringConfig, setShowAttendanceMonitoringConfig] = useState(false);
+  const [tempAttendanceStart, setTempAttendanceStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [tempAttendanceEnd, setTempAttendanceEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   const [detailReportParams, setDetailReportParams] = useState<{
     type: 'classification' | 'ranking';
@@ -1055,6 +1063,108 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (blockId === 'attendanceMonitoring') return wrapInItem(
+                  <div className="relative group/block transition-all">
+                    <DragControls />
+                    <div className={cn("bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full", isEditMode && "border-2 border-dashed border-amber-200 bg-amber-50/10")}>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                          <h3 className="text-lg font-bold text-slate-900 font-black uppercase tracking-tight text-indigo-700">Monitoramento de Chamadas (Domingos)</h3>
+                        </div>
+                        <div className="relative">
+                          <button onClick={() => setShowAttendanceMonitoringConfig(!showAttendanceMonitoringConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
+                          <AnimatePresence>
+                            {showAttendanceMonitoringConfig && (
+                              <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Início</label>
+                                      <input type="date" value={tempAttendanceStart} onChange={(e) => setTempAttendanceStart(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Fim</label>
+                                      <input type="date" value={tempAttendanceEnd} onChange={(e) => setTempAttendanceEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { setAttendanceMonitoringStart(tempAttendanceStart); setAttendanceMonitoringEnd(tempAttendanceEnd); setShowAttendanceMonitoringConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Filtrar Período</button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[300px]">
+                        {(() => {
+                          const start = parseISO(attendanceMonitoringStart);
+                          const end = parseISO(attendanceMonitoringEnd);
+                          
+                          if (!isValid(start) || !isValid(end)) return null;
+
+                          const sundays: Date[] = [];
+                          let current = start;
+                          while (current <= end) {
+                            if (current.getDay() === 0) {
+                              sundays.push(new Date(current));
+                            }
+                            current = new Date(current.getTime() + 86400000);
+                          }
+
+                          if (sundays.length === 0) return <div className="text-center py-12 text-slate-400 italic text-xs">Nenhum domingo no período.</div>;
+
+                          return sundays.map(sunday => {
+                            const dateStr = format(sunday, 'yyyy-MM-dd');
+                            return (
+                              <div key={dateStr} className="space-y-3">
+                                <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
+                                  <Calendar className="w-4 h-4 text-slate-400" />
+                                  <span className="text-xs font-black text-slate-600 uppercase tracking-widest">
+                                    {format(sunday, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-2">
+                                  {classes.length > 0 ? (
+                                    classes.map(cls => {
+                                      const hasAttendance = attendanceRecords.some(r => r.classId === cls.id && r.date === dateStr);
+                                      return (
+                                        <div key={cls.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group transition-all">
+                                          <div className="flex items-center gap-3">
+                                            <div className={cn("w-2 h-2 rounded-full", hasAttendance ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]")}></div>
+                                            <span className={cn("text-xs font-black uppercase tracking-tight truncate max-w-[150px]", hasAttendance ? "text-emerald-700" : "text-rose-700")}>
+                                              {cls.name}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {hasAttendance ? (
+                                              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                                                <CheckCircle2 className="w-3 h-3" />
+                                                CHAMADA REALIZADA
+                                              </span>
+                                            ) : (
+                                              <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">
+                                                <XCircle className="w-3 h-3" />
+                                                PENDENTE
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="text-[10px] text-slate-400 italic">Nenhuma turma cadastrada.</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
                   </div>
