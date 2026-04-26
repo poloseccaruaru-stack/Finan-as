@@ -341,24 +341,44 @@ export default function AdminModule({ user, subTab }: Props) {
         unsubGeneral();
       };
     }
-    if (subTab === 'system') {
-      const unsubYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
-        if (snap.exists()) {
-          const data = snap.data() as SchoolYearConfig;
-          setSchoolYear(data);
-          setSchoolYearForm({ startDate: data.startDate, endDate: data.endDate });
+        if (subTab === 'system') {
+          const unsubYear = onSnapshot(doc(db, 'config', 'schoolYear'), (snap) => {
+            if (snap.exists()) {
+              const data = snap.data() as SchoolYearConfig;
+              setSchoolYear(data);
+              setSchoolYearForm({ startDate: data.startDate, endDate: data.endDate });
+            }
+          }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
+    
+          const unsubProfiles = onSnapshot(collection(db, 'profiles'), async (snap) => {
+            const currentProfiles = snap.docs.map(d => ({ id: d.id, ...d.data() } as AccessProfile));
+            setProfiles(currentProfiles);
+    
+            // Auto-seed missing core profiles
+            const allTabs = [
+              'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
+              'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
+              'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+            ];
+            
+            const hasProf1 = currentProfiles.some(p => p.name === 'Professor 1');
+            const hasProf2 = currentProfiles.some(p => p.name === 'Professor 2');
+            const hasCoord = currentProfiles.some(p => p.name.toLowerCase() === 'coordenação');
+
+            if (!hasCoord && currentProfiles.length === 0) {
+              await addDoc(collection(db, 'profiles'), {
+                name: 'Coordenação',
+                allowedTabs: allTabs,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }, (err) => handleFirestoreError(err, OperationType.LIST, 'profiles'));
+    
+          return () => {
+            unsubYear();
+            unsubProfiles();
+          };
         }
-      }, (err) => handleFirestoreError(err, OperationType.GET, 'config/schoolYear'));
-
-      const unsubProfiles = onSnapshot(collection(db, 'profiles'), (snap) => {
-        setProfiles(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccessProfile)));
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'profiles'));
-
-      return () => {
-        unsubYear();
-        unsubProfiles();
-      };
-    }
     if (subTab === 'meetings') {
       const q = query(collection(db, 'meetings'), orderBy('date', 'desc'));
       const unsub = onSnapshot(q, (snap) => {
@@ -409,6 +429,55 @@ export default function AdminModule({ user, subTab }: Props) {
           showAlert('Sucesso', 'Perfil salvo com sucesso!');
         } catch (err) {
           handleFirestoreError(err, editingProfileId ? OperationType.UPDATE : OperationType.CREATE, 'profiles');
+        }
+      }
+    );
+  };
+
+  const handleCreateDefaultProfiles = async () => {
+    const allTabs = [
+      'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
+      'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
+      'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+    ];
+
+    const existingNames = profiles.map(p => p.name.toLowerCase());
+    const toCreate = [];
+
+    if (!existingNames.includes('professor 1')) {
+      toCreate.push({
+        name: 'Professor 1',
+        allowedTabs: allTabs,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    if (!existingNames.includes('professor 2')) {
+      // Find Coordination to duplicate its tabs, or use allTabs if not found
+      const coord = profiles.find(p => p.name.toLowerCase() === 'coordenação');
+      toCreate.push({
+        name: 'Professor 2',
+        allowedTabs: coord ? coord.allowedTabs : allTabs,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    if (toCreate.length === 0) {
+      showAlert('Aviso', 'Os perfis Professor 1 e Professor 2 já existem.');
+      return;
+    }
+
+    showAdminConfirm(
+      'Criar Perfis Padrão',
+      `Deseja criar automaticamente os perfis Professor 1 e Professor 2 baseados nos acessos de Administrador e Coordenação?`,
+      async () => {
+        try {
+          for (const profile of toCreate) {
+            await addDoc(collection(db, 'profiles'), profile);
+          }
+          showAlert('Sucesso', 'Perfis Professor 1 e Professor 2 criados com sucesso!');
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, 'profiles');
         }
       }
     );
@@ -784,17 +853,26 @@ export default function AdminModule({ user, subTab }: Props) {
                   <p className="text-sm text-slate-500">Crie e gerencie os cargos e permissões da plataforma.</p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setProfileForm({ name: '', allowedTabs: [] });
-                  setEditingProfileId(null);
-                  setShowProfileForm(true);
-                }}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
-              >
-                <Plus className="w-5 h-5" />
-                Novo Perfil
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCreateDefaultProfiles}
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-4 rounded-xl transition-all border border-slate-200 text-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  Duplicar Perfis (Prof 1/2)
+                </button>
+                <button
+                  onClick={() => {
+                    setProfileForm({ name: '', allowedTabs: [] });
+                    setEditingProfileId(null);
+                    setShowProfileForm(true);
+                  }}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
+                >
+                  <Plus className="w-5 h-5" />
+                  Novo Perfil
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

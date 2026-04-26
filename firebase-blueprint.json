@@ -144,6 +144,7 @@
     }
   },
   "firestore": {
+    "/users/{userId}": { "schema": "Teacher", "description": "System users and their roles" },
     "/students/{studentId}": { "schema": "Student", "description": "Students" },
     "/teachers/{teacherId}": { "schema": "Teacher", "description": "Teachers" },
     "/classes/{classId}": { "schema": "Class", "description": "Classes" },
@@ -153,6 +154,13 @@
     "/regimento/{regimentoId}": { "schema": "Regimento", "description": "School regulations" },
     "/calendar/{eventId}": { "schema": "CalendarEvent", "description": "Calendar events" },
     "/meetings/{meetingId}": { "schema": "Meeting", "description": "Meeting minutes" },
-    "/general_calendars/{calendarId}": { "schema": "GeneralCalendar", "description": "General calendars" }
+    "/general_calendars/{calendarId}": { "schema": "GeneralCalendar", "description": "General calendars" },
+    "/profiles/{profileId}": { "schema": "AccessProfile", "description": "Access profiles and permissions" },
+    "/justificationOptions/{optId}": { "schema": "JustificationOption", "description": "Options for absence justifications" },
+    "/comunicados/{comId}": { "schema": "Comunicado", "description": "School announcements" },
+    "/documentos/{docId}": { "schema": "Documento", "description": "General documents" },
+    "/budgets/{budgetId}": { "schema": "Budget", "description": "Monthly budgets" },
+    "/estimated_expenses/{expenseId}": { "schema": "EstimatedExpense", "description": "Estimated monthly expenses" },
+    "/manual_reports/{reportId}": { "schema": "ManualReport", "description": "Manually created custom reports" }
   }
 }

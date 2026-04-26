@@ -3233,6 +3233,13 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                 const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
                                 const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
+                              } else if (newRole === 'coordinator') {
+                                // Coordination access: All except system config usually, but let's include all 18 non-admin modules
+                                allowedTabsList = [
+                                  'dashboard', 'academic', 'students', 'teachers', 'classes', 'attendance',
+                                  'schoolYear', 'projects', 'finance', 'reports', 'planning',
+                                  'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+                                ];
                               } else {
                                 const profile = profiles.find(p => p.id === newRole || p.name === newRole);
                                 if (profile) {
@@ -3257,8 +3264,8 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           >
                             <option value="">Selecione um perfil...</option>
                             <option value="admin" className="font-bold text-indigo-600">ADMINISTRADOR</option>
-                            <option value="coordinator">COORDENADOR</option>
-                            {profiles.filter(p => !['admin', 'coordenador', 'professor', 'professor ebd'].includes(p.name.toLowerCase())).map(profile => (
+                            <option value="coordinator">COORDENAÇÃO</option>
+                            {profiles.filter(p => !['admin', 'administrador', 'coordenação', 'coordenador'].includes(p.name.toLowerCase())).map(profile => (
                               <option key={profile.id} value={profile.id}>{profile.name.toUpperCase()}</option>
                             ))}
                           </select>

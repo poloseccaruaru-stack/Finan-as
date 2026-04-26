@@ -10,18 +10,32 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
       return isAuthenticated() && 
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coordinator')) ||
+          (getUserData().role == 'admin' || getUserData().role == 'coordinator')) ||
          (request.auth.token.email == "poloseccaruaru@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasTabAccess(tabId) {
+      return isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          (getUserData().allowedTabs != null && tabId in getUserData().allowedTabs) ||
+          (getUserData().generalProfile != null && 
+           get(/databases/$(database)/documents/profiles/$(getUserData().generalProfile)).data.allowedTabs.hasAny([tabId]))
+        )
+      );
     }
 
     function isProfessor() {
       return isAuthenticated() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'professor';
+        getUserData().role == 'professor';
     }
 
     function incoming() { return request.resource.data; }
@@ -43,100 +57,135 @@ service cloud.firestore {
     }
 
     match /students/{studentId} {
-      allow read: if isAdmin();
+      allow read: if hasTabAccess('students') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /teachers/{teacherId} {
-      allow read: if isAdmin();
+      allow read: if hasTabAccess('teachers') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /classes/{classId} {
-      allow read: if isAdmin();
+      allow read: if hasTabAccess('classes') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAdmin() || isProfessor();
-      allow write: if isAdmin() || isProfessor();
+      allow read: if hasTabAccess('attendance') || hasTabAccess('academic');
+      allow write: if hasTabAccess('attendance') || hasTabAccess('academic');
     }
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('projects');
+      allow write: if isAdmin() || hasTabAccess('projects');
     }
 
     match /transactions/{transactionId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('finance');
+      allow write: if isAdmin() || hasTabAccess('finance');
     }
 
     match /regimento/{regId} {
-      allow read: if isAuthenticated();
+      allow read: if hasTabAccess('regimento') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /absenceResolutions/{resId} {
-      allow read: if isAdmin() || isProfessor();
-      allow create: if isAuthenticated() && isValidAbsenceResolution(incoming());
+      allow read: if hasTabAccess('attendance') || hasTabAccess('academic');
+      allow create: if (hasTabAccess('attendance') || hasTabAccess('academic')) && isValidAbsenceResolution(incoming());
       allow update: if (isAdmin() || (isAuthenticated() && existing().teacherId == request.auth.uid)) && isValidAbsenceResolution(incoming());
       allow delete: if isAdmin();
     }
 
     match /preDefinedResolutions/{resId} {
-      allow read: if isAuthenticated();
+      allow read: if hasTabAccess('attendance') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /enrollments/{enrollId} {
-      allow read: if isAuthenticated();
+      allow read: if hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /ai_actions/{actionId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || hasTabAccess('admin') || hasTabAccess('system');
       allow write: if isAdmin();
     }
 
     match /config/{configId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || hasTabAccess('admin') || hasTabAccess('system');
       allow write: if isAdmin();
     }
 
     match /calendarEvents/{eventId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('calendar') || hasTabAccess('academic');
+      allow write: if isAdmin() || hasTabAccess('calendar');
     }
 
     match /planning/{planningId} {
-      allow read: if isAdmin() || isProfessor();
-      allow write: if isAdmin() || isProfessor();
+      allow read: if hasTabAccess('planning') || hasTabAccess('academic');
+      allow write: if hasTabAccess('planning') || hasTabAccess('academic');
     }
 
     match /student_reports/{reportId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('reports') || hasTabAccess('academic');
+      allow write: if isAdmin() || hasTabAccess('reports');
     }
 
     match /teacher_reports/{reportId} {
-      allow read: if isAdmin();
+      allow read: if hasTabAccess('reports') || hasTabAccess('administrative');
       allow write: if isAdmin();
     }
 
     match /meetings/{meetingId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read: if hasTabAccess('meetings') || hasTabAccess('administrative');
+      allow write: if isAdmin() || hasTabAccess('meetings');
     }
 
     match /general_calendars/{calId} {
-      allow read: if isAuthenticated();
+      allow read: if hasTabAccess('calendar') || hasTabAccess('academic');
       allow write: if isAdmin();
     }
 
     match /organogram/{entryId} {
+      allow read: if hasTabAccess('organogram') || hasTabAccess('administrative');
+      allow write: if isAdmin();
+    }
+
+    match /profiles/{profileId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /justificationOptions/{optId} {
+      allow read: if isAuthenticated();
+      allow write: if hasTabAccess('attendance') || hasTabAccess('academic');
+    }
+
+    match /comunicados/{comId} {
+      allow read: if hasTabAccess('comunicados') || hasTabAccess('administrative');
+      allow write: if isAdmin() || hasTabAccess('comunicados');
+    }
+
+    match /documentos/{docId} {
+      allow read: if hasTabAccess('documentos') || hasTabAccess('administrative');
+      allow write: if isAdmin() || hasTabAccess('documentos');
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if hasTabAccess('finance');
+      allow write: if isAdmin();
+    }
+
+    match /estimated_expenses/{expenseId} {
+      allow read: if hasTabAccess('finance');
+      allow write: if isAdmin();
+    }
+
+    match /manual_reports/{reportId} {
+      allow read: if hasTabAccess('reports');
+      allow write: if isAdmin() || hasTabAccess('reports');
     }
 
     match /test/{docId} {
