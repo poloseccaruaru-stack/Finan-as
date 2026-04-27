@@ -116,6 +116,16 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
+  
+  const filteredClasses = useMemo(() => {
+    if (isAdmin || isCoordinator) return classes;
+    return classes.filter(c => 
+      c.teacherIds?.includes(user.id) || 
+      c.teacherId === user.id ||
+      user.classIds?.includes(c.id)
+    );
+  }, [classes, isAdmin, isCoordinator, user.id, user.classIds]);
+
   const hasFullAccess = user.allowedTabs 
     ? user.allowedTabs.includes('planning') 
     : (isAdmin || isCoordinator);
@@ -126,11 +136,8 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
 
     const unsubClasses = onSnapshot(classesQuery, (snap) => {
       const classesData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Class));
-      const filteredClasses = classesData.filter(c => c.schoolYear === selectedSchoolYear);
-      setClasses(filteredClasses);
-      if (filteredClasses.length > 0 && !selectedClassId) {
-        setSelectedClassId(filteredClasses[0].id);
-      }
+      const yearClasses = classesData.filter(c => c.schoolYear === selectedSchoolYear);
+      setClasses(yearClasses);
       setLoading(false);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'classes');
@@ -158,6 +165,15 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
     };
   }, [user, hasFullAccess, selectedClassId]);
 
+  useEffect(() => {
+    if (filteredClasses.length > 0 && !selectedClassId) {
+      setSelectedClassId(filteredClasses[0].id);
+    } else if (selectedClassId && !filteredClasses.some(c => c.id === selectedClassId)) {
+      // If the selected class is no longer in the filtered list (e.g. role change)
+      setSelectedClassId(filteredClasses.length > 0 ? filteredClasses[0].id : '');
+    }
+  }, [filteredClasses, selectedClassId]);
+
   const monthSundays = useMemo(() => {
     const start = startOfMonth(currentMonth);
     const end = endOfMonth(currentMonth);
@@ -166,7 +182,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
 
   const handleAISuggest = async () => {
     if (!selectedDate || !selectedClassId) return;
-    const className = classes.find(c => c.id === selectedClassId)?.name || "";
+    const className = filteredClasses.find(c => c.id === selectedClassId)?.name || "";
     const dateStr = safeFormat(selectedDate, 'dd/MM/yyyy');
     
     setSuggesting(true);
@@ -313,7 +329,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
           >
-            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
       </div>
@@ -391,7 +407,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                   <div>
                     <h3 className="text-2xl font-black text-slate-900">Planejamento da Aula</h3>
                     <p className="text-slate-500 font-medium">
-                      {safeFormat(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
+                      {safeFormat(selectedDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })} - {filteredClasses.find(c => c.id === selectedClassId)?.name}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -633,7 +649,7 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Relatório de Planejamento</h2>
                   <p className="text-slate-500 font-bold">
-                    {safeFormat(currentMonth, 'MMMM yyyy', { locale: ptBR })} - {classes.find(c => c.id === selectedClassId)?.name}
+                    {safeFormat(currentMonth, 'MMMM yyyy', { locale: ptBR })} - {filteredClasses.find(c => c.id === selectedClassId)?.name}
                   </p>
                 </div>
 

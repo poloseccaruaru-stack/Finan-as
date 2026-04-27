@@ -154,6 +154,9 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [absenceDates, setAbsenceDates] = useState<Record<string, string[]>>({});
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
 
+  const isAdmin = user.role === 'admin';
+  const isCoordinator = user.role === 'coordinator';
+
   useEffect(() => {
     const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snap) => {
       setCalendarEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent)));
@@ -246,17 +249,6 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   };
 
   useEffect(() => {
-    const isAdmin = user.role === 'admin';
-    const isCoordinator = user.role === 'coordinator';
-    const hasFullAccess = user.allowedTabs 
-      ? user.allowedTabs.includes('dashboard') 
-      : (isAdmin || isCoordinator);
-    const hasFinanceAccess = user.allowedTabs 
-      ? user.allowedTabs.includes('finance') 
-      : (isAdmin || isCoordinator);
-
-    const classIds = user?.classIds || [];
-
     const unsubResolutions = onSnapshot(
       query(collection(db, 'absenceResolutions'), orderBy('createdAt', 'desc')), 
       (snap) => {
@@ -476,13 +468,25 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     }
   };
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => s.schoolYear === selectedSchoolYear);
-  }, [students, selectedSchoolYear]);
-
   const filteredClasses = useMemo(() => {
-    return classes.filter(c => c.schoolYear === selectedSchoolYear);
-  }, [classes, selectedSchoolYear]);
+    const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
+    if (isAdmin || isCoordinator) return yearClasses;
+    return yearClasses.filter(c => 
+      c.teacherIds?.includes(user.id) || 
+      c.teacherId === user.id ||
+      user.classIds?.includes(c.id)
+    );
+  }, [classes, selectedSchoolYear, isAdmin, isCoordinator, user.id, user.classIds]);
+
+  const filteredStudents = useMemo(() => {
+    const yearStudents = students.filter(s => s.schoolYear === selectedSchoolYear);
+    if (isAdmin || isCoordinator) return yearStudents;
+    const allowedClassIds = filteredClasses.map(c => c.id);
+    return yearStudents.filter(s => 
+      allowedClassIds.includes(s.classId) || 
+      (s.classIds?.some(id => allowedClassIds.includes(id)))
+    );
+  }, [students, selectedSchoolYear, isAdmin, isCoordinator, filteredClasses]);
 
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);

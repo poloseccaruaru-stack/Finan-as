@@ -59,7 +59,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [financeStatusFilter, setFinanceStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<'all' | 'with-absences' | 'no-absences'>('all');
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-
+  
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -112,6 +112,17 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator';
+
+  const filteredClassesList = useMemo(() => {
+    const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
+    if (isAdmin || isCoordinator) return yearClasses;
+    return yearClasses.filter(c => 
+      c.teacherIds?.includes(user.id) || 
+      c.teacherId === user.id ||
+      user.classIds?.includes(c.id)
+    );
+  }, [classes, selectedSchoolYear, isAdmin, isCoordinator, user.id, user.classIds]);
+
   const hasFullAccess = user.allowedTabs 
     ? user.allowedTabs.includes('reports') 
     : (isAdmin || isCoordinator);
@@ -418,7 +429,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar por Turmas</label>
             <div className="flex gap-2">
               <button 
-                onClick={() => setSelectedClassIds(classes.map(c => c.id))}
+                onClick={() => setSelectedClassIds(filteredClassesList.map(c => c.id))}
                 className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
               >
                 Selecionar Todas
@@ -432,7 +443,7 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
-            {classes.filter(c => c.schoolYear === selectedSchoolYear).map(c => (
+            {filteredClassesList.map(c => (
               <button
                 key={c.id}
                 onClick={() => {
