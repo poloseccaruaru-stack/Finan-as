@@ -67,12 +67,12 @@ service cloud.firestore {
     }
 
     match /classes/{classId} {
-      allow read: if hasTabAccess('classes') || hasTabAccess('academic');
+      allow read: if hasTabAccess('classes') || hasTabAccess('academic') || hasTabAccess('dashboard');
       allow write: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if hasTabAccess('attendance') || hasTabAccess('academic');
+      allow read: if hasTabAccess('attendance') || hasTabAccess('academic') || hasTabAccess('dashboard');
       allow write: if hasTabAccess('attendance') || hasTabAccess('academic');
     }
 
@@ -114,7 +114,7 @@ service cloud.firestore {
     }
 
     match /config/{configId} {
-      allow read: if isAdmin() || hasTabAccess('admin') || hasTabAccess('system');
+      allow read: if isAdmin() || hasTabAccess('admin') || hasTabAccess('system') || hasTabAccess('dashboard');
       allow write: if isAdmin();
     }
 

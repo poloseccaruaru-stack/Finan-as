@@ -117,13 +117,23 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [localLayout, setLocalLayout] = useState<string[]>(() => {
     const saved = localStorage.getItem('ebd_dashboard_layout');
+    let l = DEFAULT_LAYOUT;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          l = parsed;
+        }
       } catch (e) {}
     }
-    return DEFAULT_LAYOUT;
+    // Force vital cards
+    if (!l.includes('attendanceMonitoring')) {
+      l = [...l, 'attendanceMonitoring'];
+    }
+    if (!l.includes('stats')) {
+      l = ['stats', ...l.filter(item => item !== 'stats')];
+    }
+    return l;
   });
   
   const [tempConsecutiveLimit, setTempConsecutiveLimit] = useState(2);
@@ -201,6 +211,16 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
     const unsubConfig = onSnapshot(doc(db, 'config', 'dashboard'), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        // Sync local layout from DB (DB priority)
+        let l = data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : [...DEFAULT_LAYOUT];
+        // ALWAYS ensure attendanceMonitoring and stats are present for everyone
+        if (!l.includes('attendanceMonitoring')) {
+          l = [...l, 'attendanceMonitoring'];
+        }
+        if (!l.includes('stats')) {
+          l = ['stats', ...l.filter(u => u !== 'stats')];
+        }
+        
         setConfig(prev => ({
           ...prev,
           highFrequencyLimit: data.highFrequencyLimit || 80,
@@ -214,15 +234,12 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           classificationEndDate: data.classificationEndDate,
           colabBirthdayStartDate: data.colabBirthdayStartDate,
           colabBirthdayEndDate: data.colabBirthdayEndDate,
-          layout: data.layout ? (data.layout.includes('stats') ? data.layout : ['stats', ...data.layout]) : DEFAULT_LAYOUT,
+          layout: l,
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
-        // Sync local layout from DB (DB priority)
-        if (data.layout) {
-          const l = data.layout.includes('stats') ? data.layout : ['stats', ...data.layout];
-          setLocalLayout(l);
-          localStorage.setItem('ebd_dashboard_layout', JSON.stringify(l));
-        }
+
+        setLocalLayout(l);
+        localStorage.setItem('ebd_dashboard_layout', JSON.stringify(l));
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard'));
 
