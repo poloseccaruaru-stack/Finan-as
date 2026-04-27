@@ -118,12 +118,13 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const isCoordinator = user.role === 'coordinator';
   
   const filteredClasses = useMemo(() => {
+    if (isAdmin || isCoordinator) return classes;
     return classes.filter(c => 
       c.teacherIds?.includes(user.id) || 
       c.teacherId === user.id ||
       user.classIds?.includes(c.id)
     );
-  }, [classes, user.id, user.classIds]);
+  }, [classes, isAdmin, isCoordinator, user.id, user.classIds]);
 
   const hasFullAccess = user.allowedTabs 
     ? user.allowedTabs.includes('planning') 
