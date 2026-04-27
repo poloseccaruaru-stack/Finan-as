@@ -50,9 +50,10 @@ import {
 
 interface Props {
   user: Teacher;
+  hasFullAccess?: boolean;
 }
 
-export default function FinanceModule({ user }: Props) {
+export default function FinanceModule({ user, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -99,10 +100,10 @@ export default function FinanceModule({ user }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  const hasFullAccess = user.allowedTabs 
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
     ? user.allowedTabs.includes('finance') 
-    : (isAdmin || isCoordinator);
+    : (isAdmin || isCoordinator));
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));

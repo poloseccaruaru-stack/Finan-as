@@ -36,6 +36,7 @@ export interface Teacher {
   login?: string;
   password?: string;
   allowedTabs?: string[];
+  permissions?: Record<string, 'read' | 'full'>;
   registrationNumber?: string;
   address?: string;
   academicBackground?: string;
@@ -46,6 +47,7 @@ export interface AccessProfile {
   id: string;
   name: string;
   allowedTabs: string[];
+  permissions?: Record<string, 'read' | 'full'>;
   isImmutable?: boolean;
   createdAt: string;
 }

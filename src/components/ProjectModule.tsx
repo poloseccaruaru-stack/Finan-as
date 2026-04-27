@@ -37,9 +37,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface Props {
   user: Teacher;
   selectedSchoolYear: string;
+  hasFullAccess?: boolean;
 }
 
-export default function ProjectModule({ user, selectedSchoolYear }: Props) {
+export default function ProjectModule({ user, selectedSchoolYear, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -95,10 +96,9 @@ export default function ProjectModule({ user, selectedSchoolYear }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  const hasEditAccess = user.allowedTabs 
-    ? user.allowedTabs.includes('projects') 
-    : (isAdmin || isCoordinator);
+  const hasFullAccess = propHasFullAccess ?? isAdmin;
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasEditAccess = hasFullAccess;
 
   useEffect(() => {
     const q = collection(db, 'projects');

@@ -46,11 +46,12 @@ import ReactMarkdown from 'react-markdown';
 interface Props {
   user: Teacher;
   selectedSchoolYear: string;
+  hasFullAccess?: boolean;
 }
 
 type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays';
 
-export default function ReportModule({ user, selectedSchoolYear }: Props) {
+export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<ReportType>('students');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -111,7 +112,10 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
+    ? user.allowedTabs.includes('reports') 
+    : (isAdmin || isCoordinator));
 
   const filteredClassesList = useMemo(() => {
     const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
@@ -122,10 +126,6 @@ export default function ReportModule({ user, selectedSchoolYear }: Props) {
       user.classIds?.includes(c.id)
     );
   }, [classes, selectedSchoolYear, isAdmin, isCoordinator, user.id, user.classIds]);
-
-  const hasFullAccess = user.allowedTabs 
-    ? user.allowedTabs.includes('reports') 
-    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const classIds = (user.classIds && user.classIds.length > 0) ? user.classIds : ['none'];

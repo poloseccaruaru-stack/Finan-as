@@ -348,7 +348,13 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />;
+        return (
+          <Dashboard 
+            user={userData} 
+            selectedSchoolYear={selectedSchoolYear} 
+            hasFullAccess={isAdmin || (userData.permissions && userData.permissions['dashboard'] === 'full')} 
+          />
+        );
       case 'academic': // This handles nested subtabs as well if they share the module
       case 'students':
       case 'teachers':
@@ -362,6 +368,7 @@ export default function App() {
             subTab={activeTab === 'academic' ? 'students' : activeTab as any} 
             selectedSchoolYear={selectedSchoolYear} 
             onImpersonate={handleImpersonate}
+            hasFullAccess={isAdmin || (userData.permissions && (userData.permissions[activeTab] === 'full' || userData.permissions['academic'] === 'full'))}
           />
         );
       case 'regimento':
@@ -370,17 +377,23 @@ export default function App() {
       case 'organogram':
       case 'comunicados':
       case 'documentos':
-        return <AdminModule user={userData} subTab={activeTab as any} />;
+        return <AdminModule user={userData} subTab={activeTab as any} hasFullAccess={isAdmin || (userData.permissions && (userData.permissions[activeTab] === 'full' || userData.permissions['administrative'] === 'full'))} />;
       case 'projects':
-        return <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+        return <ProjectModule user={userData} selectedSchoolYear={selectedSchoolYear} hasFullAccess={isAdmin || (userData.permissions && userData.permissions['projects'] === 'full')} />;
       case 'finance':
-        return <FinanceModule user={userData} />;
+        return <FinanceModule user={userData} hasFullAccess={isAdmin || (userData.permissions && userData.permissions['finance'] === 'full')} />;
       case 'reports':
-        return <ReportModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+        return <ReportModule user={userData} selectedSchoolYear={selectedSchoolYear} hasFullAccess={isAdmin || (userData.permissions && userData.permissions['reports'] === 'full')} />;
       case 'planning':
-        return <PlanningModule user={userData} selectedSchoolYear={selectedSchoolYear} />;
+        return <PlanningModule user={userData} selectedSchoolYear={selectedSchoolYear} hasFullAccess={isAdmin || (userData.permissions && userData.permissions['planning'] === 'full')} />;
       default:
-        return <Dashboard user={userData} selectedSchoolYear={selectedSchoolYear} />;
+        return (
+          <Dashboard 
+            user={userData} 
+            selectedSchoolYear={selectedSchoolYear} 
+            hasFullAccess={isAdmin || (userData.permissions && userData.permissions['dashboard'] === 'full')} 
+          />
+        );
     }
   };
 

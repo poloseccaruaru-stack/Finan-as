@@ -70,11 +70,12 @@ import { cn, safeFormat } from '../lib/utils';
 interface Props {
   user: Teacher;
   selectedSchoolYear: string;
+  hasFullAccess?: boolean;
 }
 
 const DEFAULT_LAYOUT = ['stats', 'attendanceMonitoring', 'ranking', 'classification', 'studentsPerClass', 'birthdaysStudents', 'birthdaysColab', 'alerts'];
 
-export default function Dashboard({ user, selectedSchoolYear }: Props) {
+export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -165,6 +166,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
 
   const isAdmin = user.role === 'admin';
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs ? user.allowedTabs.includes('dashboard') : isAdmin);
   const isCoordinator = user.role === 'coordinator';
 
   useEffect(() => {
@@ -688,7 +690,7 @@ export default function Dashboard({ user, selectedSchoolYear }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {user.role === 'admin' && (
+          {hasFullAccess && (
             <div className="flex items-center gap-2">
                <button 
                 onClick={() => {

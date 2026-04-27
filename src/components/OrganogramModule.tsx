@@ -28,9 +28,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   user: Teacher;
+  hasFullAccess?: boolean;
 }
 
-export default function OrganogramModule({ user }: Props) {
+export default function OrganogramModule({ user, hasFullAccess: propHasFullAccess }: Props) {
   const [entries, setEntries] = useState<OrganogramEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -74,8 +75,11 @@ export default function OrganogramModule({ user }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  const hasEditAccess = isAdmin || isCoordinator;
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
+    ? user.allowedTabs.includes('organogram') 
+    : (isAdmin || isCoordinator));
+  const hasEditAccess = hasFullAccess;
 
   useEffect(() => {
     const q = query(collection(db, 'organogram'), orderBy('level', 'asc'), orderBy('createdAt', 'asc'));

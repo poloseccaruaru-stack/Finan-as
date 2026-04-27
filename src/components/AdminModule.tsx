@@ -55,9 +55,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface Props {
   user: Teacher;
   subTab: 'regimento' | 'calendar' | 'system' | 'organogram' | 'meetings' | 'comunicados' | 'documentos';
+  hasFullAccess?: boolean;
 }
 
-export default function AdminModule({ user, subTab }: Props) {
+export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -97,7 +98,7 @@ export default function AdminModule({ user, subTab }: Props) {
   const [profiles, setProfiles] = useState<AccessProfile[]>([]);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
-  const [profileForm, setProfileForm] = useState<Partial<AccessProfile>>({ name: '', allowedTabs: [] });
+  const [profileForm, setProfileForm] = useState<Partial<AccessProfile>>({ name: '', allowedTabs: [], permissions: {} });
   
   // Alert/Confirm State
   const [alertConfig, setAlertConfig] = useState<{ show: boolean, title: string, message: string } | null>(null);
@@ -144,9 +145,10 @@ export default function AdminModule({ user, subTab }: Props) {
   });
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
+  const hasFullAccess = propHasFullAccess ?? isAdmin;
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
   const isProfessor = user.role === 'professor';
-  const hasEditAccess = isAdmin || isCoordinator;
+  const hasEditAccess = hasFullAccess;
 
   const COLLECTIONS = [
     'users', 'students', 'classes', 'attendance', 'regimento', 
@@ -412,6 +414,7 @@ export default function AdminModule({ user, subTab }: Props) {
           const profileData = {
             name: profileForm.name,
             allowedTabs: profileForm.allowedTabs,
+            permissions: profileForm.permissions || {},
             updatedAt: new Date().toISOString()
           };
 
@@ -425,7 +428,7 @@ export default function AdminModule({ user, subTab }: Props) {
           }
           setShowProfileForm(false);
           setEditingProfileId(null);
-          setProfileForm({ name: '', allowedTabs: [] });
+          setProfileForm({ name: '', allowedTabs: [], permissions: {} });
           showAlert('Sucesso', 'Perfil salvo com sucesso!');
         } catch (err) {
           handleFirestoreError(err, editingProfileId ? OperationType.UPDATE : OperationType.CREATE, 'profiles');
@@ -863,7 +866,7 @@ export default function AdminModule({ user, subTab }: Props) {
                 </button>
                 <button
                   onClick={() => {
-                    setProfileForm({ name: '', allowedTabs: [] });
+                    setProfileForm({ name: '', allowedTabs: [], permissions: {} });
                     setEditingProfileId(null);
                     setShowProfileForm(true);
                   }}
@@ -894,7 +897,7 @@ export default function AdminModule({ user, subTab }: Props) {
                 <div 
                   key={profile.id} 
                   onClick={() => {
-                    setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs });
+                    setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs, permissions: profile.permissions || {} });
                     setEditingProfileId(profile.id);
                     setShowProfileForm(true);
                   }}
@@ -907,7 +910,7 @@ export default function AdminModule({ user, subTab }: Props) {
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs });
+                            setProfileForm({ name: profile.name, allowedTabs: profile.allowedTabs, permissions: profile.permissions || {} });
                             setEditingProfileId(profile.id);
                             setShowProfileForm(true);
                           }}
@@ -1716,10 +1719,13 @@ export default function AdminModule({ user, subTab }: Props) {
                           'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
                         ];
                         const current = profileForm.allowedTabs || [];
+                        const currentPermissions = profileForm.permissions || {};
                         if (current.length >= allTabs.length) {
-                          setProfileForm({ ...profileForm, allowedTabs: [] });
+                          setProfileForm({ ...profileForm, allowedTabs: [], permissions: {} });
                         } else {
-                          setProfileForm({ ...profileForm, allowedTabs: allTabs });
+                          const newPerms = { ...currentPermissions };
+                          allTabs.forEach(t => { if (!newPerms[t]) newPerms[t] = 'full'; });
+                          setProfileForm({ ...profileForm, allowedTabs: allTabs, permissions: newPerms });
                         }
                       }}
                       className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase underline"
@@ -1776,22 +1782,61 @@ export default function AdminModule({ user, subTab }: Props) {
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{group.module}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {group.items.map(tab => (
-                            <label key={tab.id} className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
-                              <input
-                                type="checkbox"
-                                checked={profileForm.allowedTabs?.includes(tab.id)}
-                                onChange={(e) => {
-                                  const current = profileForm.allowedTabs || [];
-                                  if (e.target.checked) {
-                                    setProfileForm({ ...profileForm, allowedTabs: [...current, tab.id] });
-                                  } else {
-                                    setProfileForm({ ...profileForm, allowedTabs: current.filter(t => t !== tab.id) });
-                                  }
-                                }}
-                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                              />
-                              <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">{tab.label}</span>
-                            </label>
+                            <div key={tab.id} className="flex flex-col gap-1">
+                              <label className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
+                                <input
+                                  type="checkbox"
+                                  checked={profileForm.allowedTabs?.includes(tab.id)}
+                                  onChange={(e) => {
+                                    const current = profileForm.allowedTabs || [];
+                                    const perms = { ...(profileForm.permissions || {}) };
+                                    if (e.target.checked) {
+                                      if (!perms[tab.id]) perms[tab.id] = 'full';
+                                      setProfileForm({ ...profileForm, allowedTabs: [...current, tab.id], permissions: perms });
+                                    } else {
+                                      delete perms[tab.id];
+                                      setProfileForm({ ...profileForm, allowedTabs: current.filter(t => t !== tab.id), permissions: perms });
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight">{tab.label}</span>
+                              </label>
+                              {profileForm.allowedTabs?.includes(tab.id) && (
+                                <div className="flex gap-1 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const perms = { ...(profileForm.permissions || {}), [tab.id]: 'full' as const };
+                                      setProfileForm({ ...profileForm, permissions: perms });
+                                    }}
+                                    className={cn(
+                                      "flex-1 text-[8px] font-black py-0.5 rounded border transition-all",
+                                      (profileForm.permissions?.[tab.id] === 'full' || !profileForm.permissions?.[tab.id])
+                                        ? "bg-indigo-600 border-indigo-600 text-white"
+                                        : "bg-white border-slate-200 text-slate-400"
+                                    )}
+                                  >
+                                    ACESSO TOTAL
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const perms = { ...(profileForm.permissions || {}), [tab.id]: 'read' as const };
+                                      setProfileForm({ ...profileForm, permissions: perms });
+                                    }}
+                                    className={cn(
+                                      "flex-1 text-[8px] font-black py-0.5 rounded border transition-all",
+                                      profileForm.permissions?.[tab.id] === 'read'
+                                        ? "bg-amber-500 border-amber-500 text-white"
+                                        : "bg-white border-slate-200 text-slate-400"
+                                    )}
+                                  >
+                                    SÓ LEITURA
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       </div>

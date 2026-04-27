@@ -60,6 +60,7 @@ interface Props {
   subTab: 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'meetings';
   selectedSchoolYear: string;
   onImpersonate?: (teacher: Teacher) => void;
+  hasFullAccess?: boolean;
 }
 
 type SortField = 'name' | 'age' | 'class';
@@ -294,7 +295,7 @@ const MODULES_SUB_AREAS_LINKING: Record<string, string[]> = {
   administrative: ['admin', 'system', 'comunicados', 'documentos', 'meetings', 'organogram']
 };
 
-export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate }: Props) {
+export default function AcademicModule({ user, subTab, selectedSchoolYear, onImpersonate, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -412,12 +413,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   };
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
   const isProfessorEBD = user.role === 'professor_ebd';
   const isProfessor = user.role === 'professor';
-  const hasFullAccess = user.allowedTabs 
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
     ? (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))
-    : (isAdmin || isCoordinator || isProfessorEBD);
+    : (isAdmin || isCoordinator || isProfessorEBD));
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -670,6 +671,7 @@ interface TeacherFormState {
   turmas: Record<string, boolean>;
   modulos: Record<string, boolean>;
   subAreas: Record<string, boolean>;
+  permissions?: Record<string, 'read' | 'full'>;
 }
 
 const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
@@ -713,7 +715,8 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
     comunicados: false,
     documentos: false,
     meetings: false
-  } as Record<string, boolean>
+  } as Record<string, boolean>,
+  permissions: {} as Record<string, 'read' | 'full'>
 });
 
   // Sync forms with selectedSchoolYear
@@ -1025,8 +1028,9 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
         setTeacherForm({ 
           name: '', email: '', login: '', password: '', confirmPassword: '', contact: '', profession: '', startDateEBD: '', birthDate: '', generalProfile: '', academicBackground: '', theologicalBackground: '', role: 'professor', classIds: [], allowedTabs: [], address: '',
           turmas: {},
-          modulos: { dashboard: false, academic: false, projects: false, finance: false, reports: false },
-          subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false }
+          modulos: { dashboard: false, academic: false, administrative: false, projects: false, finance: false, reports: false },
+          subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false },
+          permissions: {}
         });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
@@ -1044,6 +1048,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
     const modulos: Record<string, boolean> = {
       dashboard: false,
       academic: false,
+      administrative: false,
       projects: false,
       finance: false,
       reports: false
@@ -1087,6 +1092,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       allowedTabs: teacher.allowedTabs || [],
       password: teacher.password || '',
       confirmPassword: teacher.password || '',
+      permissions: teacher.permissions || {},
       turmas,
       modulos,
       subAreas
@@ -3228,11 +3234,13 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                             onChange={(e) => {
                               const newRole = e.target.value;
                               let allowedTabsList: string[] = [];
+                              let permissions: Record<string, 'read' | 'full'> = {};
                               
                               if (newRole === 'admin') {
                                 const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
                                 const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
                                 allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
+                                allowedTabsList.forEach(t => permissions[t] = 'full');
                               } else if (newRole === 'coordinator') {
                                 // Coordination access: All except system config usually, but let's include all 18 non-admin modules
                                 allowedTabsList = [
@@ -3240,10 +3248,16 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                   'schoolYear', 'projects', 'finance', 'reports', 'planning',
                                   'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
                                 ];
+                                allowedTabsList.forEach(t => permissions[t] = 'full');
                               } else {
                                 const profile = profiles.find(p => p.id === newRole || p.name === newRole);
                                 if (profile) {
                                   allowedTabsList = profile.allowedTabs;
+                                  permissions = profile.permissions || {};
+                                  // Ensure default 'full' if not explicitly set
+                                  allowedTabsList.forEach(t => {
+                                    if (!permissions[t]) permissions[t] = 'full';
+                                  });
                                 }
                               }
                               
@@ -3258,7 +3272,15 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                 turmasList = classes.map(c => c.id);
                               }
                               
-                              setTeacherForm({ ...teacherForm, role: newRole, modulos, subAreas, allowedTabs: allowedTabsList, classIds: turmasList });
+                              setTeacherForm({ 
+                                ...teacherForm, 
+                                role: newRole, 
+                                modulos, 
+                                subAreas, 
+                                allowedTabs: allowedTabsList, 
+                                permissions,
+                                classIds: turmasList 
+                              });
                             }}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                           >

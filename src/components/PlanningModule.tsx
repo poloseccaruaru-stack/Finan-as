@@ -50,6 +50,7 @@ import { suggestPlanning } from '../services/geminiService';
 interface Props {
   user: Teacher;
   selectedSchoolYear: string;
+  hasFullAccess?: boolean;
 }
 
 const PREDEFINED_METHODOLOGIES = [
@@ -65,7 +66,7 @@ const PREDEFINED_METHODOLOGIES = [
   'Trabalho Manual'
 ];
 
-export default function PlanningModule({ user, selectedSchoolYear }: Props) {
+export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [plannings, setPlannings] = useState<Planning[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -115,8 +116,11 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
   const [showReportModal, setShowReportModal] = useState(false);
 
   const isAdmin = user.role === 'admin';
-  const isCoordinator = user.role === 'coordinator';
-  
+  const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
+    ? user.allowedTabs.includes('planning') 
+    : (isAdmin || isCoordinator));
+
   const filteredClasses = useMemo(() => {
     if (isAdmin || isCoordinator) return classes;
     return classes.filter(c => 
@@ -125,10 +129,6 @@ export default function PlanningModule({ user, selectedSchoolYear }: Props) {
       user.classIds?.includes(c.id)
     );
   }, [classes, isAdmin, isCoordinator, user.id, user.classIds]);
-
-  const hasFullAccess = user.allowedTabs 
-    ? user.allowedTabs.includes('planning') 
-    : (isAdmin || isCoordinator);
 
   useEffect(() => {
     const classIds = user.classIds || [];
