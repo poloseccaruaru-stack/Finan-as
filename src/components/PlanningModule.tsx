@@ -29,7 +29,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  Lock
+  Lock,
+  Pin
 } from 'lucide-react';
 import { 
   format, 
@@ -76,6 +77,25 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
+
+  const handlePinClass = async () => {
+    if (!selectedClassId || !user.id) return;
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        pinnedClassId: selectedClassId,
+        updatedAt: new Date().toISOString()
+      });
+      showAlert('Sucesso', 'Esta turma foi fixada como sua turma padrão!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
+    }
+  };
+
+  useEffect(() => {
+    if (user.pinnedClassId && !selectedClassId) {
+      setSelectedClassId(user.pinnedClassId);
+    }
+  }, [user.pinnedClassId]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     content: '',
@@ -326,15 +346,32 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-bold text-slate-500 uppercase">Turma:</label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
-          >
-            {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+        <div className="flex flex-col gap-2 min-w-[200px]">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-bold text-slate-500 uppercase">Turma:</label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+            >
+              <option value="">Selecione uma turma...</option>
+              {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          {selectedClassId && (
+            <button
+              onClick={handlePinClass}
+              className={cn(
+                "flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border",
+                user.pinnedClassId === selectedClassId 
+                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm" 
+                  : "bg-white border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:bg-indigo-50"
+              )}
+            >
+              <Pin className={cn("w-3 h-3", user.pinnedClassId === selectedClassId ? "fill-current" : "")} />
+              {user.pinnedClassId === selectedClassId ? "Turma Fixada" : "Fixar como Padrão"}
+            </button>
+          )}
         </div>
       </div>
 
