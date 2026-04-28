@@ -113,19 +113,22 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator' || isAdmin;
-  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
-    ? user.allowedTabs.includes('reports') 
-    : (isAdmin || isCoordinator));
+  const hasFullAccess = propHasFullAccess ?? (
+    isAdmin || 
+    (user.permissions && user.permissions['reports'] === 'full') ||
+    (!user.permissions && user.allowedTabs && user.allowedTabs.includes('reports')) ||
+    (!user.permissions && !user.allowedTabs && (isAdmin || isCoordinator))
+  );
 
   const filteredClassesList = useMemo(() => {
     const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
-    if (isAdmin || isCoordinator) return yearClasses;
+    if (hasFullAccess) return yearClasses;
     return yearClasses.filter(c => 
       c.teacherIds?.includes(user.id) || 
       c.teacherId === user.id ||
       user.classIds?.includes(c.id)
     );
-  }, [classes, selectedSchoolYear, isAdmin, isCoordinator, user.id, user.classIds]);
+  }, [classes, selectedSchoolYear, hasFullAccess, user.id, user.classIds]);
 
   useEffect(() => {
     const classIds = (user.classIds && user.classIds.length > 0) ? user.classIds : ['none'];

@@ -416,9 +416,12 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   const isCoordinator = user.role === 'coordinator' || isAdmin;
   const isProfessorEBD = user.role === 'professor_ebd';
   const isProfessor = user.role === 'professor';
-  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
-    ? (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))
-    : (isAdmin || isCoordinator || isProfessorEBD));
+  const hasFullAccess = propHasFullAccess ?? (
+    isAdmin || 
+    (user.permissions && (user.permissions['academic'] === 'full' || user.permissions['administrative'] === 'full')) ||
+    (!user.permissions && user.allowedTabs && (user.allowedTabs.includes('admin') || user.allowedTabs.includes('system') || user.allowedTabs.includes('teachers') || user.allowedTabs.includes('classes'))) ||
+    (!user.permissions && !user.allowedTabs && (isAdmin || isCoordinator || isProfessorEBD))
+  );
 
   const isClassFinalized = (classId: string) => {
     const cls = classes.find(c => c.id === classId);
@@ -608,13 +611,13 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   }, [classes, selectedSchoolYear]);
 
   const filteredClassesForAttendance = useMemo(() => {
-    if (isAdmin || isCoordinator) return filteredClasses;
+    if (hasFullAccess) return filteredClasses;
     return filteredClasses.filter(c => 
       c.teacherIds?.includes(user.id) || 
       c.teacherId === user.id ||
       user.classIds?.includes(c.id)
     );
-  }, [filteredClasses, isAdmin, isCoordinator, user.id, user.classIds]);
+  }, [filteredClasses, hasFullAccess, user.id, user.classIds]);
 
   // Forms State
   const [attendanceViewMode, setAttendanceViewMode] = useState<'list' | 'months' | 'icons'>('list');
@@ -962,6 +965,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: classIds,
             allowedTabs: allowedTabs,
+            permissions: teacherForm.permissions || {},
             role: teacherForm.role || 'professor',
             updatedAt: new Date().toISOString()
           };
@@ -994,6 +998,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
             theologicalBackground: teacherForm.theologicalBackground || "",
             classIds: classIds,
             allowedTabs: allowedTabs,
+            permissions: teacherForm.permissions || {},
             registrationNumber,
             role: teacherForm.role || 'professor',
             firstLogin: true,
@@ -3239,7 +3244,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                               if (newRole === 'admin') {
                                 const allModules = ['dashboard', 'academic', 'projects', 'finance', 'reports', 'planning', 'organogram'];
                                 const allSubAreas = ['students', 'teachers', 'classes', 'attendance', 'schoolYear', 'regimento', 'calendar', 'system', 'comunicados', 'documentos', 'meetings'];
-                                allowedTabsList = [...allModules, ...allSubAreas, 'admin'];
+                                allowedTabsList = [...allModules, ...allSubAreas, 'system'];
                                 allowedTabsList.forEach(t => permissions[t] = 'full');
                               } else if (newRole === 'coordinator') {
                                 // Coordination access: All except system config usually, but let's include all 18 non-admin modules
@@ -3320,7 +3325,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           <label className="text-xs font-bold text-slate-500 uppercase">Senha de Acesso</label>
                           <input
                             required
-                            type={(isAdmin || isCoordinator || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
+                            type={(hasFullAccess || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
                             value={teacherForm.password}
                             onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
@@ -3330,7 +3335,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           <label className="text-xs font-bold text-slate-500 uppercase">Confirmar Senha</label>
                           <input
                             required
-                            type={(isAdmin || isCoordinator || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
+                            type={(hasFullAccess || (editingTeacher && editingTeacher.id === user.id)) ? "text" : "password"}
                             value={teacherForm.confirmPassword}
                             onChange={(e) => setTeacherForm({ ...teacherForm, confirmPassword: e.target.value })}
                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"

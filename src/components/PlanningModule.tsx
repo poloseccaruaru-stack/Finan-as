@@ -28,7 +28,8 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  Lock
 } from 'lucide-react';
 import { 
   format, 
@@ -117,18 +118,21 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator' || isAdmin;
-  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
-    ? user.allowedTabs.includes('planning') 
-    : (isAdmin || isCoordinator));
+  const hasFullAccess = propHasFullAccess ?? (
+    isAdmin || 
+    (user.permissions && user.permissions['planning'] === 'full') ||
+    (!user.permissions && user.allowedTabs && user.allowedTabs.includes('planning')) ||
+    (!user.permissions && !user.allowedTabs && (isAdmin || isCoordinator))
+  );
 
   const filteredClasses = useMemo(() => {
-    if (isAdmin || isCoordinator) return classes;
+    if (hasFullAccess) return classes;
     return classes.filter(c => 
       c.teacherIds?.includes(user.id) || 
       c.teacherId === user.id ||
       user.classIds?.includes(c.id)
     );
-  }, [classes, isAdmin, isCoordinator, user.id, user.classIds]);
+  }, [classes, hasFullAccess, user.id, user.classIds]);
 
   useEffect(() => {
     const classIds = user.classIds || [];
@@ -414,9 +418,9 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                     <button
                       type="button"
                       onClick={handleAISuggest}
-                      disabled={suggesting}
+                      disabled={suggesting || !hasFullAccess}
                       className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-bold hover:bg-amber-100 transition-all disabled:opacity-50"
-                      title="Sugerir com Gemini"
+                      title={hasFullAccess ? "Sugerir com Gemini" : "Acesso apenas para visualização"}
                     >
                       {suggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
                       <span className="hidden md:inline">Sugerir com IA</span>
@@ -432,9 +436,10 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                     <label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Conteúdo a ser ministrado</label>
                     <textarea
                       required
+                      readOnly={!hasFullAccess}
                       value={form.content}
                       onChange={(e) => setForm({ ...form, content: e.target.value })}
-                      placeholder="Descreva o tema e os principais pontos da lição..."
+                      placeholder={hasFullAccess ? "Descreva o tema e os principais pontos da lição..." : "Sem conteúdo registrado"}
                       className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
                     />
                   </div>
@@ -446,6 +451,7 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                         <button
                           key={method}
                           type="button"
+                          disabled={!hasFullAccess}
                           onClick={() => {
                             const current = form.methodology;
                             const next = current.includes(method)
@@ -457,30 +463,33 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                             "px-4 py-2 rounded-full text-xs font-bold transition-all border",
                             form.methodology.includes(method)
                               ? "bg-indigo-600 border-indigo-600 text-white shadow-md"
-                              : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600",
+                            !hasFullAccess && "opacity-80 cursor-default"
                           )}
                         >
                           {method}
                         </button>
                       ))}
                     </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Adicionar outra metodologia..."
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const val = e.currentTarget.value.trim();
-                            if (val && !form.methodology.includes(val)) {
-                              setForm({ ...form, methodology: [...form.methodology, val] });
-                              e.currentTarget.value = '';
+                    {hasFullAccess && (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Adicionar outra metodologia..."
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = e.currentTarget.value.trim();
+                              if (val && !form.methodology.includes(val)) {
+                                setForm({ ...form, methodology: [...form.methodology, val] });
+                                e.currentTarget.value = '';
+                              }
                             }
-                          }
-                        }}
-                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                      />
-                    </div>
+                          }}
+                          className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        />
+                      </div>
+                    )}
                     {form.methodology.length > 0 && (
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-400 uppercase mb-2">Selecionadas:</p>
@@ -503,24 +512,35 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                   </div>
 
                   <div className="flex gap-4 pt-4">
-                    <button
-                      type="submit"
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-5 h-5" />
-                      Salvar Planejamento
-                    </button>
-                    {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
-                          if (p) handleDelete(p.id);
-                        }}
-                        className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
-                      >
-                        <Trash2 className="w-6 h-6" />
-                      </button>
+                    {hasFullAccess ? (
+                      <>
+                        <button
+                          type="submit"
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Save className="w-5 h-5" />
+                          Salvar Planejamento
+                        </button>
+                        {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
+                              if (p) handleDelete(p.id);
+                            }}
+                            className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex-1 p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          Modo Somente Leitura
+                        </p>
+                      </div>
                     )}
                   </div>
                 </form>

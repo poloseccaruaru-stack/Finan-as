@@ -101,9 +101,12 @@ export default function FinanceModule({ user, hasFullAccess: propHasFullAccess }
 
   const isAdmin = user.role === 'admin';
   const isCoordinator = user.role === 'coordinator' || isAdmin;
-  const hasFullAccess = propHasFullAccess ?? (user.allowedTabs 
-    ? user.allowedTabs.includes('finance') 
-    : (isAdmin || isCoordinator));
+  const hasFullAccess = propHasFullAccess ?? (
+    isAdmin || 
+    (user.permissions && user.permissions['finance'] === 'full') ||
+    (!user.permissions && user.allowedTabs && user.allowedTabs.includes('finance')) ||
+    (!user.permissions && !user.allowedTabs && (isAdmin || isCoordinator))
+  );
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));

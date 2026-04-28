@@ -96,8 +96,13 @@ export default function ProjectModule({ user, selectedSchoolYear, hasFullAccess:
   });
 
   const isAdmin = user.role === 'admin';
-  const hasFullAccess = propHasFullAccess ?? isAdmin;
   const isCoordinator = user.role === 'coordinator' || isAdmin;
+  const hasFullAccess = propHasFullAccess ?? (
+    isAdmin || 
+    (user.permissions && user.permissions['projects'] === 'full') ||
+    (!user.permissions && user.allowedTabs && user.allowedTabs.includes('projects')) ||
+    (!user.permissions && !user.allowedTabs && (isAdmin || isCoordinator))
+  );
   const hasEditAccess = hasFullAccess;
 
   useEffect(() => {

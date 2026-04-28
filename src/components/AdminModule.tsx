@@ -58,6 +58,12 @@ interface Props {
   hasFullAccess?: boolean;
 }
 
+export const ALL_PROFILE_TABS = [
+  'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
+  'schoolYear', 'projects', 'finance', 'reports', 'planning', 'system',
+  'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+];
+
 export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [regimentos, setRegimentos] = useState<Regimento[]>([]);
@@ -359,7 +365,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
             // Auto-seed missing core profiles
             const allTabs = [
               'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
-              'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
+              'schoolYear', 'projects', 'finance', 'reports', 'planning', 'system',
               'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
             ];
             
@@ -438,19 +444,18 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
   };
 
   const handleCreateDefaultProfiles = async () => {
-    const allTabs = [
-      'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
-      'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
-      'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
-    ];
+    const allTabs = ALL_PROFILE_TABS;
 
     const existingNames = profiles.map(p => p.name.toLowerCase());
     const toCreate = [];
 
     if (!existingNames.includes('professor 1')) {
+      const perms: Record<string, 'read' | 'full'> = {};
+      allTabs.forEach(t => { perms[t] = 'full'; });
       toCreate.push({
         name: 'Professor 1',
         allowedTabs: allTabs,
+        permissions: perms,
         createdAt: new Date().toISOString()
       });
     }
@@ -461,6 +466,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
       toCreate.push({
         name: 'Professor 2',
         allowedTabs: coord ? coord.allowedTabs : allTabs,
+        permissions: coord ? coord.permissions : {},
         createdAt: new Date().toISOString()
       });
     }
@@ -842,7 +848,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
           </div>
         )}
 
-      {subTab === 'system' && isAdmin && (
+      {subTab === 'system' && hasFullAccess && (
         <div className="space-y-6">
           {/* Profile Management */}
           <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
@@ -866,7 +872,15 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 </button>
                 <button
                   onClick={() => {
-                    setProfileForm({ name: '', allowedTabs: [], permissions: {} });
+                    const defaultPermissions: Record<string, 'read' | 'full'> = {};
+                    ALL_PROFILE_TABS.forEach(tab => {
+                      defaultPermissions[tab] = 'full';
+                    });
+                    setProfileForm({ 
+                      name: '', 
+                      allowedTabs: [...ALL_PROFILE_TABS], 
+                      permissions: defaultPermissions 
+                    });
                     setEditingProfileId(null);
                     setShowProfileForm(true);
                   }}
@@ -1713,11 +1727,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                     <button
                       type="button"
                       onClick={() => {
-                        const allTabs = [
-                          'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
-                          'schoolYear', 'projects', 'finance', 'reports', 'planning', 'admin',
-                          'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
-                        ];
+                        const allTabs = ALL_PROFILE_TABS;
                         const current = profileForm.allowedTabs || [];
                         const currentPermissions = profileForm.permissions || {};
                         if (current.length >= allTabs.length) {
@@ -1725,12 +1735,12 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                         } else {
                           const newPerms = { ...currentPermissions };
                           allTabs.forEach(t => { if (!newPerms[t]) newPerms[t] = 'full'; });
-                          setProfileForm({ ...profileForm, allowedTabs: allTabs, permissions: newPerms });
+                          setProfileForm({ ...profileForm, allowedTabs: [...allTabs], permissions: newPerms });
                         }
                       }}
                       className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase underline"
                     >
-                      {profileForm.allowedTabs?.length && profileForm.allowedTabs.length >= 18 ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                      {profileForm.allowedTabs?.length && profileForm.allowedTabs.length >= (ALL_PROFILE_TABS.length - 1) ? 'Desmarcar Todos' : 'Selecionar Todos'}
                     </button>
                   </div>
                   
@@ -1770,7 +1780,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                         module: 'Administrativo', 
                         items: [
                           { id: 'administrative', label: 'Módulo Administrativo' },
-                          { id: 'admin', label: 'Configurações' },
+                          { id: 'system', label: 'Configurações' },
                           { id: 'comunicados', label: 'Comunicados' },
                           { id: 'documentos', label: 'Documentos' },
                           { id: 'meetings', label: 'Reuniões' },
@@ -1842,7 +1852,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400 italic">O acesso total é garantido apenas ao perfil Administrador raiz.</p>
+                  <p className="text-[10px] text-slate-400 italic">Configure o nível de acesso para cada módulo. O acesso total permite criar e modificar dados.</p>
                 </div>
 
                 <div className="pt-4">

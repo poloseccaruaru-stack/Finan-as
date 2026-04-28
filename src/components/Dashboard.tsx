@@ -489,23 +489,23 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
 
   const filteredClasses = useMemo(() => {
     const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
-    if (isAdmin || isCoordinator) return yearClasses;
+    if (hasFullAccess) return yearClasses;
     return yearClasses.filter(c => 
       c.teacherIds?.includes(user.id) || 
       c.teacherId === user.id ||
       user.classIds?.includes(c.id)
     );
-  }, [classes, selectedSchoolYear, isAdmin, isCoordinator, user.id, user.classIds]);
+  }, [classes, selectedSchoolYear, hasFullAccess, user.id, user.classIds]);
 
   const filteredStudents = useMemo(() => {
     const yearStudents = students.filter(s => s.schoolYear === selectedSchoolYear);
-    if (isAdmin || isCoordinator) return yearStudents;
+    if (hasFullAccess) return yearStudents;
     const allowedClassIds = filteredClasses.map(c => c.id);
     return yearStudents.filter(s => 
       allowedClassIds.includes(s.classId) || 
       (s.classIds?.some(id => allowedClassIds.includes(id)))
     );
-  }, [students, selectedSchoolYear, isAdmin, isCoordinator, filteredClasses]);
+  }, [students, selectedSchoolYear, hasFullAccess, filteredClasses]);
 
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);

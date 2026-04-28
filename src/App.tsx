@@ -285,9 +285,6 @@ export default function App() {
         { id: 'organogram', label: 'Organograma', icon: Users },
         { id: 'system', label: 'Sistema', icon: LayoutDashboard },
       ].filter(sub => {
-        // SYSTEM is exclusive to ADMIN role
-        if (sub.id === 'system') return isAdmin;
-
         // If allowedTabs are defined, they are the source of truth for granular permissions
         if (userData.allowedTabs && userData.allowedTabs.length > 0) {
           return userData.allowedTabs.includes(sub.id);
@@ -300,8 +297,6 @@ export default function App() {
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'reports', label: 'Relatórios', icon: Printer },
   ].filter(item => {
-    if (item.id === 'system') return isAdmin;
-    
     // If allowedTabs are defined, they are the source of truth for granular permissions
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(item.id);
@@ -311,9 +306,6 @@ export default function App() {
   });
 
   const hasAccess = (tabId: string): boolean => {
-    // SYSTEM is exclusive to ADMIN role
-    if (tabId === 'system') return isAdmin;
-
     // Check if the tab (or its parent) is in allowedTabs
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(tabId);
