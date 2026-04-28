@@ -41,6 +41,7 @@ export interface Teacher {
   address?: string;
   academicBackground?: string;
   theologicalBackground?: string;
+  pinnedClassId?: string;
 }
 
 export interface AccessProfile {

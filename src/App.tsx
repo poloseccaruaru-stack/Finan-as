@@ -123,21 +123,15 @@ export default function App() {
             (err) => handleFirestoreError(err, OperationType.GET, 'config/dashboard')
           );
           
-          testConnection();
           const userDocRef = doc(db, 'users', user.uid);
           
-          // Add a timeout for the doc fetch to prevent infinite loading
-          const fetchPromise = getDoc(userDocRef);
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout fetching user data')), 5000)
-          );
-
-          try {
-            const userDoc = await Promise.race([fetchPromise, timeoutPromise]) as any;
-            if (userDoc.exists()) {
-              setUserData({ id: userDoc.id, ...userDoc.data() } as Teacher);
+          // Use onSnapshot for reactive user data
+          const unsubUser = onSnapshot(userDocRef, (snap) => {
+            if (snap.exists()) {
+              setUserData({ id: snap.id, ...snap.data() } as Teacher);
             } else {
-              // Default for new Google users
+              // Handle new user creation if needed (already handled by logic above usually)
+              // But for robustness:
               const newData: Teacher = {
                 id: user.uid,
                 name: user.displayName || '',
@@ -149,21 +143,19 @@ export default function App() {
                 createdAt: new Date().toISOString(),
                 allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
               };
-              await setDoc(userDocRef, newData);
-              setUserData(newData);
+              setDoc(userDocRef, newData);
             }
-          } catch (fetchErr) {
-            console.error('Error fetching user doc:', fetchErr);
-            // Fallback to basic user data if doc fetch fails
-            setUserData({
-              id: user.uid,
-              name: user.displayName || 'Usuário',
-              email: user.email || '',
-              role: user.email === 'poloseccaruaru@gmail.com' ? 'admin' : 'professor',
-              classIds: [],
-              allowedTabs: ['dashboard', 'academic', 'projects', 'reports']
-            } as any);
-          }
+            setLoading(false);
+          }, (err) => {
+            console.error('Error in user onSnapshot:', err);
+            handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+            setLoading(false);
+          });
+
+          // Store for cleanup
+          (window as any).unsubUser = unsubUser;
+          
+          testConnection();
         } else {
           // If not Firebase Auth, check if we have a manual session in localStorage
           const manualUser = localStorage.getItem('ebd_manual_user');
@@ -191,6 +183,7 @@ export default function App() {
     return () => {
       unsubConfig?.();
       unsubscribe();
+      if ((window as any).unsubUser) (window as any).unsubUser();
     };
   }, []);
 

@@ -1387,6 +1387,25 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
     }
   };
 
+  const handlePinClass = async () => {
+    if (!selectedClass || !user.id) return;
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        pinnedClassId: selectedClass,
+        updatedAt: new Date().toISOString()
+      });
+      showAlert('Sucesso', 'Esta turma foi fixada como sua turma padrão!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'attendance' && user.pinnedClassId && !selectedClass) {
+      setSelectedClass(user.pinnedClassId);
+    }
+  }, [subTab, user.pinnedClassId]);
+
   useEffect(() => {
     const unsubTimes = onSnapshot(doc(db, 'config', 'attendance_times'), (snap) => {
       if (snap.exists()) {
@@ -2115,6 +2134,20 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                   <option value="">Selecione uma turma...</option>
                   {filteredClassesForAttendance.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                {selectedClass && (
+                  <button
+                    onClick={handlePinClass}
+                    className={cn(
+                      "mt-2 flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border",
+                      user.pinnedClassId === selectedClass 
+                        ? "bg-indigo-600 border-indigo-600 text-white" 
+                        : "bg-white border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:bg-indigo-50"
+                    )}
+                  >
+                    <Pin className={cn("w-3 h-3", user.pinnedClassId === selectedClass ? "fill-current" : "")} />
+                    {user.pinnedClassId === selectedClass ? "Turma Fixada" : "Fixar como Padrão"}
+                  </button>
+                )}
               </div>
               <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data da Chamada</label>
