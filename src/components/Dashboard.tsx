@@ -152,6 +152,17 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
 
   const [attendanceMonitoringStart, setAttendanceMonitoringStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [attendanceMonitoringEnd, setAttendanceMonitoringEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  useEffect(() => {
+    if (config.attendanceMonitoringStartDate) {
+      setAttendanceMonitoringStart(config.attendanceMonitoringStartDate);
+      setTempAttendanceStart(config.attendanceMonitoringStartDate);
+    }
+    if (config.attendanceMonitoringEndDate) {
+      setAttendanceMonitoringEnd(config.attendanceMonitoringEndDate);
+      setTempAttendanceEnd(config.attendanceMonitoringEndDate);
+    }
+  }, [config.attendanceMonitoringStartDate, config.attendanceMonitoringEndDate]);
+
   const [showAttendanceMonitoringConfig, setShowAttendanceMonitoringConfig] = useState(false);
   const [tempAttendanceStart, setTempAttendanceStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [tempAttendanceEnd, setTempAttendanceEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -236,6 +247,8 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
           classificationEndDate: data.classificationEndDate,
           colabBirthdayStartDate: data.colabBirthdayStartDate,
           colabBirthdayEndDate: data.colabBirthdayEndDate,
+          attendanceMonitoringStartDate: data.attendanceMonitoringStartDate,
+          attendanceMonitoringEndDate: data.attendanceMonitoringEndDate,
           layout: l,
           eventBarPosition: data.eventBarPosition || 'bottom'
         }));
@@ -351,18 +364,20 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
     };
   }, [user]);
 
-  const updateConfig = async (newConfig: DashboardConfig) => {
+  const updateConfig = async (updates: Partial<DashboardConfig>) => {
     setIsSavingConfig(true);
     try {
       // Save to localStorage as fallback
-      if (newConfig.layout) {
-        localStorage.setItem('ebd_dashboard_layout', JSON.stringify(newConfig.layout));
+      if (updates.layout) {
+        localStorage.setItem('ebd_dashboard_layout', JSON.stringify(updates.layout));
       }
       
-      // Use updateDoc to avoid overwriting or creating an incomplete doc if possible
-      // But since we have a complete 'newConfig' object relative to state, we ensure all fields are sent
-      await setDoc(doc(db, 'config', 'dashboard'), newConfig, { merge: true });
-      setConfig(newConfig);
+      // Use setDoc with merge: true for partial updates
+      await setDoc(doc(db, 'config', 'dashboard'), updates, { merge: true });
+      
+      // State is handled by onSnapshot, but we can update it immediately for responsiveness
+      // but only if it's safe. Actually, onSnapshot is very fast locally.
+      // But let's close modals here.
       setShowQuickAlertConfig(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'config/dashboard');
@@ -696,7 +711,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                 onClick={() => {
                   if (isEditMode) {
                     // One final forced sync when turning off edit mode
-                    updateConfig({ ...config, layout: localLayout });
+                    updateConfig({ layout: localLayout });
                   }
                   setIsEditMode(!isEditMode);
                 }}
@@ -755,7 +770,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
               <input 
                 type="number" 
                 value={config.highFrequencyLimit}
-                onChange={(e) => updateConfig({ ...config, highFrequencyLimit: Number(e.target.value) })}
+                onChange={(e) => updateConfig({ highFrequencyLimit: Number(e.target.value) })}
                 className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -764,7 +779,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
               <input 
                 type="number" 
                 value={config.intermediateFrequencyLimit}
-                onChange={(e) => updateConfig({ ...config, intermediateFrequencyLimit: Number(e.target.value) })}
+                onChange={(e) => updateConfig({ intermediateFrequencyLimit: Number(e.target.value) })}
                 className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -773,7 +788,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
               <input 
                 type="number" 
                 value={config.consecutiveAbsencesLimit}
-                onChange={(e) => updateConfig({ ...config, consecutiveAbsencesLimit: Number(e.target.value) })}
+                onChange={(e) => updateConfig({ consecutiveAbsencesLimit: Number(e.target.value) })}
                 className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -936,7 +951,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                       <input type="date" value={tempRankEnd} onChange={(e) => setTempRankEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
                                     </div>
                                   </div>
-                                  <button onClick={() => { updateConfig({ ...config, rankStartDate: tempRankStart, rankEndDate: tempRankEnd }); setShowRankConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
+                                  <button onClick={() => { updateConfig({ rankStartDate: tempRankStart, rankEndDate: tempRankEnd }); setShowRankConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
                                 </div>
                               </motion.div>
                             )}
@@ -1018,7 +1033,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                       <input type="date" value={tempClassifEnd} onChange={(e) => setTempClassifEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
                                     </div>
                                   </div>
-                                  <button onClick={() => { updateConfig({ ...config, classificationStartDate: tempClassifStart, classificationEndDate: tempClassifEnd }); setShowClassifConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
+                                  <button onClick={() => { updateConfig({ classificationStartDate: tempClassifStart, classificationEndDate: tempClassifEnd }); setShowClassifConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Seleção</button>
                                 </div>
                               </motion.div>
                             )}
@@ -1124,7 +1139,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                       <input type="date" value={tempAttendanceEnd} onChange={(e) => setTempAttendanceEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
                                     </div>
                                   </div>
-                                  <button onClick={() => { setAttendanceMonitoringStart(tempAttendanceStart); setAttendanceMonitoringEnd(tempAttendanceEnd); setShowAttendanceMonitoringConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Filtrar Período</button>
+                                  <button onClick={() => { updateConfig({ attendanceMonitoringStartDate: tempAttendanceStart, attendanceMonitoringEndDate: tempAttendanceEnd }); setShowAttendanceMonitoringConfig(false); }} className="w-full py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all font-bold">Fixar Período</button>
                                 </div>
                               </motion.div>
                             )}
@@ -1268,7 +1283,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                       <input type="date" value={tempColabBirthEnd} onChange={(e) => setTempColabBirthEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
                                     </div>
                                   </div>
-                                  <button onClick={() => { updateConfig({ ...config, colabBirthdayStartDate: tempColabBirthStart, colabBirthdayEndDate: tempColabBirthEnd }); setShowColabBirthConfig(false); }} className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all font-bold">Fixar Seleção</button>
+                                  <button onClick={() => { updateConfig({ colabBirthdayStartDate: tempColabBirthStart, colabBirthdayEndDate: tempColabBirthEnd }); setShowColabBirthConfig(false); }} className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all font-bold">Fixar Seleção</button>
                                 </div>
                               </motion.div>
                             )}
@@ -1328,7 +1343,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                       <input type="date" value={tempFreqEnd} onChange={(e) => setTempFreqEnd(e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 outline-none" />
                                     </div>
                                   </div>
-                                  <button onClick={() => { updateConfig({ ...config, consecutiveAbsencesLimit: tempConsecutiveLimit, frequencyStartDate: tempFreqStart, frequencyEndDate: tempFreqEnd }); setShowQuickAlertConfig(false); }} className="w-full py-2 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all font-bold">Fixar Alerta</button>
+                                  <button onClick={() => { updateConfig({ consecutiveAbsencesLimit: tempConsecutiveLimit, frequencyStartDate: tempFreqStart, frequencyEndDate: tempFreqEnd }); setShowQuickAlertConfig(false); }} className="w-full py-2 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all font-bold">Fixar Alerta</button>
                                 </div>
                               </motion.div>
                             )}

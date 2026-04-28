@@ -207,6 +207,8 @@ export interface DashboardConfig {
   classificationEndDate?: string;
   colabBirthdayStartDate?: string;
   colabBirthdayEndDate?: string;
+  attendanceMonitoringStartDate?: string;
+  attendanceMonitoringEndDate?: string;
   layout?: string[];
   eventBarPosition: 'top' | 'bottom';
   eventBarVisibility?: 'both' | 'sidebar' | 'bottom' | 'none';
