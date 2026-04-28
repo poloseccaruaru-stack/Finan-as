@@ -42,6 +42,7 @@ export interface Teacher {
   academicBackground?: string;
   theologicalBackground?: string;
   pinnedClassId?: string;
+  dashboardDisplayMode?: 'general' | 'room';
 }
 
 export interface AccessProfile {

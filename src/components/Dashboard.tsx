@@ -47,7 +47,10 @@ import {
   RefreshCw,
   X,
   CheckCircle2,
-  XCircle
+  XCircle,
+  LayoutGrid,
+  Focus,
+  Pin
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -149,6 +152,29 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
 
   const [tempColabBirthStart, setTempColabBirthStart] = useState('');
   const [tempColabBirthEnd, setTempColabBirthEnd] = useState('');
+
+  const [alert, setAlert] = useState<{ title: string; message: string } | null>(null);
+  const showAlert = (title: string, message: string) => {
+    setAlert({ title, message });
+    setTimeout(() => setAlert(null), 3000);
+  };
+
+  const [displayMode, setDisplayMode] = useState<'general' | 'room'>(user.dashboardDisplayMode || 'general');
+  const [selectedClassId, setSelectedClassId] = useState<string>(user.pinnedClassId || '');
+
+  const handlePinDashboardPreferences = async () => {
+    if (!user.id) return;
+    try {
+      await updateDoc(doc(db, 'users', user.id), {
+        dashboardDisplayMode: displayMode,
+        pinnedClassId: selectedClassId,
+        updatedAt: new Date().toISOString()
+      });
+      showAlert('Sucesso', 'Preferências do dashboard fixadas!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.id}`);
+    }
+  };
 
   const [attendanceMonitoringStart, setAttendanceMonitoringStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [attendanceMonitoringEnd, setAttendanceMonitoringEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -503,24 +529,40 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
   };
 
   const filteredClasses = useMemo(() => {
-    const yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
-    if (hasFullAccess) return yearClasses;
-    return yearClasses.filter(c => 
-      c.teacherIds?.includes(user.id) || 
-      c.teacherId === user.id ||
-      user.classIds?.includes(c.id)
-    );
-  }, [classes, selectedSchoolYear, hasFullAccess, user.id, user.classIds]);
+    let yearClasses = classes.filter(c => c.schoolYear === selectedSchoolYear);
+    
+    // Access-based filtering
+    if (!hasFullAccess) {
+      yearClasses = yearClasses.filter(c => 
+        c.teacherIds?.includes(user.id) || 
+        c.teacherId === user.id ||
+        user.classIds?.includes(c.id)
+      );
+    }
+
+    // Mode-based filtering
+    if (displayMode === 'room' && selectedClassId) {
+      const specificClass = yearClasses.find(c => c.id === selectedClassId);
+      if (specificClass) return [specificClass];
+      // If selected class is not in allowed list for current year, return empty or all?
+      // Usually return empty as the selection is invalid for current context.
+      return [];
+    }
+
+    return yearClasses;
+  }, [classes, selectedSchoolYear, hasFullAccess, user.id, user.classIds, displayMode, selectedClassId]);
 
   const filteredStudents = useMemo(() => {
     const yearStudents = students.filter(s => s.schoolYear === selectedSchoolYear);
-    if (hasFullAccess) return yearStudents;
-    const allowedClassIds = filteredClasses.map(c => c.id);
-    return yearStudents.filter(s => 
-      allowedClassIds.includes(s.classId) || 
-      (s.classIds?.some(id => allowedClassIds.includes(id)))
-    );
-  }, [students, selectedSchoolYear, hasFullAccess, filteredClasses]);
+    if (!hasFullAccess || displayMode === 'room') {
+      const allowedClassIds = filteredClasses.map(c => c.id);
+      return yearStudents.filter(s => 
+        allowedClassIds.includes(s.classId) || 
+        (s.classIds?.some(id => allowedClassIds.includes(id)))
+      );
+    }
+    return yearStudents;
+  }, [students, selectedSchoolYear, hasFullAccess, filteredClasses, displayMode]);
 
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
@@ -635,7 +677,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
       const dateB = parseISO(b.birthDate!);
       return getDate(dateA) - getDate(dateB);
     });
-  }, [students, teachers, birthdayStart, birthdayEnd, config.colabBirthdayStartDate, config.colabBirthdayEndDate]);
+  }, [filteredStudents, teachers, birthdayStart, birthdayEnd, config.colabBirthdayStartDate, config.colabBirthdayEndDate]);
 
   const handlePrintBirthdays = () => {
     const printWindow = window.open('', '_blank');
@@ -693,6 +735,24 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
 
   return (
     <div className="space-y-6 pb-20 relative">
+      <AnimatePresence>
+        {alert && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 20, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            className="fixed top-0 left-1/2 z-[100] bg-white border-l-4 border-emerald-500 p-4 rounded-xl shadow-2xl flex items-center gap-3 min-w-[300px]"
+          >
+            <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center">
+              <Check className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <h4 className="font-black text-slate-900 uppercase tracking-tight text-sm">{alert.title}</h4>
+              <p className="text-xs text-slate-500 font-bold">{alert.message}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Header with Config */}
       <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-4">
@@ -747,6 +807,60 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
             {isCollapsed ? <ChevronDown className="w-6 h-6" /> : <ChevronUp className="w-6 h-6" />}
           </button>
         </div>
+      </div>
+
+      {/* Dashboard Display Controls */}
+      <div className="flex flex-wrap items-center gap-6 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm transition-all">
+        <div className="flex items-center bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+          <button 
+            onClick={() => setDisplayMode('general')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+              displayMode === 'general' 
+                ? "bg-white text-indigo-600 shadow-md ring-1 ring-black/5" 
+                : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Dados Gerais
+          </button>
+          <button 
+            onClick={() => setDisplayMode('room')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+              displayMode === 'room' 
+                ? "bg-white text-indigo-600 shadow-md ring-1 ring-black/5" 
+                : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <Focus className="w-3.5 h-3.5" />
+            Dados da Sala
+          </button>
+        </div>
+
+        {displayMode === 'room' && (
+          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-500">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filtrar Turma:</label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 text-xs min-w-[220px] transition-all hover:border-slate-300 shadow-inner"
+            >
+              <option value="">Selecione uma turma...</option>
+              {classes
+                .filter(c => c.schoolYear === selectedSchoolYear && (hasFullAccess || c.teacherIds?.includes(user.id) || c.teacherId === user.id || user.classIds?.includes(c.id)))
+                .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <button 
+          onClick={handlePinDashboardPreferences}
+          className="md:ml-auto flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100/50 hover:scale-[1.02] active:scale-95 group"
+        >
+          <Pin className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
+          Fixar Preferências
+        </button>
       </div>
 
       <AnimatePresence>
@@ -1176,8 +1290,8 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-1 gap-2">
-                                  {classes.length > 0 ? (
-                                    classes.map(cls => {
+                                  {filteredClasses.length > 0 ? (
+                                    filteredClasses.map(cls => {
                                       const hasAttendance = attendanceRecords.some(r => r.classId === cls.id && r.date === dateStr);
                                       return (
                                         <div key={cls.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 group transition-all">
@@ -1321,17 +1435,29 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                           <AlertCircle className="w-5 h-5 text-red-500" />
-                          <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight font-black">Alertas de Frequência</h3>
+                          <div>
+                            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight font-black">Alertas de Frequência</h3>
+                            {(config.frequencyStartDate || config.frequencyEndDate) && (
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                                {config.frequencyStartDate ? safeFormat(config.frequencyStartDate, 'dd/MM/yy') : 'Início'} — {config.frequencyEndDate ? safeFormat(config.frequencyEndDate, 'dd/MM/yy') : 'Fim'}
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 relative">
-                          <button onClick={() => setShowQuickAlertConfig(!showQuickAlertConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn"><Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" /></button>
+                          <button onClick={() => setShowQuickAlertConfig(!showQuickAlertConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn" title="Configurar Alerta">
+                            <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
+                          </button>
                           <AnimatePresence>
                             {showQuickAlertConfig && (
                               <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }} className="absolute right-full top-0 mr-2 bg-white p-4 rounded-2xl shadow-xl border border-slate-100 min-w-[240px] z-50">
                                 <div className="space-y-4">
                                   <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 font-bold tracking-widest">Faltas para Alerta</label>
-                                    <input type="number" min="1" value={tempConsecutiveLimit} onChange={(e) => setTempConsecutiveLimit(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    <div className="flex items-center gap-2">
+                                      <input type="number" min="1" value={tempConsecutiveLimit} onChange={(e) => setTempConsecutiveLimit(parseInt(e.target.value) || 1)} className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500" />
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase">Faltas</span>
+                                    </div>
                                   </div>
                                   <div className="grid grid-cols-2 gap-2">
                                     <div>
@@ -1356,11 +1482,12 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                           if (!baseFilter) return false;
                           if (config.frequencyStartDate || config.frequencyEndDate) {
                             const studentAbsences = absenceDates[s.id] || [];
-                            const start = config.frequencyStartDate ? parseISO(config.frequencyStartDate) : null;
-                            const end = config.frequencyEndDate ? parseISO(config.frequencyEndDate) : null;
+                            const start = (config.frequencyStartDate && isValid(parseISO(config.frequencyStartDate))) ? parseISO(config.frequencyStartDate) : null;
+                            const end = (config.frequencyEndDate && isValid(parseISO(config.frequencyEndDate))) ? parseISO(config.frequencyEndDate) : null;
+                            if (!start && !end) return true; // Invalid dates but fields present? Show all.
                             return studentAbsences.some(dateStr => {
                               const d = parseISO(dateStr);
-                              return (!start || d >= start) && (!end || d <= end);
+                              return isValid(d) && (!start || d >= start) && (!end || d <= end);
                             });
                           }
                           return true;
