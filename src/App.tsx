@@ -59,7 +59,7 @@ import HorizontalEventTicker from './components/HorizontalEventTicker';
 import { cn } from './lib/utils';
 import { Teacher, DashboardConfig } from './types';
 
-type TabId = 'dashboard' | 'academic' | 'admin' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings';
+type TabId = 'dashboard' | 'academic' | 'admin' | 'students' | 'teachers' | 'classes' | 'attendance' | 'schoolYear' | 'regimento' | 'calendar' | 'system' | 'projects' | 'finance' | 'reports' | 'planning' | 'organogram' | 'comunicados' | 'documentos' | 'meetings' | 'ai_assistant';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -299,6 +299,9 @@ export default function App() {
   });
 
   const hasAccess = (tabId: string): boolean => {
+    // Assistente IA is allowed for everyone as requested
+    if (tabId === 'ai_assistant') return true;
+
     // Check if the tab (or its parent) is in allowedTabs
     if (userData.allowedTabs && userData.allowedTabs.length > 0) {
       return userData.allowedTabs.includes(tabId);
@@ -401,7 +404,7 @@ export default function App() {
           {isSidebarOpen && <span className="text-xl font-black text-white truncate tracking-tight">EBD IGBAPI</span>}
         </div>
 
-        <AISidebarSearch isSidebarOpen={isSidebarOpen} />
+        {hasAccess('ai_assistant') && <AISidebarSearch isSidebarOpen={isSidebarOpen} />}
 
         {isSidebarOpen && (
           <div className="px-6 py-4 border-b border-slate-800">

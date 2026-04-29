@@ -22,12 +22,14 @@ service cloud.firestore {
     }
 
     function hasTabAccess(tabId) {
-      return isAdmin() || (
-        isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          (getUserData().allowedTabs != null && tabId in getUserData().allowedTabs) ||
-          (getUserData().generalProfile != null && 
-           get(/databases/$(database)/documents/profiles/$(getUserData().generalProfile)).data.allowedTabs.hasAny([tabId]))
+      return tabId == 'ai_assistant' ? isAuthenticated() : (
+        isAdmin() || (
+          isAuthenticated() && 
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            (getUserData().allowedTabs != null && tabId in getUserData().allowedTabs) ||
+            (getUserData().generalProfile != null && 
+             get(/databases/$(database)/documents/profiles/$(getUserData().generalProfile)).data.allowedTabs.hasAny([tabId]))
+          )
         )
       );
     }
@@ -109,8 +111,8 @@ service cloud.firestore {
     }
 
     match /ai_actions/{actionId} {
-      allow read: if isAdmin() || hasTabAccess('admin') || hasTabAccess('system');
-      allow write: if isAdmin();
+      allow read: if isAdmin() || hasTabAccess('ai_assistant');
+      allow write: if isAdmin() || hasTabAccess('ai_assistant');
     }
 
     match /config/{configId} {

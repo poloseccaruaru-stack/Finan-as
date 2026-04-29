@@ -61,7 +61,7 @@ interface Props {
 export const ALL_PROFILE_TABS = [
   'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
   'schoolYear', 'projects', 'finance', 'reports', 'planning', 'system',
-  'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+  'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram', 'ai_assistant'
 ];
 
 export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAccess }: Props) {
