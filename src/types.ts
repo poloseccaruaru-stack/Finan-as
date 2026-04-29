@@ -214,6 +214,7 @@ export interface DashboardConfig {
   layout?: string[];
   eventBarPosition: 'top' | 'bottom';
   eventBarVisibility?: 'both' | 'sidebar' | 'bottom' | 'none';
+  whatsappMessages?: string[];
 }
 
 export interface AbsenceResolution {

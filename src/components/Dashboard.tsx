@@ -50,7 +50,11 @@ import {
   XCircle,
   LayoutGrid,
   Focus,
-  Pin
+  Pin,
+  MessageSquare,
+  Send,
+  ExternalLink,
+  Phone
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -103,6 +107,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
   const [isSavingResolution, setIsSavingResolution] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [showPreDefinedConfig, setShowPreDefinedConfig] = useState(false);
+  const [showWhatsAppConfig, setShowWhatsAppConfig] = useState(false);
   const [showResolvedReport, setShowResolvedReport] = useState(false);
   
   // Report Filter States
@@ -139,6 +144,12 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
     }
     return l;
   });
+  
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppStudent, setWhatsAppStudent] = useState<Student | null>(null);
+  const [customWhatsAppMessage, setCustomWhatsAppMessage] = useState('');
+  const [selectedWhatsAppTemplate, setSelectedWhatsAppTemplate] = useState('');
+  const [newTemplateText, setNewTemplateText] = useState('');
   
   const [tempConsecutiveLimit, setTempConsecutiveLimit] = useState(2);
   const [tempFreqStart, setTempFreqStart] = useState('');
@@ -276,7 +287,8 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
           attendanceMonitoringStartDate: data.attendanceMonitoringStartDate,
           attendanceMonitoringEndDate: data.attendanceMonitoringEndDate,
           layout: l,
-          eventBarPosition: data.eventBarPosition || 'bottom'
+          eventBarPosition: data.eventBarPosition || 'bottom',
+          whatsappMessages: data.whatsappMessages || []
         }));
 
         setLocalLayout(l);
@@ -400,6 +412,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
       
       // Use setDoc with merge: true for partial updates
       await setDoc(doc(db, 'config', 'dashboard'), updates, { merge: true });
+      showAlert('Sucesso', 'Configurações do dashboard atualizadas!');
       
       // State is handled by onSnapshot, but we can update it immediately for responsiveness
       // but only if it's safe. Actually, onSnapshot is very fast locally.
@@ -563,6 +576,26 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
     }
     return yearStudents;
   }, [students, selectedSchoolYear, hasFullAccess, filteredClasses, displayMode]);
+  
+  const frequencyAlerts = useMemo(() => {
+    return filteredStudents
+      .filter(s => {
+        const baseFilter = s.consecutiveAbsences >= (config.consecutiveAbsencesLimit || 2);
+        if (!baseFilter) return false;
+        if (config.frequencyStartDate || config.frequencyEndDate) {
+          const studentAbsences = absenceDates[s.id] || [];
+          const start = (config.frequencyStartDate && isValid(parseISO(config.frequencyStartDate))) ? parseISO(config.frequencyStartDate) : null;
+          const end = (config.frequencyEndDate && isValid(parseISO(config.frequencyEndDate))) ? parseISO(config.frequencyEndDate) : null;
+          if (!start && !end) return true;
+          return studentAbsences.some(dateStr => {
+            const d = parseISO(dateStr);
+            return isValid(d) && (!start || d >= start) && (!end || d <= end);
+          });
+        }
+        return true;
+      })
+      .sort((a, b) => b.consecutiveAbsences - a.consecutiveAbsences);
+  }, [filteredStudents, config.consecutiveAbsencesLimit, config.frequencyStartDate, config.frequencyEndDate, absenceDates]);
 
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
@@ -915,6 +948,13 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
             >
               <Settings className="w-4 h-4" />
               Configurar Respostas Pré-definidas
+            </button>
+            <button 
+              onClick={() => setShowWhatsAppConfig(true)}
+              className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-all flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Configurar Mensagens WhatsApp
             </button>
             <button 
               onClick={() => setShowResolvedReport(true)}
@@ -1476,33 +1516,54 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                           </AnimatePresence>
                         </div>
                       </div>
-                      <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                        {filteredStudents.filter(s => {
-                          const baseFilter = s.consecutiveAbsences >= (config.consecutiveAbsencesLimit || 2);
-                          if (!baseFilter) return false;
-                          if (config.frequencyStartDate || config.frequencyEndDate) {
-                            const studentAbsences = absenceDates[s.id] || [];
-                            const start = (config.frequencyStartDate && isValid(parseISO(config.frequencyStartDate))) ? parseISO(config.frequencyStartDate) : null;
-                            const end = (config.frequencyEndDate && isValid(parseISO(config.frequencyEndDate))) ? parseISO(config.frequencyEndDate) : null;
-                            if (!start && !end) return true; // Invalid dates but fields present? Show all.
-                            return studentAbsences.some(dateStr => {
-                              const d = parseISO(dateStr);
-                              return isValid(d) && (!start || d >= start) && (!end || d <= end);
-                            });
-                          }
-                          return true;
-                        }).map(student => (
-                          <div key={student.id} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-between group hover:bg-red-100/50 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-lg shadow-sm border border-red-100">⚠️</div>
-                              <div>
-                                <p className="text-sm font-black text-red-900 uppercase leading-none mb-1 truncate max-w-[150px]">{student.name}</p>
-                                <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">Faltou {student.consecutiveAbsences} vezes seguidas!</p>
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        {frequencyAlerts.length > 0 ? (
+                          frequencyAlerts.map(student => {
+                            const lastClass = classes.find(c => c.id === student.classId) || classes.find(c => student.classIds?.includes(c.id));
+                            return (
+                              <div key={student.id} className="p-4 bg-red-50 border border-red-100 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between group hover:bg-red-100/50 transition-all gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-lg shadow-sm border border-red-100 shrink-0">⚠️</div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-black text-red-900 uppercase leading-none truncate">{student.name}</p>
+                                      {student.phone && (
+                                        <span className="text-[9px] font-bold text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-100 flex items-center gap-1">
+                                          <Phone className="w-2.5 h-2.5" />
+                                          {student.phone}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider mt-1">Faltou {student.consecutiveAbsences} vezes seguidas!</p>
+                                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Turma: {lastClass?.name || 'N/A'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => {
+                                      setWhatsAppStudent(student);
+                                      setCustomWhatsAppMessage("");
+                                      setSelectedWhatsAppTemplate(config.whatsappMessages?.[0] || "");
+                                      setShowWhatsAppModal(true);
+                                    }}
+                                    className="flex-1 sm:flex-none px-4 py-2 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-600 transition-all shadow-md flex items-center justify-center gap-2"
+                                  >
+                                    <MessageSquare className="w-3 h-3" />
+                                    Falar no WhatsApp
+                                  </button>
+                                  <button 
+                                    onClick={() => { setResolvingStudent(student); setResolutionNote(''); setShowResolveModal(true); }} 
+                                    className="flex-1 sm:flex-none px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md"
+                                  >
+                                    Resolvido
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                            <button onClick={() => { setResolvingStudent(student); setResolutionNote(''); setShowResolveModal(true); }} className="px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-md">Resolvido</button>
-                          </div>
-                        ))}
+                            );
+                          })
+                        ) : (
+                          <div className="text-center py-12 text-slate-400 italic text-xs">Sem alertas de frequência no momento.</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1971,6 +2032,194 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
           />
         </div>
       </motion.div>
+    )}
+    {showWhatsAppConfig && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100"
+        >
+          <div className="p-6 border-b border-slate-50 flex justify-between items-center text-emerald-600">
+            <div>
+              <h3 className="text-xl font-black uppercase tracking-tight leading-none mb-1">Mensagens WhatsApp</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Gerencie os textos para contatos rápidos</p>
+            </div>
+            <button onClick={() => setShowWhatsAppConfig(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div className="flex gap-2">
+              <input 
+                type="text"
+                placeholder="Nova mensagem WhatsApp..."
+                value={newTemplateText}
+                onChange={(e) => setNewTemplateText(e.target.value)}
+                className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition-all font-medium"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTemplateText.trim()) {
+                    const messages = config.whatsappMessages || [];
+                    updateConfig({ whatsappMessages: [...messages, newTemplateText.trim()] });
+                    setNewTemplateText('');
+                  }
+                }}
+              />
+              <button 
+                disabled={!newTemplateText.trim()}
+                onClick={() => {
+                  const messages = config.whatsappMessages || [];
+                  updateConfig({ whatsappMessages: [...messages, newTemplateText.trim()] });
+                  setNewTemplateText('');
+                }}
+                className="p-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all font-black disabled:opacity-50"
+              >
+                <Plus className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensagem Padrão (Sempre presente)</span>
+                </div>
+                <span className="text-sm font-bold text-slate-600">Olá, gostaria de mais informações.</span>
+              </div>
+              {config.whatsappMessages?.map((msg, idx) => (
+                <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 group hover:border-emerald-200 hover:bg-emerald-50/10 transition-all">
+                  <span className="text-sm font-bold text-slate-700">{msg}</span>
+                  <button 
+                    onClick={() => {
+                      const messages = [...(config.whatsappMessages || [])];
+                      messages.splice(idx, 1);
+                      updateConfig({ whatsappMessages: messages });
+                    }}
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {(!config.whatsappMessages || config.whatsappMessages.length === 0) && (
+                <p className="text-center py-8 text-slate-400 italic text-xs">Padrão cadastrado.</p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    )}
+
+    {showWhatsAppModal && whatsAppStudent && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+        onClick={() => setShowWhatsAppModal(false)}
+      >
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-emerald-600 text-white">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight leading-none mb-1 text-white">WhatsApp</h3>
+                <p className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest leading-none line-clamp-1">{whatsAppStudent.name}</p>
+              </div>
+            </div>
+            <button onClick={() => setShowWhatsAppModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Número Aluno/Responsável</label>
+              <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 font-bold">
+                <Phone className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm">{whatsAppStudent.phone || 'NÃO CADASTRADO'}</span>
+              </div>
+              {!whatsAppStudent.phone && (
+                <p className="mt-1 text-[9px] text-red-500 font-bold uppercase tracking-widest leading-none">⚠️ Adicione o telefone no cadastro para falar.</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Escolha uma Mensagem</label>
+              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                <button
+                  onClick={() => {
+                    setSelectedWhatsAppTemplate("default");
+                    setCustomWhatsAppMessage("");
+                  }}
+                  className={cn(
+                    "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase",
+                    selectedWhatsAppTemplate === "default" && !customWhatsAppMessage
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
+                      : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"
+                  )}
+                >
+                  Olá, gostaria de mais informações. (Padrão)
+                </button>
+                {config.whatsappMessages?.map((msg, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setSelectedWhatsAppTemplate(msg);
+                      setCustomWhatsAppMessage("");
+                    }}
+                    className={cn(
+                      "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase",
+                      selectedWhatsAppTemplate === msg && !customWhatsAppMessage
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
+                        : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"
+                    )}
+                  >
+                    {msg}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ou escreva uma mensagem agora</label>
+              <textarea 
+                value={customWhatsAppMessage}
+                onChange={(e) => setCustomWhatsAppMessage(e.target.value)}
+                placeholder="Ex: Olá, notamos sua ausência..."
+                className="w-full h-24 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm transition-all resize-none font-medium"
+              ></textarea>
+            </div>
+
+            <div className="pt-2">
+              <button 
+                disabled={!whatsAppStudent.phone}
+                onClick={() => {
+                  if (!whatsAppStudent.phone) return;
+                  const cleanPhone = whatsAppStudent.phone.replace(/\D/g, '');
+                  const finalMsg = customWhatsAppMessage.trim() || 
+                                  (selectedWhatsAppTemplate === 'default' ? "Olá, gostaria de mais informações." : selectedWhatsAppTemplate) ||
+                                  "Olá, gostaria de mais informações.";
+                  
+                  const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
+                  window.open(url, '_blank');
+                  setShowWhatsAppModal(false);
+                }}
+                className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-3 active:scale-95 disabled:grayscale disabled:opacity-50"
+              >
+                <Send className="w-5 h-5" />
+                Deseja enviar mensagem agora?
+                <ExternalLink className="w-4 h-4 ml-auto opacity-50" />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     )}
   </AnimatePresence>
 </div>
