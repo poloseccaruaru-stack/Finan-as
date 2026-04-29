@@ -366,7 +366,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
             const allTabs = [
               'dashboard', 'academic', 'administrative', 'students', 'teachers', 'classes', 'attendance',
               'schoolYear', 'projects', 'finance', 'reports', 'planning', 'system',
-              'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram'
+              'regimento', 'calendar', 'comunicados', 'documentos', 'meetings', 'organogram', 'ai_assistant'
             ];
             
             const hasProf1 = currentProfiles.some(p => p.name === 'Professor 1');
@@ -379,6 +379,18 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 allowedTabs: allTabs,
                 createdAt: new Date().toISOString()
               });
+            }
+
+            // Corrige perfis existentes que não possuem o Assistente de IA
+            if (isAdmin) {
+              for (const profile of currentProfiles) {
+                if (!profile.allowedTabs?.includes('ai_assistant')) {
+                  const newTabs = [...(profile.allowedTabs || []), 'ai_assistant'].filter((v, i, a) => a.indexOf(v) === i);
+                  await updateDoc(doc(db, 'profiles', profile.id), {
+                    allowedTabs: newTabs
+                  });
+                }
+              }
             }
           }, (err) => handleFirestoreError(err, OperationType.LIST, 'profiles'));
     
@@ -419,7 +431,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
         try {
           const profileData = {
             name: profileForm.name,
-            allowedTabs: profileForm.allowedTabs,
+            allowedTabs: [...(profileForm.allowedTabs || []), 'ai_assistant'].filter((v, i, a) => a.indexOf(v) === i),
             permissions: profileForm.permissions || {},
             updatedAt: new Date().toISOString()
           };

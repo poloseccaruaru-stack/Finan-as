@@ -455,9 +455,9 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                     <button
                       type="button"
                       onClick={handleAISuggest}
-                      disabled={suggesting || !hasFullAccess}
+                      disabled={suggesting}
                       className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-bold hover:bg-amber-100 transition-all disabled:opacity-50"
-                      title={hasFullAccess ? "Sugerir com Gemini" : "Acesso apenas para visualização"}
+                      title="Sugerir com Gemini"
                     >
                       {suggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
                       <span className="hidden md:inline">Sugerir com IA</span>

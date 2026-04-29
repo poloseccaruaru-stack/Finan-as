@@ -54,12 +54,12 @@ service cloud.firestore {
 
     // Rules for each collection
     match /users/{userId} {
-      allow read: if isAdmin() || isOwner(userId);
+      allow read: if isAdmin() || isOwner(userId) || hasTabAccess('ai_assistant');
       allow write: if isOwner(userId) || isAdmin();
     }
 
     match /students/{studentId} {
-      allow read: if hasTabAccess('students') || hasTabAccess('academic');
+      allow read: if hasTabAccess('students') || hasTabAccess('academic') || hasTabAccess('ai_assistant');
       allow write: if isAdmin();
     }
 
@@ -69,22 +69,22 @@ service cloud.firestore {
     }
 
     match /classes/{classId} {
-      allow read: if hasTabAccess('classes') || hasTabAccess('academic') || hasTabAccess('dashboard');
+      allow read: if hasTabAccess('classes') || hasTabAccess('academic') || hasTabAccess('dashboard') || hasTabAccess('ai_assistant');
       allow write: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if hasTabAccess('attendance') || hasTabAccess('academic') || hasTabAccess('dashboard');
+      allow read: if hasTabAccess('attendance') || hasTabAccess('academic') || hasTabAccess('dashboard') || hasTabAccess('ai_assistant');
       allow write: if hasTabAccess('attendance') || hasTabAccess('academic');
     }
 
     match /projects/{projectId} {
-      allow read: if hasTabAccess('projects');
+      allow read: if hasTabAccess('projects') || hasTabAccess('ai_assistant');
       allow write: if isAdmin() || hasTabAccess('projects');
     }
 
     match /transactions/{transactionId} {
-      allow read: if hasTabAccess('finance');
+      allow read: if hasTabAccess('finance') || hasTabAccess('ai_assistant');
       allow write: if isAdmin() || hasTabAccess('finance');
     }
 
@@ -126,7 +126,7 @@ service cloud.firestore {
     }
 
     match /planning/{planningId} {
-      allow read: if hasTabAccess('planning') || hasTabAccess('academic');
+      allow read: if hasTabAccess('planning') || hasTabAccess('academic') || hasTabAccess('ai_assistant');
       allow write: if hasTabAccess('planning') || hasTabAccess('academic');
     }
 
