@@ -272,7 +272,7 @@ export default function App() {
       icon: Briefcase,
       subItems: [
         { id: 'regimento', label: 'Regimento', icon: FileText },
-        { id: 'calendar', label: 'Calendário', icon: Calendar },
+        { id: 'calendar', label: 'Agenda EBD', icon: Calendar },
         { id: 'comunicados', label: 'Comunicados', icon: FileText },
         { id: 'documentos', label: 'Documentos Gerais', icon: FileText },
         { id: 'organogram', label: 'Organograma', icon: Users },

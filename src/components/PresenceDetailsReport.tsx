@@ -52,11 +52,32 @@ export default function PresenceDetailsReport({ type, targetId, startDate, endDa
   const calculateAttendance = (studentId: string) => {
     const start = startDate ? parseISO(startDate) : null;
     const end = endDate ? parseISO(endDate) : null;
+    const student = students.find(s => s.id === studentId);
 
     const relevant = attendanceRecords.filter(att => {
       const d = parseISO(att.date);
       const inPeriod = (!start || d >= start) && (!end || d <= end);
-      return inPeriod && (att.presentStudentIds?.includes(studentId) || att.absentStudentIds?.includes(studentId));
+      
+      // Check enrollment and exit dates for the specific class of this attendance
+      const enrollmentDateStr = student?.enrollmentDates?.[att.classId];
+      const exitDateStr = student?.exitDates?.[att.classId];
+      const enrollmentStatus = student?.enrollmentStatuses?.[att.classId] || 'ativo';
+      
+      const afterEnroll = !enrollmentDateStr || att.date >= enrollmentDateStr;
+      const isActiveStatus = enrollmentStatus === 'ativo';
+      
+      let beforeExit = true;
+      if (exitDateStr) {
+        if (isActiveStatus) {
+          beforeExit = att.date <= exitDateStr;
+        } else {
+          beforeExit = att.date < exitDateStr;
+        }
+      }
+      
+      const isEnrolled = afterEnroll && beforeExit;
+      
+      return inPeriod && isEnrolled && (att.presentStudentIds?.includes(studentId) || att.absentStudentIds?.includes(studentId));
     });
 
     if (relevant.length === 0) return { percentage: 100, presences: [], absences: [] };

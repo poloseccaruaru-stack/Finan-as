@@ -556,14 +556,14 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
       setShowGeneralCalendarForm(false);
       setEditingGeneralCalendarId(null);
       setGeneralCalendarForm({ title: '', content: '' });
-      alert('Calendário Geral salvo com sucesso!');
+      alert('Agenda Geral salva com sucesso!');
     } catch (err) {
       handleFirestoreError(err, editingGeneralCalendarId ? OperationType.UPDATE : OperationType.CREATE, 'general_calendars');
     }
   };
 
   const handleDeleteGeneralCalendar = (id: string) => {
-    showAdminConfirm('Excluir Calendário', 'Deseja realmente excluir este calendário?', async () => {
+    showAdminConfirm('Excluir Agenda', 'Deseja realmente excluir esta agenda?', async () => {
       try {
         await deleteDoc(doc(db, 'general_calendars', id));
       } catch (err) {
@@ -698,7 +698,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-900">
           {subTab === 'regimento' ? 'Regimento Interno EBD' : 
-           subTab === 'calendar' ? 'Calendário Escolar' : 
+           subTab === 'calendar' ? 'Calendário/Agenda' : 
            subTab === 'organogram' ? 'Organograma' : 
            subTab === 'comunicados' ? 'Comunicados' :
            subTab === 'documentos' ? 'Documentos Gerais' :
@@ -1052,7 +1052,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                         {key === 'teachers' ? 'Professores' :
                          key === 'students' ? 'Alunos' :
                          key === 'classes' ? 'Turmas' :
-                         key === 'calendar' ? 'Calendário' :
+                         key === 'calendar' ? 'Agenda EBD' :
                          key === 'regimento' ? 'Regimento' :
                          key === 'organogram' ? 'Organograma' :
                          key === 'projects' ? 'Projetos' :
@@ -1157,7 +1157,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 activeCalendarType === 'ebd' ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
               )}
             >
-              Calendário EBD
+              Agenda EBD
             </button>
             <button 
               onClick={() => setActiveCalendarType('church')}
@@ -1166,7 +1166,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 activeCalendarType === 'church' ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
               )}
             >
-              Calendário Igreja
+              Agenda Igreja
             </button>
             <button 
               onClick={() => setActiveCalendarType('convention')}
@@ -1184,14 +1184,14 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 activeCalendarType === 'geral' ? "bg-indigo-600 border-indigo-600 text-white shadow-lg" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300"
               )}
             >
-              Calendário Geral
+              Agenda Geral
             </button>
           </div>
 
           {activeCalendarType === 'geral' ? (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-900">Calendários Gerais</h3>
+                <h3 className="text-lg font-bold text-slate-900">Agendas Gerais</h3>
                 {hasEditAccess && (
                   <button
                     onClick={() => {
@@ -1202,7 +1202,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-lg shadow-indigo-100"
                   >
                     <Plus className="w-5 h-5" />
-                    Novo Calendário
+                    Nova Agenda
                   </button>
                 )}
               </div>
@@ -1246,7 +1246,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                 ))}
                 {generalCalendars.length === 0 && (
                   <div className="col-span-full py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 w-full">
-                    <p className="text-slate-400 text-sm">Nenhum calendário geral cadastrado.</p>
+                    <p className="text-slate-400 text-sm">Nenhuma agenda geral cadastrada.</p>
                   </div>
                 )}
               </div>
@@ -1403,7 +1403,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
-                  {editingGeneralCalendarId ? 'Editar Calendário' : 'Novo Calendário Geral'}
+                  {editingGeneralCalendarId ? 'Editar Agenda' : 'Nova Agenda Geral'}
                 </h3>
                 <button onClick={() => setShowGeneralCalendarForm(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                   <X className="w-5 h-5 text-slate-500" />
@@ -1411,7 +1411,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
               </div>
               <form onSubmit={handleSaveGeneralCalendar} className="p-6 space-y-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Título do Calendário</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Título da Agenda</label>
                   <input
                     required
                     type="text"
@@ -1431,7 +1431,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                   />
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
-                  {editingGeneralCalendarId ? 'Atualizar Calendário' : 'Salvar Calendário'}
+                  {editingGeneralCalendarId ? 'Atualizar Agenda' : 'Salvar Agenda'}
                 </button>
               </form>
             </motion.div>
@@ -1773,7 +1773,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                           { id: 'planning', label: 'Planejamento' },
                           { id: 'schoolYear', label: 'Ano Letivo' },
                           { id: 'regimento', label: 'Regimento' },
-                          { id: 'calendar', label: 'Calendário' },
+                          { id: 'calendar', label: 'Agenda EBD' },
                         ] 
                       },
                       { 

@@ -95,11 +95,24 @@ function AttendanceStudentCard({
   isLast,
   isSelected,
   onSelect,
-  onNumberChange
+  onNumberChange,
+  selectedClass,
+  attendanceDate
 }: any) {
   const controls = useDragControls();
   const [localNumber, setLocalNumber] = useState(index + 1);
   const itemRef = useRef<HTMLLIElement>(null);
+
+  const enrollmentStatus = selectedClass ? student.enrollmentStatuses?.[selectedClass] || 'ativo' : 'ativo';
+  const enrollmentDate = selectedClass ? student.enrollmentDates?.[selectedClass] : null;
+  const exitDate = selectedClass ? student.exitDates?.[selectedClass] : null;
+  
+  const isEnrolledAtDate = attendanceDate ? (
+    (!enrollmentDate || attendanceDate >= enrollmentDate) &&
+    (!exitDate || (enrollmentStatus === 'ativo' ? attendanceDate <= exitDate : attendanceDate < exitDate))
+  ) : true;
+
+  const isMarkingBlocked = enrollmentStatus !== 'ativo';
 
   useEffect(() => {
     setLocalNumber(index + 1);
@@ -235,52 +248,66 @@ function AttendanceStudentCard({
       </div>
       
       <div className="flex items-center gap-2">
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            setAttendanceList((prev: any) => ({ 
-              ...prev, 
-              [student.id]: (prev[student.id] === 'present' || prev[student.id] === true) ? 'absent' : 'present' 
-            })); 
-          }}
-          className={cn(
-            "rounded-xl flex items-center justify-center transition-all shadow-sm",
-            markingZoom === 1 ? "w-10 h-10" : markingZoom === 2 ? "w-12 h-12" : "w-14 h-14",
-            (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-600 text-white shadow-green-100" : "bg-red-600 text-white shadow-red-100"
-          )}
-          title={(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "Presente (Clique para Falta)" : "Falta (Clique para Presente)"}
-        >
-          {(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? (
-            <CheckCircle2 className="w-6 h-6" />
-          ) : (
-            <XCircle className="w-6 h-6" />
-          )}
-        </button>
-        
-        <AnimatePresence>
-          {!(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) && (
-            <motion.button 
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
+        {!markingOrderMode && (isMarkingBlocked || !isEnrolledAtDate) ? (
+          <div className={cn(
+            "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shadow-sm transition-all animate-in fade-in zoom-in duration-300",
+            enrollmentStatus === 'ativo' ? "bg-slate-50 text-slate-400 border-slate-200" :
+            enrollmentStatus === 'concluído' ? "bg-blue-50 text-blue-600 border-blue-200" :
+            enrollmentStatus === 'transferido' ? "bg-amber-50 text-amber-600 border-amber-200" :
+            "bg-red-50 text-red-600 border-red-200"
+          )}>
+            {!isEnrolledAtDate && enrollmentStatus === 'ativo' ? 'Não Vinculado' : enrollmentStatus}
+          </div>
+        ) : (
+          <>
+            <button
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentJustifyStudent(student.id);
-                setShowJustifyModal(true);
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setAttendanceList((prev: any) => ({ 
+                  ...prev, 
+                  [student.id]: (prev[student.id] === 'present' || prev[student.id] === true) ? 'absent' : 'present' 
+                })); 
               }}
               className={cn(
-                "rounded-lg flex items-center justify-center font-bold transition-all",
-                markingZoom === 1 ? "w-10 h-10 text-xs" : markingZoom === 2 ? "w-12 h-12 text-sm" : "w-14 h-14 text-base",
-                justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                "rounded-xl flex items-center justify-center transition-all shadow-sm",
+                markingZoom === 1 ? "w-10 h-10" : markingZoom === 2 ? "w-12 h-12" : "w-14 h-14",
+                (attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "bg-green-600 text-white shadow-green-100" : "bg-red-600 text-white shadow-red-100"
               )}
-              title="Justificar falta"
+              title={(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? "Presente (Clique para Falta)" : "Falta (Clique para Presente)"}
             >
-              J
-            </motion.button>
-          )}
-        </AnimatePresence>
+              {(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) ? (
+                <CheckCircle2 className="w-6 h-6" />
+              ) : (
+                <XCircle className="w-6 h-6" />
+              )}
+            </button>
+            
+            <AnimatePresence>
+              {!(attendanceList[student.id] === 'present' || attendanceList[student.id] === true) && (
+                <motion.button 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentJustifyStudent(student.id);
+                    setShowJustifyModal(true);
+                  }}
+                  className={cn(
+                    "rounded-lg flex items-center justify-center font-bold transition-all",
+                    markingZoom === 1 ? "w-10 h-10 text-xs" : markingZoom === 2 ? "w-12 h-12 text-sm" : "w-14 h-14 text-base",
+                    justifications[student.id] ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                  )}
+                  title="Justificar falta"
+                >
+                  J
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </>
+        )}
       </div>
     </Reorder.Item>
   );
@@ -649,6 +676,9 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     history: '',
     classId: '',
     classIds: [] as string[],
+    enrollmentDates: {} as Record<string, string>,
+    exitDates: {} as Record<string, string>,
+    enrollmentStatuses: {} as Record<string, 'ativo' | 'concluído' | 'transferido' | 'evadido'>,
     schoolYear: selectedSchoolYear,
     doNotRenew: false,
     status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido'
@@ -826,20 +856,37 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const sanitizedForm = {
-        name: studentForm.name || "",
-        birthDate: studentForm.birthDate || "",
-        address: studentForm.address || "",
-        guardians: studentForm.guardians || "",
-        emergencyContact: studentForm.emergencyContact || "",
-        phone: studentForm.phone || "",
-        history: studentForm.history || "",
-        classId: studentForm.classIds[0] || "",
-        classIds: studentForm.classIds.filter(id => id !== ""),
-        schoolYear: studentForm.schoolYear || selectedSchoolYear,
-        doNotRenew: studentForm.doNotRenew || false,
-        status: studentForm.status || 'ativo'
-      };
+        const newClassIds = studentForm.classIds.filter(id => id !== "");
+        const enrollmentDates = { ...studentForm.enrollmentDates };
+        const exitDates = { ...studentForm.exitDates };
+        const enrollmentStatuses = { ...studentForm.enrollmentStatuses };
+        
+        newClassIds.forEach(cid => {
+          if (!enrollmentDates[cid]) {
+            enrollmentDates[cid] = safeFormat(new Date(), 'yyyy-MM-dd');
+          }
+          if (!enrollmentStatuses[cid]) {
+            enrollmentStatuses[cid] = 'ativo';
+          }
+        });
+
+        const sanitizedForm = {
+          name: studentForm.name || "",
+          birthDate: studentForm.birthDate || "",
+          address: studentForm.address || "",
+          guardians: studentForm.guardians || "",
+          emergencyContact: studentForm.emergencyContact || "",
+          phone: studentForm.phone || "",
+          history: studentForm.history || "",
+          classId: newClassIds[0] || "",
+          classIds: newClassIds,
+          enrollmentDates,
+          exitDates,
+          enrollmentStatuses,
+          schoolYear: studentForm.schoolYear || selectedSchoolYear,
+          doNotRenew: studentForm.doNotRenew || false,
+          status: studentForm.status || 'ativo'
+        };
 
       if (editingStudent) {
         await updateDoc(doc(db, 'students', editingStudent.id), sanitizedForm);
@@ -855,7 +902,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
@@ -907,6 +954,9 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       history: student.history,
       classId: student.classId || '',
       classIds: student.classIds || (student.classId ? [student.classId] : []),
+      enrollmentDates: student.enrollmentDates || {},
+      exitDates: student.exitDates || {},
+      enrollmentStatuses: student.enrollmentStatuses || {},
       schoolYear: student.schoolYear || selectedSchoolYear,
       doNotRenew: student.doNotRenew || false,
       status: student.status || 'ativo'
@@ -1482,8 +1532,39 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       return;
     }
 
-    const present = Object.keys(attendanceList).filter(id => attendanceList[id] === 'present' || attendanceList[id] === true);
-    const absent = Object.keys(attendanceList).filter(id => attendanceList[id] === 'absent' || attendanceList[id] === false);
+    const classStudents = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass));
+    
+    const isStudentValidForAttendance = (studentId: string) => {
+      const s = classStudents.find(st => st.id === studentId);
+      if (!s) return false;
+      const enrollmentStatus = selectedClass ? s.enrollmentStatuses?.[selectedClass] || 'ativo' : 'ativo';
+      const enrollmentDate = selectedClass ? s.enrollmentDates?.[selectedClass] : null;
+      const exitDate = selectedClass ? s.exitDates?.[selectedClass] : null;
+
+      const afterEnroll = !enrollmentDate || (attendanceDate && attendanceDate >= enrollmentDate);
+      const isActiveStatus = enrollmentStatus === 'ativo';
+
+      let beforeExit = true;
+      if (exitDate) {
+        if (isActiveStatus) {
+          beforeExit = !!(attendanceDate && attendanceDate <= exitDate);
+        } else {
+          beforeExit = !!(attendanceDate && attendanceDate < exitDate);
+        }
+      }
+
+      return afterEnroll && beforeExit;
+    };
+
+    const present = Object.keys(attendanceList).filter(id => 
+      (attendanceList[id] === 'present' || attendanceList[id] === true) && isStudentValidForAttendance(id)
+    );
+    const absent = Object.keys(attendanceList).filter(id => 
+      (attendanceList[id] === 'absent' || attendanceList[id] === false) && isStudentValidForAttendance(id)
+    );
+    const partial = Object.keys(attendanceList).filter(id => 
+      attendanceList[id] === 'partial' && isStudentValidForAttendance(id)
+    );
     
     try {
       if (currentPlanning && contentGiven !== currentPlanning.content && !observation.trim()) {
@@ -1502,7 +1583,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
         endTime: endTime || "",
         presentStudentIds: present || [],
         absentStudentIds: absent || [],
-        justifications: justifications || {},
+        partialStudentIds: partial || [],
+        justifications: Object.fromEntries(
+          Object.entries(justifications).filter(([id]) => isStudentValidForAttendance(id))
+        ),
         contentGiven: contentGiven || "",
         methodology: attendanceMethodology.join(', ') || "",
         observation: observation || "",
@@ -1732,7 +1816,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                     setEditingMeeting(null);
                   } else if (subTab === 'students') {
                     setEditingStudent(null);
-                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
                     setTeacherForm({ 
@@ -1833,17 +1917,44 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       {differenceInYears(new Date(), parseISO(student.birthDate))} anos
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-col gap-1.5">
                         {student.classIds?.length > 0 ? (
-                          student.classIds.map(cid => (
-                            <span key={cid} className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded uppercase">
-                              {classes.find(c => c.id === cid)?.name}
-                            </span>
-                          ))
+                          student.classIds.map(cid => {
+                            const cls = classes.find(c => c.id === cid);
+                            if (!cls) return null;
+                            const status = student.enrollmentStatuses?.[cid] || 'ativo';
+                            const enrollDate = student.enrollmentDates?.[cid];
+                            const exitDate = student.exitDates?.[cid];
+                            return (
+                              <div key={cid} className="flex flex-col gap-0.5 p-1.5 bg-slate-50 rounded-lg border border-slate-100">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold text-indigo-600 uppercase">
+                                    {cls.name}
+                                  </span>
+                                  <span className={cn(
+                                    "text-[9px] font-black uppercase px-1.5 py-0.25 rounded",
+                                    status === 'ativo' ? "bg-green-100 text-green-700" :
+                                    status === 'concluído' ? "bg-blue-100 text-blue-700" :
+                                    status === 'transferido' ? "bg-amber-100 text-amber-700" :
+                                    "bg-red-100 text-red-700"
+                                  )}>
+                                    {status}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2 text-[9px] text-slate-400">
+                                  {enrollDate && <span>Entrada: {safeFormat(enrollDate, 'dd/MM/yy')}</span>}
+                                  {exitDate && <span>Saída: {safeFormat(exitDate, 'dd/MM/yy')}</span>}
+                                </div>
+                              </div>
+                            );
+                          })
                         ) : student.classId ? (
-                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded uppercase">
-                            {classes.find(c => c.id === student.classId)?.name}
-                          </span>
+                          <div className="flex flex-col gap-0.5 p-1.5 bg-slate-50 rounded-lg border border-slate-100">
+                             <span className="text-[10px] font-bold text-indigo-600 uppercase">
+                                {classes.find(c => c.id === student.classId)?.name}
+                              </span>
+                              <span className="text-[9px] font-black uppercase p-1 bg-green-100 text-green-700 rounded w-fit">ATIVO</span>
+                          </div>
                         ) : (
                           <span className="text-xs font-medium text-slate-400 italic">Sem Turma</span>
                         )}
@@ -2062,7 +2173,23 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       {teachers.find(t => t.id === c.teacherId)?.name || 'Não atribuído'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} alunos
+                      {students.filter(s => {
+                        const belongs = s.classId === c.id || s.classIds?.includes(c.id);
+                        if (!belongs) return false;
+                        const exitDate = s.exitDates?.[c.id];
+                        const enrollmentStatus = s.enrollmentStatuses?.[c.id] || 'ativo';
+                        const today = safeFormat(new Date(), 'yyyy-MM-dd');
+                        
+                        const isActiveStatus = enrollmentStatus === 'ativo';
+                        if (exitDate) {
+                          if (isActiveStatus) {
+                            if (today > exitDate) return false;
+                          } else {
+                            if (today >= exitDate) return false;
+                          }
+                        }
+                        return true;
+                      }).length} alunos
                     </td>
                      <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
@@ -2343,7 +2470,12 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                 )}
                 <button
                   onClick={() => {
-                    const allPresentValue = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: 'present' }), {});
+                    const allPresentValue = students.filter(s => {
+                      const belongsToClass = s.classId === selectedClass || s.classIds?.includes(selectedClass);
+                      if (!belongsToClass) return false;
+                      const enrollmentDate = s.enrollmentDates?.[selectedClass];
+                      return !enrollmentDate || !attendanceDate || enrollmentDate <= attendanceDate;
+                    }).reduce((acc, s) => ({ ...acc, [s.id]: 'present' }), {});
                     setAttendanceList(allPresentValue);
                   }}
                   className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 font-semibold rounded-xl transition-all text-sm"
@@ -2352,7 +2484,12 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                 </button>
                 <button
                   onClick={() => {
-                    const allAbsentValue = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: 'absent' }), {});
+                    const allAbsentValue = students.filter(s => {
+                      const belongsToClass = s.classId === selectedClass || s.classIds?.includes(selectedClass);
+                      if (!belongsToClass) return false;
+                      const enrollmentDate = s.enrollmentDates?.[selectedClass];
+                      return !enrollmentDate || !attendanceDate || enrollmentDate <= attendanceDate;
+                    }).reduce((acc, s) => ({ ...acc, [s.id]: 'absent' }), {});
                     setAttendanceList(allAbsentValue);
                   }}
                   className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold rounded-xl transition-all text-sm"
@@ -2384,8 +2521,13 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                             handleEditAttendance(att);
                           } else {
                             setEditingAttendance(null);
-                            // Reset attendance list to all present for new date
-                            const initial = students.filter(s => s.classId === selectedClass || s.classIds?.includes(selectedClass)).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
+                            // Reset attendance list to only enrolled students for new date
+                            const initial = students.filter(s => {
+                              const belongsToClass = s.classId === selectedClass || s.classIds?.includes(selectedClass);
+                              if (!belongsToClass) return false;
+                              const enrollmentDate = s.enrollmentDates?.[selectedClass];
+                              return !enrollmentDate || enrollmentDate <= p.date;
+                            }).reduce((acc, s) => ({ ...acc, [s.id]: true }), {});
                             setAttendanceList(initial);
                             setJustifications({});
                             setContentGiven('');
@@ -2440,7 +2582,12 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                 >
                   {workingStudentOrder
                     .map(sid => students.find(s => s.id === sid))
-                    .filter((s): s is Student => !!s)
+                    .filter((s): s is Student => {
+                      if (!s) return false;
+                      // Only hide if never enrolled in the class
+                      const hasEverBeenInClass = s.classId === selectedClass || s.classIds?.includes(selectedClass);
+                      return hasEverBeenInClass;
+                    })
                     .map((student, index) => (
                       <AttendanceStudentCard
                         key={student.id}
@@ -2461,8 +2608,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         isSelected={selectedOrderStudentId === student.id}
                         onSelect={setSelectedOrderStudentId}
                         onNumberChange={handleManualReorder}
+                        selectedClass={selectedClass}
+                        attendanceDate={attendanceDate}
                       />
-                  ))}
+                    ))}
                 </Reorder.Group>
               </div>
 
@@ -3147,40 +3296,125 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Turmas Vinculadas</label>
-                      <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Turmas e Datas de Vinculação</label>
+                      <div className="space-y-4">
                         {studentForm.classIds.map((cid, index) => (
-                          <div key={index} className="flex gap-2">
-                            <select
-                              value={cid}
-                              onChange={(e) => {
-                                const newIds = [...studentForm.classIds];
-                                newIds[index] = e.target.value;
-                                setStudentForm({ ...studentForm, classIds: newIds });
-                              }}
-                              className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                              <option value="">Selecione...</option>
-                              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newIds = studentForm.classIds.filter((_, i) => i !== index);
-                                setStudentForm({ ...studentForm, classIds: newIds });
-                              }}
-                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                          <div key={index} className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                            <div className="flex gap-2">
+                              <select
+                                value={cid}
+                                onChange={(e) => {
+                                  const newIds = [...studentForm.classIds];
+                                  const oldId = newIds[index];
+                                  const newId = e.target.value;
+                                  newIds[index] = newId;
+                                  
+                                  const newEnrollDates = { ...studentForm.enrollmentDates };
+                                  if (newId && !newEnrollDates[newId]) {
+                                    newEnrollDates[newId] = safeFormat(new Date(), 'yyyy-MM-dd');
+                                  }
+                                  // Optionally clear old one if it's being replaced and not elsewhere in list
+                                  if (oldId && !newIds.includes(oldId)) {
+                                    // delete newEnrollDates[oldId]; // Keep historical dates for now
+                                  }
+                                  
+                                  setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates });
+                                }}
+                                className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              >
+                                <option value="">Selecione a Turma...</option>
+                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newIds = studentForm.classIds.filter((_, i) => i !== index);
+                                  const newEnrollDates = { ...studentForm.enrollmentDates };
+                                  const newExitDates = { ...studentForm.exitDates };
+                                  if (cid) {
+                                    delete newEnrollDates[cid];
+                                    delete newExitDates[cid];
+                                  }
+                                  setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates, exitDates: newExitDates });
+                                }}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Entrada</label>
+                                <input
+                                  type="date"
+                                  value={studentForm.enrollmentDates[cid] || (cid ? safeFormat(new Date(), 'yyyy-MM-dd') : '')}
+                                  onChange={(e) => {
+                                    if (!cid) return;
+                                    setStudentForm({
+                                      ...studentForm,
+                                      enrollmentDates: { ...studentForm.enrollmentDates, [cid]: e.target.value }
+                                    });
+                                  }}
+                                  className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Saída (Opcional)</label>
+                                <input
+                                  type="date"
+                                  value={studentForm.exitDates[cid] || ''}
+                                  onChange={(e) => {
+                                    if (!cid) return;
+                                    setStudentForm({
+                                      ...studentForm,
+                                      exitDates: { ...studentForm.exitDates, [cid]: e.target.value }
+                                    });
+                                  }}
+                                  className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Status na Turma</label>
+                              <select
+                                value={studentForm.enrollmentStatuses[cid] || 'ativo'}
+                                onChange={(e) => {
+                                  const newEnrollStatuses = { ...studentForm.enrollmentStatuses };
+                                  const newExitDates = { ...studentForm.exitDates };
+                                  const oldStatus = newEnrollStatuses[cid] || 'ativo';
+                                  const newStatus = e.target.value as any;
+                                  
+                                  newEnrollStatuses[cid] = newStatus;
+                                  
+                                  // If moving from active to something else, set exit date if not set
+                                  if (oldStatus === 'ativo' && newStatus !== 'ativo' && !newExitDates[cid]) {
+                                    newExitDates[cid] = safeFormat(new Date(), 'yyyy-MM-dd');
+                                  }
+                                  // If moving back to active, clear exit date maybe? Or let user decide.
+                                  // For now, let's just set it automatically one-way.
+                                  
+                                  setStudentForm({
+                                    ...studentForm,
+                                    enrollmentStatuses: newEnrollStatuses,
+                                    exitDates: newExitDates
+                                  });
+                                }}
+                                className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                              >
+                                <option value="ativo">Ativo</option>
+                                <option value="concluído">Concluído</option>
+                                <option value="transferido">Transferido</option>
+                                <option value="evadido">Evadido</option>
+                              </select>
+                            </div>
                           </div>
                         ))}
                         <button
                           type="button"
                           onClick={() => setStudentForm({ ...studentForm, classIds: [...studentForm.classIds, ''] })}
-                          className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all text-[10px] font-bold uppercase flex items-center justify-center gap-2"
+                          className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all text-xs font-bold uppercase flex items-center justify-center gap-2"
                         >
-                          <Plus className="w-3 h-3" /> Adicionar Outra Turma
+                          <Plus className="w-4 h-4" /> ADICIONAR TURMA
                         </button>
                       </div>
                     </div>
@@ -4092,7 +4326,28 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       </thead>
                       <tbody className="divide-y divide-slate-100 print:divide-slate-200">
                         {students
-                          .filter(s => s.classId === viewingAttendance.classId)
+                          .filter(s => {
+                            const belongsToClass = s.classId === viewingAttendance.classId || s.classIds?.includes(viewingAttendance.classId);
+                            if (!belongsToClass) return false;
+                            
+                            const enrollmentDate = s.enrollmentDates?.[viewingAttendance.classId];
+                            const exitDate = s.exitDates?.[viewingAttendance.classId];
+                            const enrollmentStatus = s.enrollmentStatuses?.[viewingAttendance.classId] || 'ativo';
+                            
+                            const afterEnroll = !enrollmentDate || viewingAttendance.date >= enrollmentDate;
+                            const isActiveStatus = enrollmentStatus === 'ativo';
+                            
+                            let beforeExit = true;
+                            if (exitDate) {
+                              if (isActiveStatus) {
+                                beforeExit = viewingAttendance.date <= exitDate;
+                              } else {
+                                beforeExit = viewingAttendance.date < exitDate;
+                              }
+                            }
+                            
+                            return afterEnroll && beforeExit;
+                          })
                           .map(student => {
                             const isPresent = viewingAttendance.presentStudentIds.includes(student.id);
                             const justification = viewingAttendance.justifications?.[student.id];
@@ -4743,7 +4998,25 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           />
                           <div>
                             <p className="text-sm font-bold text-slate-900">{c.name}</p>
-                            <p className="text-[10px] text-slate-500">{students.filter(s => s.classId === c.id || s.classIds?.includes(c.id)).length} Alunos</p>
+                            <p className="text-[10px] text-slate-500">
+                              {students.filter(s => {
+                                const belongs = s.classId === c.id || s.classIds?.includes(c.id);
+                                if (!belongs) return false;
+                                const exitDate = s.exitDates?.[c.id];
+                                const enrollmentStatus = s.enrollmentStatuses?.[c.id] || 'ativo';
+                                const today = safeFormat(new Date(), 'yyyy-MM-dd');
+                                
+                                const isActiveStatus = enrollmentStatus === 'ativo';
+                                if (exitDate) {
+                                  if (isActiveStatus) {
+                                    if (today > exitDate) return false;
+                                  } else {
+                                    if (today >= exitDate) return false;
+                                  }
+                                }
+                                return true;
+                              }).length} Alunos
+                            </p>
                           </div>
                         </label>
                       ))}

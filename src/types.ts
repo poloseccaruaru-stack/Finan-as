@@ -16,6 +16,9 @@ export interface Student {
   lastAbsenceDate?: string;
   attendancePercentage?: number;
   registrationNumber?: string;
+  enrollmentDates?: Record<string, string>;
+  exitDates?: Record<string, string>;
+  enrollmentStatuses?: Record<string, 'ativo' | 'concluído' | 'transferido' | 'evadido'>;
   doNotRenew?: boolean;
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
 }

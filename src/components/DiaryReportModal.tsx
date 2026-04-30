@@ -263,18 +263,43 @@ export function DiaryReportModal({
                   </thead>
                   <tbody>
                     {orderedStudents.map((student, idx) => {
-                      const presence = classAttendances.filter(a => a.presentStudentIds.includes(student.id)).length;
-                      const partialPresence = classAttendances.filter(a => a.partialStudentIds?.includes(student.id)).length;
-                      const absence = classAttendances.filter(a => a.absentStudentIds.includes(student.id)).length;
+                      const isEnrolledAtAttendance = (student: Student, attendanceDate: string) => {
+                        const enrollmentDate = student.enrollmentDates?.[classId];
+                        const exitDate = student.exitDates?.[classId];
+                        const enrollmentStatus = student.enrollmentStatuses?.[classId] || 'ativo';
+
+                        const afterEnroll = !enrollmentDate || attendanceDate >= enrollmentDate;
+                        const isActiveStatus = enrollmentStatus === 'ativo';
+                        
+                        let beforeExit = true;
+                        if (exitDate) {
+                          if (isActiveStatus) {
+                            beforeExit = attendanceDate <= exitDate;
+                          } else {
+                            beforeExit = attendanceDate < exitDate;
+                          }
+                        }
+                        
+                        return afterEnroll && beforeExit;
+                      };
+
+                      const validAttendances = classAttendances.filter(a => isEnrolledAtAttendance(student, a.date));
+                      
+                      const presence = validAttendances.filter(a => a.presentStudentIds.includes(student.id)).length;
+                      const partialPresence = validAttendances.filter(a => a.partialStudentIds?.includes(student.id)).length;
+                      const absence = validAttendances.filter(a => a.absentStudentIds.includes(student.id)).length;
                       return (
                         <tr key={student.id} className="hover:bg-slate-50 print:hover:bg-transparent">
                           <td className="border-[2px] border-slate-900 p-1 text-center font-bold">{(idx + 1).toString().padStart(2, '0')}</td>
                           <td className="border-[2px] border-slate-900 p-2 font-semibold uppercase">{student.name}</td>
-                          {classAttendances.map(a => (
-                            <td key={a.id} className="border-[2px] border-slate-900 p-1 text-center font-bold">
-                              {a.presentStudentIds.includes(student.id) ? '•' : a.partialStudentIds?.includes(student.id) ? 'PA' : 'F'}
-                            </td>
-                          ))}
+                          {classAttendances.map(a => {
+                            const isEnrolled = isEnrolledAtAttendance(student, a.date);
+                            return (
+                              <td key={a.id} className="border-[2px] border-slate-900 p-1 text-center font-bold">
+                                {isEnrolled ? (a.presentStudentIds.includes(student.id) ? '•' : a.partialStudentIds?.includes(student.id) ? 'PA' : 'F') : ''}
+                              </td>
+                            );
+                          })}
                           {Array.from({ length: Math.max(0, 15 - classAttendances.length) }).map((_, i) => (
                             <td key={i} className="border-[2px] border-slate-900"></td>
                           ))}

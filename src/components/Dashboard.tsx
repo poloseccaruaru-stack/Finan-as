@@ -610,11 +610,29 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
   const calculateStudentPeriodAttendance = (studentId: string, startDate?: string, endDate?: string) => {
     const start = (startDate && isValid(parseISO(startDate))) ? parseISO(startDate) : null;
     const end = (endDate && isValid(parseISO(endDate))) ? parseISO(endDate) : null;
+    const student = students.find(s => s.id === studentId);
 
     const relevantAttendance = attendanceRecords.filter(att => {
       const d = parseISO(att.date);
       const inPeriod = (!start || d >= start) && (!end || d <= end);
-      return inPeriod && (att.presentStudentIds?.includes(studentId) || att.absentStudentIds?.includes(studentId));
+      
+      const enrollmentDateStr = student?.enrollmentDates?.[att.classId];
+      const exitDateStr = student?.exitDates?.[att.classId];
+      const enrollmentStatus = student?.enrollmentStatuses?.[att.classId] || 'ativo';
+
+      const afterEnroll = !enrollmentDateStr || att.date >= enrollmentDateStr;
+      const isActiveStatus = enrollmentStatus === 'ativo';
+
+      let beforeExit = true;
+      if (exitDateStr) {
+        if (isActiveStatus) {
+          beforeExit = att.date <= exitDateStr;
+        } else {
+          beforeExit = att.date < exitDateStr;
+        }
+      }
+
+      return inPeriod && afterEnroll && beforeExit && (att.presentStudentIds?.includes(studentId) || att.absentStudentIds?.includes(studentId));
     });
 
     if (relevantAttendance.length === 0) return 100; // Default to 100 if no records found in period
@@ -635,7 +653,30 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
         return att.classId === c.id && (!start || d >= start) && (!end || d <= end);
       });
 
-      const totalPossiblePresences = relevantAttendance.length * (classStudents.length || 1);
+      let totalPossiblePresences = 0;
+      relevantAttendance.forEach(att => {
+        const studentsEnrolledAtThisDate = classStudents.filter(s => {
+          const enrollmentDateStr = s.enrollmentDates?.[c.id];
+          const exitDateStr = s.exitDates?.[c.id];
+          const enrollmentStatus = s.enrollmentStatuses?.[c.id] || 'ativo';
+
+          const afterEnroll = !enrollmentDateStr || att.date >= enrollmentDateStr;
+          const isActiveStatus = enrollmentStatus === 'ativo';
+
+          let beforeExit = true;
+          if (exitDateStr) {
+            if (isActiveStatus) {
+              beforeExit = att.date <= exitDateStr;
+            } else {
+              beforeExit = att.date < exitDateStr;
+            }
+          }
+
+          return afterEnroll && beforeExit;
+        });
+        totalPossiblePresences += studentsEnrolledAtThisDate.length;
+      });
+
       const actualPresences = relevantAttendance.reduce((acc, att) => acc + (att.presentStudentIds?.length || 0), 0);
       
       const attendancePercent = totalPossiblePresences > 0 ? (actualPresences / totalPossiblePresences) * 100 : 0;
@@ -1485,6 +1526,13 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                           </div>
                         </div>
                         <div className="flex items-center gap-2 relative">
+                          <button 
+                            onClick={() => setShowWhatsAppConfig(true)} 
+                            className="p-2 hover:bg-emerald-50 rounded-xl transition-all text-emerald-500 group/wa" 
+                            title="Configurar Mensagens WhatsApp"
+                          >
+                            <MessageSquare className="w-5 h-5 group-hover/wa:scale-110 transition-transform" />
+                          </button>
                           <button onClick={() => setShowQuickAlertConfig(!showQuickAlertConfig)} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 group/btn" title="Configurar Alerta">
                             <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
                           </button>
@@ -2085,18 +2133,18 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensagem Padrão (Sempre presente)</span>
                 </div>
-                <span className="text-sm font-bold text-slate-600">Olá, gostaria de mais informações.</span>
+                <span className="text-sm font-bold text-slate-600">Olá, Graça e paz. Estamos sentindo muito a sua falta nessas últimas semanas em nossa EBD. Queremos incentivar sua presença já nesse próximo domingo para juntos aprendermos mais da Palavra do Senhor. Podemos contar com a sua presença?</span>
               </div>
               {config.whatsappMessages?.map((msg, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 group hover:border-emerald-200 hover:bg-emerald-50/10 transition-all">
-                  <span className="text-sm font-bold text-slate-700">{msg}</span>
+                <div key={idx} className="flex items-start justify-between p-4 bg-white rounded-2xl border border-slate-100 group hover:border-emerald-200 hover:bg-emerald-50/10 transition-all gap-4">
+                  <span className="text-sm font-bold text-slate-700 flex-1 whitespace-pre-wrap">{msg}</span>
                   <button 
                     onClick={() => {
                       const messages = [...(config.whatsappMessages || [])];
                       messages.splice(idx, 1);
                       updateConfig({ whatsappMessages: messages });
                     }}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -2158,13 +2206,13 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                     setCustomWhatsAppMessage("");
                   }}
                   className={cn(
-                    "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase",
+                    "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase whitespace-pre-wrap",
                     selectedWhatsAppTemplate === "default" && !customWhatsAppMessage
                       ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
                       : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"
                   )}
                 >
-                  Olá, gostaria de mais informações. (Padrão)
+                  Olá, Graça e paz. Estamos sentindo muito a sua falta nessas últimas semanas em nossa EBD. Queremos incentivar sua presença já nesse próximo domingo para juntos aprendermos mais da Palavra do Senhor. Podemos contar com a sua presença?
                 </button>
                 {config.whatsappMessages?.map((msg, idx) => (
                   <button
@@ -2174,7 +2222,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                       setCustomWhatsAppMessage("");
                     }}
                     className={cn(
-                      "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase",
+                      "w-full text-left p-3 rounded-xl border transition-all text-xs font-bold uppercase whitespace-pre-wrap",
                       selectedWhatsAppTemplate === msg && !customWhatsAppMessage
                         ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
                         : "bg-white border-slate-200 text-slate-500 hover:border-emerald-300"
@@ -2202,9 +2250,10 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                 onClick={() => {
                   if (!whatsAppStudent.phone) return;
                   const cleanPhone = whatsAppStudent.phone.replace(/\D/g, '');
+                  const defaultMsg = "Olá, Graça e paz. Estamos sentindo muito a sua falta nessas últimas semanas em nossa EBD. Queremos incentivar sua presença já nesse próximo domingo para juntos aprendermos mais da Palavra do Senhor. Podemos contar com a sua presença?";
                   const finalMsg = customWhatsAppMessage.trim() || 
-                                  (selectedWhatsAppTemplate === 'default' ? "Olá, gostaria de mais informações." : selectedWhatsAppTemplate) ||
-                                  "Olá, gostaria de mais informações.";
+                                  (selectedWhatsAppTemplate === 'default' ? defaultMsg : selectedWhatsAppTemplate) ||
+                                  defaultMsg;
                   
                   const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
                   window.open(url, '_blank');
