@@ -681,7 +681,8 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     enrollmentStatuses: {} as Record<string, 'ativo' | 'concluído' | 'transferido' | 'evadido'>,
     schoolYear: selectedSchoolYear,
     doNotRenew: false,
-    status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido'
+    status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido',
+    churchStatus: 'membro' as 'membro' | 'congregado' | 'visitante' | 'outros'
   });
 
 interface TeacherFormState {
@@ -885,7 +886,8 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
           enrollmentStatuses,
           schoolYear: studentForm.schoolYear || selectedSchoolYear,
           doNotRenew: studentForm.doNotRenew || false,
-          status: studentForm.status || 'ativo'
+          status: studentForm.status || 'ativo',
+          churchStatus: studentForm.churchStatus || 'membro'
         };
 
       if (editingStudent) {
@@ -902,7 +904,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro' });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
@@ -959,7 +961,8 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       enrollmentStatuses: student.enrollmentStatuses || {},
       schoolYear: student.schoolYear || selectedSchoolYear,
       doNotRenew: student.doNotRenew || false,
-      status: student.status || 'ativo'
+      status: student.status || 'ativo',
+      churchStatus: student.churchStatus || 'membro'
     });
     setShowForm(true);
   };
@@ -1816,7 +1819,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                     setEditingMeeting(null);
                   } else if (subTab === 'students') {
                     setEditingStudent(null);
-                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo' });
+                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro' });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
                     setTeacherForm({ 
@@ -1907,10 +1910,23 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 font-bold">
                           {student.name.charAt(0)}
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{student.name}</p>
-                          <p className="text-xs text-slate-500">{student.guardians}</p>
-                        </div>
+                         <div>
+                           <p className="text-sm font-semibold text-slate-900">{student.name}</p>
+                           <div className="flex items-center gap-2">
+                             <p className="text-xs text-slate-500">{student.guardians}</p>
+                             {student.churchStatus && (
+                               <span className={cn(
+                                 "text-[9px] font-black uppercase px-1.5 py-0.25 rounded border transition-all",
+                                 student.churchStatus === 'membro' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                                 student.churchStatus === 'congregado' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                 student.churchStatus === 'visitante' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                                 "bg-slate-50 text-slate-700 border-slate-100"
+                               )}>
+                                 {student.churchStatus}
+                               </span>
+                             )}
+                           </div>
+                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
@@ -3450,6 +3466,19 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         ))}
                       </select>
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Vínculo com a Igreja</label>
+                      <select
+                        value={studentForm.churchStatus}
+                        onChange={(e) => setStudentForm({ ...studentForm, churchStatus: e.target.value as any })}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="membro">Membro</option>
+                        <option value="congregado">Congregado</option>
+                        <option value="visitante">Visitante</option>
+                        <option value="outros">Outros</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -4859,7 +4888,14 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-slate-900">{viewingStudentHistory.name}</h3>
-                    <p className="text-slate-500 font-medium">Histórico de Trajetória Escolar</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-slate-500 font-medium">Histórico de Trajetória Escolar</p>
+                      {viewingStudentHistory.churchStatus && (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                          {viewingStudentHistory.churchStatus}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button onClick={() => setViewingStudentHistory(null)} className="p-2 hover:bg-slate-200 rounded-xl transition-all">

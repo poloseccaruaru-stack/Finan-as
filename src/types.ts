@@ -21,6 +21,7 @@ export interface Student {
   enrollmentStatuses?: Record<string, 'ativo' | 'concluído' | 'transferido' | 'evadido'>;
   doNotRenew?: boolean;
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
+  churchStatus?: 'membro' | 'congregado' | 'visitante' | 'outros';
 }
 
 export interface Teacher {

@@ -387,21 +387,35 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
+      {/* Mobile Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
         {/* Sidebar */}
       <aside className={cn(
         "fixed md:relative z-40 h-screen bg-slate-900 text-slate-300 transition-all duration-300 flex flex-col",
         isSidebarOpen ? "w-64" : "w-0 md:w-20 overflow-hidden"
       )}>
-        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-lg shadow-indigo-900/20">
-            <img 
-              src="https://img.icons8.com/color/96/000000/school.png" 
-              alt="Logo" 
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+        <div className="p-6 flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-lg shadow-indigo-900/20">
+              <img 
+                src="https://img.icons8.com/color/96/000000/school.png" 
+                alt="Logo" 
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            {isSidebarOpen && <span className="text-xl font-black text-white truncate tracking-tight">EBD IGBAPI</span>}
           </div>
-          {isSidebarOpen && <span className="text-xl font-black text-white truncate tracking-tight">EBD IGBAPI</span>}
+          {isSidebarOpen && (
+            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {hasAccess('ai_assistant') && <AISidebarSearch isSidebarOpen={isSidebarOpen} />}
