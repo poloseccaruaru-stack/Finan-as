@@ -23,7 +23,8 @@ import {
   Trash2,
   Cake,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sparkles
 } from 'lucide-react';
 import { 
   Student, 
@@ -35,12 +36,13 @@ import {
   Class,
   ManualReport,
   StudentReport,
-  TeacherReport
+  TeacherReport,
+  SavedAISearch
 } from '../types';
 import { cn, safeFormat } from '../lib/utils';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -49,7 +51,7 @@ interface Props {
   hasFullAccess?: boolean;
 }
 
-type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays';
+type ReportType = 'students' | 'attendance' | 'planning' | 'finance' | 'projects' | 'teachers' | 'individual_students' | 'individual_teachers' | 'birthdays' | 'ai_searches';
 
 export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: propHasFullAccess }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -71,6 +73,7 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
   const [manualReports, setManualReports] = useState<ManualReport[]>([]);
   const [studentReports, setStudentReports] = useState<StudentReport[]>([]);
   const [teacherReports, setTeacherReports] = useState<TeacherReport[]>([]);
+  const [savedAISearches, setSavedAISearches] = useState<SavedAISearch[]>([]);
   const [modalConfig, setModalConfig] = useState<{
     show: boolean;
     title: string;
@@ -181,6 +184,10 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
       setTeacherReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeacherReport)));
     });
 
+    const unsubSavedAISearches = onSnapshot(collection(db, 'saved_ai_searches'), (snap) => {
+      setSavedAISearches(snap.docs.map(d => ({ id: d.id, ...d.data() } as SavedAISearch)));
+    });
+
     return () => {
       unsubStudents();
       unsubTeachers();
@@ -192,6 +199,7 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
       unsubManualReports();
       unsubStudentReports();
       unsubTeacherReports();
+      unsubSavedAISearches();
     };
   }, [user, hasFullAccess, selectedSchoolYear]);
 
@@ -266,10 +274,15 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
             return 0;
           }
         });
+      case 'ai_searches':
+        return savedAISearches
+          .filter(s => s.title.toLowerCase().includes(searchTerm.toLowerCase()) || (s.comments || '').toLowerCase().includes(searchTerm.toLowerCase()))
+          .filter(s => filterByDate(s.date))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       default:
         return [];
     }
-  }, [activeTab, students, teachers, attendances, plannings, projects, transactions, studentReports, teacherReports, searchTerm, dateRange]);
+  }, [activeTab, students, teachers, attendances, plannings, projects, transactions, studentReports, teacherReports, savedAISearches, searchTerm, dateRange]);
 
   const handlePrint = () => {
     window.print();
@@ -311,6 +324,7 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
     { id: 'planning', label: 'Planejamento', icon: BookOpen },
     { id: 'finance', label: 'Financeiro', icon: DollarSign },
     { id: 'projects', label: 'Projetos', icon: Briefcase },
+    { id: 'ai_searches', label: 'Pesquisas IA', icon: Sparkles },
   ];
 
   return (
@@ -782,6 +796,79 @@ export default function ReportModule({ user, selectedSchoolYear, hasFullAccess: 
                 ))}
               </tbody>
             </table>
+          )}
+
+          {activeTab === 'ai_searches' && (
+            <div className="space-y-8">
+              <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Conteúdos de Pesquisa Salvas</h4>
+                  <p className="text-xs text-indigo-600 font-bold uppercase tracking-widest">Pesquisas geradas pelo Assistente de IA e arquivadas para consulta</p>
+                </div>
+              </div>
+
+              {(filteredData as SavedAISearch[]).map(search => (
+                <div key={search.id} className="p-6 border border-slate-100 rounded-2xl bg-slate-50/30 group">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                        <Sparkles className="w-4 h-4 text-indigo-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 uppercase tracking-tight">{search.title}</h4>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                          {safeFormat(search.date, 'dd/MM/yyyy')} 
+                          {search.createdAt && ` - ${format(parseISO(search.createdAt), 'HH:mm')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        showAdminConfirm('Excluir Pesquisa', 'Deseja realmente excluir este conteúdo?', async () => {
+                          try {
+                            await deleteDoc(doc(db, 'saved_ai_searches', search.id));
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.DELETE, `saved_ai_searches/${search.id}`);
+                          }
+                        });
+                      }}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="prose prose-sm prose-slate max-w-none bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mb-4">
+                    <ReactMarkdown>{search.content}</ReactMarkdown>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Comentários</label>
+                    <textarea 
+                      className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none italic text-slate-600 h-20"
+                      placeholder="Adicione um comentário ou observação sobre esta pesquisa..."
+                      defaultValue={search.comments || ''}
+                      onBlur={async (e) => {
+                        const newComments = e.target.value;
+                        if (newComments !== (search.comments || '')) {
+                          try {
+                            await updateDoc(doc(db, 'saved_ai_searches', search.id), {
+                              comments: newComments
+                            });
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.UPDATE, `saved_ai_searches/${search.id}`);
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {filteredData.length === 0 && (

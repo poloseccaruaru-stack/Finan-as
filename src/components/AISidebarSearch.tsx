@@ -71,14 +71,17 @@ export default function AISidebarSearch({ isSidebarOpen }: Props) {
   const handleSaveAction = async () => {
     if (!result) return;
     try {
-      await addDoc(collection(db, 'ai_actions'), {
-        query,
-        result,
+      await addDoc(collection(db, 'saved_ai_searches'), {
+        title: query,
+        content: result,
+        date: new Date().toISOString().split('T')[0],
+        comments: '',
         createdAt: new Date().toISOString()
       });
-      alert('Ação arquivada com sucesso!');
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'ai_actions');
+      alert('Pesquisa salva com sucesso nos Relatórios!');
+      setShowModal(false);
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.CREATE, 'saved_ai_searches');
     }
   };
 

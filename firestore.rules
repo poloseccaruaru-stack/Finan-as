@@ -110,9 +110,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /ai_actions/{actionId} {
-      allow read: if isAdmin() || hasTabAccess('ai_assistant');
-      allow write: if isAdmin() || hasTabAccess('ai_assistant');
+    match /saved_ai_searches/{searchId} {
+      allow read: if isAdmin() || hasTabAccess('reports');
+      allow write: if isAdmin() || hasTabAccess('ai_assistant') || hasTabAccess('reports');
     }
 
     match /config/{configId} {

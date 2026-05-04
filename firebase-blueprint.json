@@ -143,6 +143,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "content"]
+    },
+    "SavedAISearch": {
+      "title": "SavedAISearch",
+      "description": "Conteúdos de Pesquisa Salvas no Assistente de IA",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "comments": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "date"]
     }
   },
   "firestore": {
@@ -163,6 +177,7 @@
     "/documentos/{docId}": { "schema": "Documento", "description": "General documents" },
     "/budgets/{budgetId}": { "schema": "Budget", "description": "Monthly budgets" },
     "/estimated_expenses/{expenseId}": { "schema": "EstimatedExpense", "description": "Estimated monthly expenses" },
-    "/manual_reports/{reportId}": { "schema": "ManualReport", "description": "Manually created custom reports" }
+    "/manual_reports/{reportId}": { "schema": "ManualReport", "description": "Manually created custom reports" },
+    "/saved_ai_searches/{searchId}": { "schema": "SavedAISearch", "description": "Conteúdos de Pesquisa Salvas no Assistente de IA" }
   }
 }

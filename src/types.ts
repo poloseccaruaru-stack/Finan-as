@@ -24,6 +24,15 @@ export interface Student {
   churchStatus?: 'membro' | 'congregado' | 'visitante' | 'outros';
 }
 
+export interface SavedAISearch {
+  id: string;
+  title: string;
+  content: string;
+  comments?: string;
+  date: string;
+  createdAt: string;
+}
+
 export interface Teacher {
   id: string;
   name: string;
