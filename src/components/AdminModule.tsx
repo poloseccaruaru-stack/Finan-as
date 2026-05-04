@@ -793,7 +793,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                     </p>
                   </div>
                   {hasEditAccess && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                       <button 
                         onClick={() => {
                           setEditingComunicadoId(c.id);
@@ -832,7 +832,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{safeFormat(d.date, 'dd/MM/yyyy')}</p>
                   </div>
                   {hasEditAccess && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                       <button 
                         onClick={() => {
                           setEditingDocumentoId(d.id);
@@ -932,7 +932,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-bold text-slate-900 uppercase">{profile.name}</h4>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1214,7 +1214,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                       <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all transform group-hover:scale-110 shadow-sm">
                         <CalendarIcon className="w-8 h-8" />
                       </div>
-                      <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="absolute -top-2 -right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         {hasEditAccess && (
                           <>
                             <button 
@@ -1290,7 +1290,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                       </div>
                     </div>
                     {hasEditAccess && (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         <button 
                           onClick={() => {
                             setCalendarForm({ title: event.title, date: event.date, type: event.type, description: event.description || '' });
@@ -1586,7 +1586,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                       </p>
                     </div>
                     {hasEditAccess && (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
                             setEditingMeetingId(meeting.id);
@@ -1673,7 +1673,7 @@ export default function AdminModule({ user, subTab, hasFullAccess: propHasFullAc
                     </div>
                     
                     {hasEditAccess && (
-                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex flex-col gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();

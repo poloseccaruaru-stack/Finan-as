@@ -171,7 +171,7 @@ export default function OrganogramModule({ user, hasFullAccess: propHasFullAcces
                 </div>
               </div>
               {hasEditAccess && (
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                   <button 
                     onClick={() => handleEdit(entry)}
                     className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"

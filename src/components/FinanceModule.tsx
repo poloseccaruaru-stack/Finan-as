@@ -518,7 +518,7 @@ export default function FinanceModule({ user, hasFullAccess: propHasFullAccess }
                       {hasFullAccess && (
                         <button 
                           onClick={() => handleDeleteTransaction(t.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>

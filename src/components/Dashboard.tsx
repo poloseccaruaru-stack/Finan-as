@@ -1761,7 +1761,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                   <span className="text-sm font-bold text-slate-700">{res.text}</span>
                   <button 
                     onClick={() => handleDeletePreDefined(res.id)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -2009,7 +2009,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                             <p className="text-[10px] font-black text-slate-700 uppercase leading-none mt-1">{teacher?.name || 'N/A'}</p>
                           </div>
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={() => {
                               setEditingResolution(res);
@@ -2144,7 +2144,7 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                       messages.splice(idx, 1);
                       updateConfig({ whatsappMessages: messages });
                     }}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

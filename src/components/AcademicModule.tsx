@@ -1997,7 +1997,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       {student.phone || '-'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         <button 
                           onClick={() => setViewingStudentHistory(student)}
                           className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
@@ -2096,7 +2096,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       {teacher.registrationNumber || '-'}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         {hasFullAccess && teacher.role !== 'admin' && (
                           <button 
                             onClick={() => {
@@ -2208,7 +2208,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       }).length} alunos
                     </td>
                      <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         {hasFullAccess && (
                           <>
                             <button 
@@ -2932,7 +2932,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                   </div>
                                 </td>
                                 <td className="px-4 py-6 text-right align-top">
-                                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all print:hidden">
+                                  <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all print:hidden">
                                     <button 
                                       onClick={() => setViewingAttendance(att)}
                                       className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
@@ -3004,7 +3004,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                                         <span className="text-sm font-bold text-slate-900">
                                           {safeFormat(att.date, 'dd/MM/yyyy')}
                                         </span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                                           <button onClick={() => setViewingAttendance(att)} className="p-1 text-slate-400 hover:text-indigo-600"><Eye className="w-4 h-4" /></button>
                                           <button onClick={() => { setViewingAttendance(att); setTimeout(() => window.print(), 500); }} className="p-1 text-slate-400 hover:text-indigo-600"><Printer className="w-4 h-4" /></button>
                                         </div>
@@ -3054,7 +3054,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                               <p className="text-[10px] font-bold text-slate-900">{safeFormat(att.date, 'dd/MM')}</p>
                               <p className="text-[9px] text-slate-500 truncate">{classes.find(c => c.id === att.classId)?.name}</p>
                               
-                              <div className="absolute -top-1 -right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <div className="absolute -top-1 -right-1 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                                 <div className="p-1 bg-white shadow-md rounded-full text-indigo-600" onClick={(e) => { e.stopPropagation(); setViewingAttendance(att); setTimeout(() => window.print(), 500); }}>
                                   <Printer className="w-3 h-3" />
                                 </div>
@@ -3215,7 +3215,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                             <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase">
                               {safeFormat(meeting.date, 'dd/MM/yyyy')}
                             </span>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                               <button onClick={() => setViewingMeeting(meeting)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                 <Eye className="w-4 h-4" />
                               </button>
@@ -4209,7 +4209,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       {safeFormat(att.date, "dd 'de' MMMM", { locale: ptBR })}
                     </p>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                     <button 
                       onClick={() => handleEditAttendance(att)}
                       className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
