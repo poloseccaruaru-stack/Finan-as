@@ -46,7 +46,10 @@ import {
   LayoutGrid,
   List,
   Minus,
-  GripVertical
+  GripVertical,
+  User,
+  Phone,
+  School
 } from 'lucide-react';
 import { format, differenceInYears, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -1914,23 +1917,22 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 font-bold">
                           {student.name.charAt(0)}
                         </div>
-                         <div>
-                           <p className="text-sm font-semibold text-slate-900">{student.name}</p>
-                           <div className="flex items-center gap-2">
-                             <p className="text-xs text-slate-500">{student.guardians}</p>
-                             {student.churchStatus && (
-                               <span className={cn(
-                                 "text-[9px] font-black uppercase px-1.5 py-0.25 rounded border transition-all",
-                                 student.churchStatus === 'membro' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
-                                 student.churchStatus === 'congregado' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                                 student.churchStatus === 'visitante' ? "bg-amber-50 text-amber-700 border-amber-100" :
-                                 "bg-slate-50 text-slate-700 border-slate-100"
-                               )}>
-                                 {student.churchStatus}
-                               </span>
-                             )}
-                           </div>
-                         </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors uppercase">{student.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={cn(
+                              "text-[9px] font-black uppercase px-1.5 py-0.5 rounded border transition-all",
+                              !student.churchStatus ? "bg-slate-50 text-slate-400 border-slate-200" :
+                              student.churchStatus === 'membro' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                              student.churchStatus === 'congregado' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                              student.churchStatus === 'visitante' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                              "bg-slate-50 text-slate-700 border-slate-100"
+                            )}>
+                              {student.churchStatus || 'Vínculo não informado'}
+                            </span>
+                            <p className="text-[10px] text-slate-400 font-medium truncate max-w-[120px]">{student.guardians}</p>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
@@ -3278,7 +3280,11 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`bg-white rounded-2xl shadow-2xl w-full overflow-y-auto ${subTab === 'teachers' ? 'max-w-4xl max-h-[90vh]' : 'max-w-lg max-h-[90vh]'}`}
+              className={`bg-white rounded-2xl shadow-2xl w-full overflow-y-auto ${
+                subTab === 'students' ? 'max-w-6xl max-h-[90vh]' :
+                subTab === 'teachers' ? 'max-w-4xl max-h-[90vh]' : 
+                'max-w-lg max-h-[90vh]'
+              }`}
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-slate-900">
@@ -3293,238 +3299,328 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
               </div>
               
               {subTab === 'students' && (
-                <form onSubmit={handleAddStudent} className="p-6 space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
-                    <input
-                      required
-                      type="text"
-                      value={studentForm.name}
-                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Data de Nascimento (Opcional)</label>
-                      <input
-                        type="date"
-                        value={studentForm.birthDate}
-                        onChange={(e) => setStudentForm({ ...studentForm, birthDate: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
+                <div className="p-10">
+                  <form onSubmit={handleAddStudent} className="space-y-10">
+                    {/* Section 1: Identificação */}
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-100">
+                        <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                          <User className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Identificação do Aluno</h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Dados pessoais e nascimento</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div className="md:col-span-3 space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Completo</label>
+                          <input
+                            type="text"
+                            required
+                            value={studentForm.name}
+                            onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                            placeholder="Digite o nome completo do aluno"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nascimento</label>
+                          <input
+                            type="date"
+                            value={studentForm.birthDate}
+                            onChange={(e) => setStudentForm({ ...studentForm, birthDate: e.target.value })}
+                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-slate-700"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Telefone</label>
-                      <input
-                        type="tel"
-                        value={studentForm.phone}
-                        onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
-                        placeholder="(00) 00000-0000"
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
+
+                    {/* Section 2: Família e Localização */}
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-100">
+                        <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                          <Phone className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Família e Localização</h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Contatos e endereço residencial</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Responsáveis / Guardiões</label>
+                          <input
+                            type="text"
+                            value={studentForm.guardians}
+                            onChange={(e) => setStudentForm({ ...studentForm, guardians: e.target.value })}
+                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                            placeholder="Nomes dos pais ou responsáveis"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">WhatsApp Principal</label>
+                          <input
+                            type="text"
+                            value={studentForm.phone}
+                            onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
+                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                            placeholder="(00) 00000-0000"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Contato Emergência</label>
+                          <input
+                            type="text"
+                            value={studentForm.emergencyContact}
+                            onChange={(e) => setStudentForm({ ...studentForm, emergencyContact: e.target.value })}
+                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                            placeholder="Nome e telefone de urgência"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Endereço Residencial</label>
+                        <input
+                          type="text"
+                          value={studentForm.address}
+                          onChange={(e) => setStudentForm({ ...studentForm, address: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
+                          placeholder="Rua, Número, Bairro, Cidade..."
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Turmas e Datas de Vinculação</label>
-                      <div className="space-y-4">
-                        {studentForm.classIds.map((cid, index) => (
-                          <div key={index} className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                            <div className="flex gap-2">
+
+                    {/* Section 3: Vida Eclesiástica e Escolar */}
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-100">
+                        <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                          <School className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Vida Eclesiástica e Acadêmica</h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Vínculo com a igreja e turmas da EBD</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
+                        {/* Status Side */}
+                        <div className="lg:col-span-2 space-y-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vínculo com Igreja</label>
                               <select
-                                value={cid}
-                                onChange={(e) => {
-                                  const newIds = [...studentForm.classIds];
-                                  const oldId = newIds[index];
-                                  const newId = e.target.value;
-                                  newIds[index] = newId;
-                                  
-                                  const newEnrollDates = { ...studentForm.enrollmentDates };
-                                  if (newId && !newEnrollDates[newId]) {
-                                    newEnrollDates[newId] = safeFormat(new Date(), 'yyyy-MM-dd');
-                                  }
-                                  // Optionally clear old one if it's being replaced and not elsewhere in list
-                                  if (oldId && !newIds.includes(oldId)) {
-                                    // delete newEnrollDates[oldId]; // Keep historical dates for now
-                                  }
-                                  
-                                  setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates });
-                                }}
-                                className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                value={studentForm.churchStatus}
+                                onChange={(e) => setStudentForm({ ...studentForm, churchStatus: e.target.value as any })}
+                                className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-amber-500 transition-all font-bold text-slate-700 appearance-none cursor-pointer"
                               >
-                                <option value="">Selecione a Turma...</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                <option value="membro">Membro</option>
+                                <option value="congregado">Congregado</option>
+                                <option value="visitante">Visitante</option>
+                                <option value="outros">Outros</option>
                               </select>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newIds = studentForm.classIds.filter((_, i) => i !== index);
-                                  const newEnrollDates = { ...studentForm.enrollmentDates };
-                                  const newExitDates = { ...studentForm.exitDates };
-                                  if (cid) {
-                                    delete newEnrollDates[cid];
-                                    delete newExitDates[cid];
-                                  }
-                                  setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates, exitDates: newExitDates });
-                                }}
-                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Entrada</label>
-                                <input
-                                  type="date"
-                                  value={studentForm.enrollmentDates[cid] || (cid ? safeFormat(new Date(), 'yyyy-MM-dd') : '')}
-                                  onChange={(e) => {
-                                    if (!cid) return;
-                                    setStudentForm({
-                                      ...studentForm,
-                                      enrollmentDates: { ...studentForm.enrollmentDates, [cid]: e.target.value }
-                                    });
-                                  }}
-                                  className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Saída (Opcional)</label>
-                                <input
-                                  type="date"
-                                  value={studentForm.exitDates[cid] || ''}
-                                  onChange={(e) => {
-                                    if (!cid) return;
-                                    setStudentForm({
-                                      ...studentForm,
-                                      exitDates: { ...studentForm.exitDates, [cid]: e.target.value }
-                                    });
-                                  }}
-                                  className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Status na Turma</label>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Ano Letivo</label>
                               <select
-                                value={studentForm.enrollmentStatuses[cid] || 'ativo'}
-                                onChange={(e) => {
-                                  const newEnrollStatuses = { ...studentForm.enrollmentStatuses };
-                                  const newExitDates = { ...studentForm.exitDates };
-                                  const oldStatus = newEnrollStatuses[cid] || 'ativo';
-                                  const newStatus = e.target.value as any;
-                                  
-                                  newEnrollStatuses[cid] = newStatus;
-                                  
-                                  // If moving from active to something else, set exit date if not set
-                                  if (oldStatus === 'ativo' && newStatus !== 'ativo' && !newExitDates[cid]) {
-                                    newExitDates[cid] = safeFormat(new Date(), 'yyyy-MM-dd');
-                                  }
-                                  // If moving back to active, clear exit date maybe? Or let user decide.
-                                  // For now, let's just set it automatically one-way.
-                                  
-                                  setStudentForm({
-                                    ...studentForm,
-                                    enrollmentStatuses: newEnrollStatuses,
-                                    exitDates: newExitDates
-                                  });
-                                }}
-                                className="w-full px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                                value={studentForm.schoolYear}
+                                onChange={(e) => setStudentForm({ ...studentForm, schoolYear: e.target.value })}
+                                className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-amber-500 transition-all font-bold text-slate-700 appearance-none cursor-pointer"
                               >
-                                <option value="ativo">Ativo</option>
-                                <option value="concluído">Concluído</option>
-                                <option value="transferido">Transferido</option>
-                                <option value="evadido">Evadido</option>
+                                {Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() + i).toString()).map(year => (
+                                  <option key={year} value={year}>{year}</option>
+                                ))}
                               </select>
                             </div>
                           </div>
-                        ))}
+                          
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Status de Matrícula</label>
+                            <select
+                              value={studentForm.status}
+                              onChange={(e) => setStudentForm({ ...studentForm, status: e.target.value as any })}
+                              className="w-full px-5 py-3.5 bg-slate-100 border-2 border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-amber-500 transition-all font-bold text-slate-700 appearance-none cursor-pointer"
+                            >
+                              <option value="ativo">Ativo</option>
+                              <option value="concluído">Concluído</option>
+                              <option value="transferido">Transferido</option>
+                              <option value="evadido">Evadido</option>
+                            </select>
+                          </div>
+
+                          <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                            <label className="flex items-center gap-4 cursor-pointer group">
+                              <div className="relative flex items-center justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={studentForm.doNotRenew}
+                                  onChange={(e) => setStudentForm({ ...studentForm, doNotRenew: e.target.checked })}
+                                  className="w-6 h-6 rounded-lg border-2 border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                              </div>
+                              <span className="text-[11px] font-black text-slate-600 group-hover:text-indigo-600 uppercase transition-colors leading-tight">
+                                Bloquear renovação automática para o próximo ano
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Classes Side */}
+                        <div className="lg:col-span-3 space-y-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vínculo com Turmas</label>
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                              {studentForm.classIds.filter(id => id).length} Turma(s)
+                            </span>
+                          </div>
+                          
+                          <div className="bg-slate-50 rounded-2xl border-2 border-slate-100 p-4 space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar">
+                            {studentForm.classIds.map((cid, index) => (
+                              <div key={index} className="bg-white border-2 border-slate-100 rounded-xl p-4 shadow-sm hover:border-indigo-100 transition-all space-y-4">
+                                <div className="flex gap-3">
+                                  <select
+                                    value={cid}
+                                    onChange={(e) => {
+                                      const newIds = [...studentForm.classIds];
+                                      const newId = e.target.value;
+                                      newIds[index] = newId;
+                                      const newEnrollDates = { ...studentForm.enrollmentDates };
+                                      if (newId && !newEnrollDates[newId]) {
+                                        newEnrollDates[newId] = safeFormat(new Date(), 'yyyy-MM-dd');
+                                      }
+                                      setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates });
+                                    }}
+                                    className="flex-1 px-4 py-2.5 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-black text-slate-700"
+                                  >
+                                    <option value="">Selecione a Turma...</option>
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newIds = studentForm.classIds.filter((_, i) => i !== index);
+                                      const newEnrollDates = { ...studentForm.enrollmentDates };
+                                      const newExitDates = { ...studentForm.exitDates };
+                                      if (cid) {
+                                        delete newEnrollDates[cid];
+                                        delete newExitDates[cid];
+                                      }
+                                      setStudentForm({ ...studentForm, classIds: newIds, enrollmentDates: newEnrollDates, exitDates: newExitDates });
+                                    }}
+                                    className="p-2 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                  </button>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Matrícula</label>
+                                    <input
+                                      type="date"
+                                      value={studentForm.enrollmentDates[cid] || (cid ? safeFormat(new Date(), 'yyyy-MM-dd') : '')}
+                                      onChange={(e) => {
+                                        if (!cid) return;
+                                        setStudentForm({ ...studentForm, enrollmentDates: { ...studentForm.enrollmentDates, [cid]: e.target.value } });
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Encerramento</label>
+                                    <input
+                                      type="date"
+                                      value={studentForm.exitDates[cid] || ''}
+                                      onChange={(e) => {
+                                        if (!cid) return;
+                                        setStudentForm({ ...studentForm, exitDates: { ...studentForm.exitDates, [cid]: e.target.value } });
+                                      }}
+                                      className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <div className="pt-2 border-t border-slate-50">
+                                  <select
+                                    value={studentForm.enrollmentStatuses[cid] || 'ativo'}
+                                    onChange={(e) => {
+                                      const newEnrollStatuses = { ...studentForm.enrollmentStatuses };
+                                      const newExitDates = { ...studentForm.exitDates };
+                                      const oldStatus = newEnrollStatuses[cid] || 'ativo';
+                                      const newStatus = e.target.value as any;
+                                      newEnrollStatuses[cid] = newStatus;
+                                      if (oldStatus === 'ativo' && newStatus !== 'ativo' && !newExitDates[cid]) {
+                                        newExitDates[cid] = safeFormat(new Date(), 'yyyy-MM-dd');
+                                      }
+                                      setStudentForm({ ...studentForm, enrollmentStatuses: newEnrollStatuses, exitDates: newExitDates });
+                                    }}
+                                    className="w-full px-3 py-2 text-[10px] font-black uppercase bg-slate-50 border border-slate-200 rounded-lg outline-none cursor-pointer"
+                                  >
+                                    <option value="ativo">Status: Ativo</option>
+                                    <option value="concluído">Status: Concluído</option>
+                                    <option value="transferido">Status: Transferido</option>
+                                    <option value="evadido">Status: Evadido</option>
+                                  </select>
+                                </div>
+                              </div>
+                            ))}
+                            
+                            <button
+                              type="button"
+                              onClick={() => setStudentForm({ ...studentForm, classIds: [...studentForm.classIds, ''] })}
+                              className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 bg-white hover:bg-indigo-50/30 transition-all text-xs font-black uppercase flex items-center justify-center gap-2"
+                            >
+                              <Plus className="w-5 h-5" /> Vincular a uma nova Turma
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 4: Histórico */}
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Histórico Escolar e Observações Adicionais</label>
+                      <textarea
+                        value={studentForm.history}
+                        onChange={(e) => setStudentForm({ ...studentForm, history: e.target.value })}
+                        className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all h-36 font-bold text-slate-700 text-sm placeholder:text-slate-300 resize-none"
+                        placeholder="Anote aqui informações relevantes sobre o aprendizado, comportamento ou necessidades especiais do aluno..."
+                      />
+                    </div>
+
+                    {/* Actions Bar */}
+                    <div className="flex items-center justify-between pt-8 border-t-2 border-slate-100">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase hidden md:block">
+                        Campos marcados com * são obrigatórios para o registro.
+                      </p>
+                      <div className="flex gap-4 w-full md:w-auto">
                         <button
                           type="button"
-                          onClick={() => setStudentForm({ ...studentForm, classIds: [...studentForm.classIds, ''] })}
-                          className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all text-xs font-bold uppercase flex items-center justify-center gap-2"
+                          onClick={() => {
+                            setShowForm(false);
+                            setEditingStudent(null);
+                          }}
+                          className="flex-1 md:flex-none px-8 py-3.5 text-slate-500 font-black uppercase tracking-widest text-[11px] hover:bg-slate-100 rounded-2xl transition-all"
                         >
-                          <Plus className="w-4 h-4" /> ADICIONAR TURMA
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 md:flex-none px-12 py-3.5 bg-indigo-600 text-white font-black uppercase tracking-widest text-[11px] rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          {editingStudent ? (
+                            <>Confirmar Alterações</>
+                          ) : (
+                            <>Finalizar Cadastro do Aluno</>
+                          )}
                         </button>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Endereço</label>
-                      <input
-                        type="text"
-                        value={studentForm.address}
-                        onChange={(e) => setStudentForm({ ...studentForm, address: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Rua, número, bairro..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Responsáveis</label>
-                      <input
-                        type="text"
-                        value={studentForm.guardians}
-                        onChange={(e) => setStudentForm({ ...studentForm, guardians: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Ano Letivo</label>
-                      <select
-                        required
-                        value={studentForm.schoolYear}
-                        onChange={(e) => setStudentForm({ ...studentForm, schoolYear: e.target.value })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        {Array.from({ length: 11 }, (_, i) => (new Date().getFullYear() - 5 + i).toString()).map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Vínculo com a Igreja</label>
-                      <select
-                        value={studentForm.churchStatus}
-                        onChange={(e) => setStudentForm({ ...studentForm, churchStatus: e.target.value as any })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="membro">Membro</option>
-                        <option value="congregado">Congregado</option>
-                        <option value="visitante">Visitante</option>
-                        <option value="outros">Outros</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
-                      <select
-                        value={studentForm.status}
-                        onChange={(e) => setStudentForm({ ...studentForm, status: e.target.value as any })}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="ativo">Ativo</option>
-                        <option value="concluído">Concluído</option>
-                        <option value="transferido">Transferido</option>
-                        <option value="evadido">Evadido</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2 pt-6">
-                      <input
-                        type="checkbox"
-                        id="doNotRenew"
-                        checked={studentForm.doNotRenew}
-                        onChange={(e) => setStudentForm({ ...studentForm, doNotRenew: e.target.checked })}
-                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                      />
-                      <label htmlFor="doNotRenew" className="text-sm font-medium text-slate-700">Não renovar matrícula automaticamente</label>
-                    </div>
-                  </div>
-                  <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-100">
-                    {editingStudent ? 'Atualizar Aluno' : 'Salvar Aluno'}
-                  </button>
-                </form>
+                  </form>
+                </div>
               )}
 
               {subTab === 'teachers' && (
