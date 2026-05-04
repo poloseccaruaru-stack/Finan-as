@@ -392,6 +392,7 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
   };
   const [versiculoCitado, setVersiculoCitado] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
   const [houveOferta, setHouveOferta] = useState<'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA'>('SIM');
+  const [visitorCount, setVisitorCount] = useState<number>(0);
   const [schoolYear, setSchoolYear] = useState<string>('');
   const [schoolYearConfig, setSchoolYearConfig] = useState<any>(null);
   const [showReenrollmentSummary, setShowReenrollmentSummary] = useState(false);
@@ -1597,6 +1598,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
         alunosParticiparam,
         versiculoCitado,
         houveOferta,
+        visitorCount,
         createdAt: new Date().toISOString()
       };
 
@@ -1620,6 +1622,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       setAlunosParticiparam('SIM');
       setVersiculoCitado('SIM');
       setHouveOferta('SIM');
+      setVisitorCount(0);
       setEditingAttendance(null);
       setSelectedClass(null);
 
@@ -1702,6 +1705,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
     setAlunosParticiparam(att.alunosParticiparam || 'SIM');
     setVersiculoCitado(att.versiculoCitado || 'SIM');
     setHouveOferta(att.houveOferta || 'SIM');
+    setVisitorCount(att.visitorCount || 0);
     
     const list: { [key: string]: boolean } = {};
     att.presentStudentIds.forEach(id => list[id] = true);
@@ -2728,6 +2732,17 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         </div>
                       </div>
                     ))}
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">5) Número de Visitantes em Sala</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={visitorCount}
+                        onChange={(e) => setVisitorCount(parseInt(e.target.value) || 0)}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold"
+                        placeholder="Ex: 2"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -4323,18 +4338,19 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                 </div>
 
                 {/* Attendance Questions in Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100 print:grid-cols-2 print:gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 border-t border-slate-100 print:grid-cols-2 print:gap-4">
                   {[
                     { label: '1) A aula atingiu os objetivos desejados?', value: viewingAttendance.aulaObjetivos },
                     { label: '2) Os alunos participaram e interagiram durante a aula?', value: viewingAttendance.alunosParticiparam },
                     { label: '3) O versículo bíblico da semana foi citado em sala?', value: viewingAttendance.versiculoCitado },
                     { label: '4) Houve oferta em sala?', value: viewingAttendance.houveOferta },
+                    { label: '5) Visitantes em sala', value: (viewingAttendance.visitorCount || 0).toString() },
                   ].map((q, i) => (
                     <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100 print:bg-white print:border-slate-200">
                       <p className="text-[10px] font-bold text-slate-500 uppercase mb-1 print:text-slate-900">{q.label}</p>
                       <p className={cn(
                         "text-xs font-black uppercase",
-                        q.value === 'SIM' ? "text-green-600" : q.value === 'NÃO' ? "text-red-600" : q.value === 'PARCIALMENTE' ? "text-amber-600" : "text-slate-600"
+                        q.value === 'SIM' ? "text-green-600" : q.value === 'NÃO' ? "text-red-600" : q.value === 'PARCIALMENTE' ? "text-amber-600" : "text-indigo-600"
                       )}>
                         {q.value || 'NÃO INFORMADO'}
                       </p>

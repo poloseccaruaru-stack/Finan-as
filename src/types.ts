@@ -102,6 +102,7 @@ export interface Attendance {
   alunosParticiparam?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
   versiculoCitado?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
   houveOferta?: 'SIM' | 'NÃO' | 'PARCIALMENTE' | 'NÃO SE APLICA';
+  visitorCount?: number;
   createdAt: string;
 }
 

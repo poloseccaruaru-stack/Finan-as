@@ -12,6 +12,7 @@
         "emergencyContact": { "type": "string" },
         "history": { "type": "string" },
         "photoURL": { "type": "string" },
+        "churchStatus": { "type": "string", "enum": ["membro", "congregado", "visitante", "outros"] },
         "classId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -54,6 +55,7 @@
         "date": { "type": "string", "format": "date" },
         "presentStudentIds": { "type": "array", "items": { "type": "string" } },
         "absentStudentIds": { "type": "array", "items": { "type": "string" } },
+        "visitorCount": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["classId", "date"]
