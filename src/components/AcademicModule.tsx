@@ -686,7 +686,10 @@ export default function AcademicModule({ user, subTab, selectedSchoolYear, onImp
     schoolYear: selectedSchoolYear,
     doNotRenew: false,
     status: 'ativo' as 'ativo' | 'concluído' | 'transferido' | 'evadido',
-    churchStatus: 'membro' as 'membro' | 'congregado' | 'visitante' | 'outros'
+    churchStatus: 'membro' as 'membro' | 'congregado' | 'visitante' | 'outros',
+    gender: 'masculino' as 'masculino' | 'feminino' | undefined,
+    hasChildren: true,
+    childrenCount: 0
   });
 
 interface TeacherFormState {
@@ -710,6 +713,9 @@ interface TeacherFormState {
   modulos: Record<string, boolean>;
   subAreas: Record<string, boolean>;
   permissions?: Record<string, 'read' | 'full'>;
+  gender?: 'masculino' | 'feminino';
+  hasChildren?: boolean;
+  childrenCount?: number;
 }
 
 const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
@@ -754,7 +760,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
     documentos: false,
     meetings: false
   } as Record<string, boolean>,
-  permissions: {} as Record<string, 'read' | 'full'>
+  permissions: {} as Record<string, 'read' | 'full'>,
+  gender: 'masculino',
+  hasChildren: true,
+  childrenCount: 0
 });
 
   // Sync forms with selectedSchoolYear
@@ -891,7 +900,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
           schoolYear: studentForm.schoolYear || selectedSchoolYear,
           doNotRenew: studentForm.doNotRenew || false,
           status: studentForm.status || 'ativo',
-          churchStatus: studentForm.churchStatus || 'membro'
+          churchStatus: studentForm.churchStatus || 'membro',
+          gender: studentForm.gender,
+          hasChildren: studentForm.hasChildren,
+          childrenCount: studentForm.childrenCount
         };
 
       if (editingStudent) {
@@ -908,7 +920,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       }
       setShowForm(false);
       setEditingStudent(null);
-      setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro' });
+      setStudentForm({ 
+        name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro',
+        gender: 'masculino', hasChildren: true, childrenCount: 0
+      });
     } catch (err) {
       handleFirestoreError(err, editingStudent ? OperationType.UPDATE : OperationType.CREATE, 'students');
     }
@@ -966,7 +981,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       schoolYear: student.schoolYear || selectedSchoolYear,
       doNotRenew: student.doNotRenew || false,
       status: student.status || 'ativo',
-      churchStatus: student.churchStatus || 'membro'
+      churchStatus: student.churchStatus || 'membro',
+      gender: student.gender || 'masculino',
+      hasChildren: student.hasChildren !== undefined ? student.hasChildren : true,
+      childrenCount: student.childrenCount || 0
     });
     setShowForm(true);
   };
@@ -1020,6 +1038,9 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
             address: teacherForm.address || "",
             academicBackground: teacherForm.academicBackground || "",
             theologicalBackground: teacherForm.theologicalBackground || "",
+            gender: teacherForm.gender,
+            hasChildren: teacherForm.hasChildren || false,
+            childrenCount: teacherForm.childrenCount || 0,
             classIds: classIds,
             allowedTabs: allowedTabs,
             permissions: teacherForm.permissions || {},
@@ -1053,6 +1074,9 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
             address: teacherForm.address || "",
             academicBackground: teacherForm.academicBackground || "",
             theologicalBackground: teacherForm.theologicalBackground || "",
+            gender: teacherForm.gender,
+            hasChildren: teacherForm.hasChildren || false,
+            childrenCount: teacherForm.childrenCount || 0,
             classIds: classIds,
             allowedTabs: allowedTabs,
             permissions: teacherForm.permissions || {},
@@ -1092,7 +1116,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
           turmas: {},
           modulos: { dashboard: false, academic: false, administrative: false, projects: false, finance: false, reports: false },
           subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false },
-          permissions: {}
+          permissions: {},
+          gender: 'masculino',
+          hasChildren: true,
+          childrenCount: 0
         });
       } catch (err) {
         handleFirestoreError(err, editingTeacher ? OperationType.UPDATE : OperationType.CREATE, 'users');
@@ -1155,6 +1182,9 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
       password: teacher.password || '',
       confirmPassword: teacher.password || '',
       permissions: teacher.permissions || {},
+      gender: teacher.gender || 'masculino',
+      hasChildren: teacher.hasChildren !== undefined ? teacher.hasChildren : true,
+      childrenCount: teacher.childrenCount || 0,
       turmas,
       modulos,
       subAreas
@@ -1826,7 +1856,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                     setEditingMeeting(null);
                   } else if (subTab === 'students') {
                     setEditingStudent(null);
-                    setStudentForm({ name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro' });
+                    setStudentForm({ 
+                      name: '', birthDate: '', address: '', guardians: '', emergencyContact: '', phone: '', history: '', classId: '', classIds: [], enrollmentDates: {}, exitDates: {}, enrollmentStatuses: {}, schoolYear: selectedSchoolYear, doNotRenew: false, status: 'ativo', churchStatus: 'membro',
+                      gender: 'masculino', hasChildren: true, childrenCount: 0
+                    });
                   } else if (subTab === 'teachers') {
                     setEditingTeacher(null);
                     setTeacherForm({ 
@@ -1848,7 +1881,10 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                       allowedTabs: ['dashboard', 'academic', 'projects', 'reports'],
                       turmas: {},
                       modulos: { dashboard: true, academic: true, projects: true, finance: false, reports: true },
-                      subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false }
+                      subAreas: { students: false, teachers: false, classes: false, attendance: false, planning: false, schoolYear: false, regimento: false, calendar: false, organogram: false, system: false, comunicados: false, documentos: false, meetings: false },
+                      gender: 'masculino',
+                      hasChildren: true,
+                      childrenCount: 0
                     });
                   } else if (subTab === 'classes') {
                     setEditingClass(null);
@@ -3313,7 +3349,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
                         <div className="md:col-span-3 space-y-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Completo</label>
                           <input
@@ -3325,7 +3361,7 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                             placeholder="Digite o nome completo do aluno"
                           />
                         </div>
-                        <div className="space-y-2">
+                        <div className="md:col-span-1 space-y-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nascimento</label>
                           <input
                             type="date"
@@ -3333,6 +3369,35 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                             onChange={(e) => setStudentForm({ ...studentForm, birthDate: e.target.value })}
                             className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-slate-700"
                           />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sexo</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setStudentForm({ ...studentForm, gender: 'masculino' })}
+                              className={cn(
+                                "flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2",
+                                studentForm.gender === 'masculino' 
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                                  : "bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Masculino
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStudentForm({ ...studentForm, gender: 'feminino' })}
+                              className={cn(
+                                "flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2",
+                                studentForm.gender === 'feminino' 
+                                  ? "bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-100" 
+                                  : "bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Feminino
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3391,6 +3456,51 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700 placeholder:text-slate-300"
                           placeholder="Rua, Número, Bairro, Cidade..."
                         />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Possui Filhos?</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setStudentForm({ ...studentForm, hasChildren: true })}
+                              className={cn(
+                                "flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2",
+                                studentForm.hasChildren 
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                                  : "bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Sim
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStudentForm({ ...studentForm, hasChildren: false, childrenCount: 0 })}
+                              className={cn(
+                                "flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2",
+                                !studentForm.hasChildren 
+                                  ? "bg-slate-600 border-slate-600 text-white shadow-lg shadow-slate-100" 
+                                  : "bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Não
+                            </button>
+                          </div>
+                        </div>
+                        {studentForm.hasChildren && (
+                          <div className="space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Quantidade de Filhos</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={studentForm.childrenCount || ''}
+                              onChange={(e) => setStudentForm({ ...studentForm, childrenCount: parseInt(e.target.value) || 0 })}
+                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700"
+                              placeholder="Informe a quantidade"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3769,6 +3879,79 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           />
                         </div>
                       </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Sexo</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setTeacherForm({ ...teacherForm, gender: 'masculino' })}
+                              className={cn(
+                                "flex-1 py-2 rounded-xl text-xs font-bold uppercase transition-all border",
+                                teacherForm.gender === 'masculino' 
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100" 
+                                  : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Masculino
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTeacherForm({ ...teacherForm, gender: 'feminino' })}
+                              className={cn(
+                                "flex-1 py-2 rounded-xl text-xs font-bold uppercase transition-all border",
+                                teacherForm.gender === 'feminino' 
+                                  ? "bg-pink-600 border-pink-600 text-white shadow-md shadow-pink-100" 
+                                  : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Feminino
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Possui Filhos?</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setTeacherForm({ ...teacherForm, hasChildren: true })}
+                              className={cn(
+                                "flex-1 py-2 rounded-xl text-xs font-bold uppercase transition-all border",
+                                teacherForm.hasChildren 
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100" 
+                                  : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Sim
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTeacherForm({ ...teacherForm, hasChildren: false, childrenCount: 0 })}
+                              className={cn(
+                                "flex-1 py-2 rounded-xl text-xs font-bold uppercase transition-all border",
+                                !teacherForm.hasChildren 
+                                  ? "bg-slate-600 border-slate-600 text-white shadow-md shadow-slate-100" 
+                                  : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+                              )}
+                            >
+                              Não
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {teacherForm.hasChildren && (
+                        <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Quantidade de Filhos</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={teacherForm.childrenCount || ''}
+                            onChange={(e) => setTeacherForm({ ...teacherForm, childrenCount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                            placeholder="Informe a quantidade"
+                          />
+                        </div>
+                      )}
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-slate-500 uppercase">Endereço Completo</label>
                         <input

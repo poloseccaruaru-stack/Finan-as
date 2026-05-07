@@ -13,6 +13,9 @@
         "history": { "type": "string" },
         "photoURL": { "type": "string" },
         "churchStatus": { "type": "string", "enum": ["membro", "congregado", "visitante", "outros"] },
+        "gender": { "type": "string", "enum": ["masculino", "feminino"] },
+        "hasChildren": { "type": "boolean" },
+        "childrenCount": { "type": "number" },
         "classId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -26,6 +29,9 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "contact": { "type": "string" },
+        "gender": { "type": "string", "enum": ["masculino", "feminino"] },
+        "hasChildren": { "type": "boolean" },
+        "childrenCount": { "type": "number" },
         "subjects": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" }
       },

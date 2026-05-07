@@ -22,6 +22,9 @@ export interface Student {
   doNotRenew?: boolean;
   status?: 'ativo' | 'concluído' | 'transferido' | 'evadido';
   churchStatus?: 'membro' | 'congregado' | 'visitante' | 'outros';
+  gender?: 'masculino' | 'feminino';
+  hasChildren?: boolean;
+  childrenCount?: number;
 }
 
 export interface SavedAISearch {
@@ -56,6 +59,9 @@ export interface Teacher {
   theologicalBackground?: string;
   pinnedClassId?: string;
   dashboardDisplayMode?: 'general' | 'room';
+  gender?: 'masculino' | 'feminino';
+  hasChildren?: boolean;
+  childrenCount?: number;
 }
 
 export interface AccessProfile {
