@@ -3489,16 +3489,33 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                           </div>
                         </div>
                         {studentForm.hasChildren && (
-                          <div className="space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
+                          <div className="space-y-3 animate-in fade-in slide-in-from-left-4 duration-300">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Quantidade de Filhos</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={studentForm.childrenCount || ''}
-                              onChange={(e) => setStudentForm({ ...studentForm, childrenCount: parseInt(e.target.value) || 0 })}
-                              className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700"
-                              placeholder="Informe a quantidade"
-                            />
+                            <div className="flex flex-col gap-3">
+                              <input
+                                type="number"
+                                min="1"
+                                disabled={studentForm.childrenCount === 0}
+                                value={studentForm.childrenCount === 0 ? '' : studentForm.childrenCount || ''}
+                                onChange={(e) => setStudentForm({ ...studentForm, childrenCount: parseInt(e.target.value) || 1 })}
+                                className={cn(
+                                  "w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-700",
+                                  studentForm.childrenCount === 0 && "opacity-50 bg-slate-100"
+                                )}
+                                placeholder="Informe a quantidade"
+                              />
+                              <label className="flex items-center gap-3 px-2 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={studentForm.childrenCount === 0}
+                                  onChange={(e) => setStudentForm({ ...studentForm, childrenCount: e.target.checked ? 0 : 1 })}
+                                  className="w-5 h-5 rounded-lg border-2 border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all"
+                                />
+                                <span className="text-[10px] font-black text-slate-500 group-hover:text-indigo-600 uppercase tracking-widest transition-colors">
+                                  Quantidade não informada
+                                </span>
+                              </label>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -3940,16 +3957,33 @@ const [teacherForm, setTeacherForm] = useState<TeacherFormState>({
                         </div>
                       </div>
                       {teacherForm.hasChildren && (
-                        <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                           <label className="text-xs font-bold text-slate-500 uppercase">Quantidade de Filhos</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={teacherForm.childrenCount || ''}
-                            onChange={(e) => setTeacherForm({ ...teacherForm, childrenCount: parseInt(e.target.value) || 0 })}
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                            placeholder="Informe a quantidade"
-                          />
+                          <div className="flex flex-col gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              disabled={teacherForm.childrenCount === 0}
+                              value={teacherForm.childrenCount === 0 ? '' : teacherForm.childrenCount || ''}
+                              onChange={(e) => setTeacherForm({ ...teacherForm, childrenCount: parseInt(e.target.value) || 1 })}
+                              className={cn(
+                                "w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold",
+                                teacherForm.childrenCount === 0 && "opacity-50 bg-slate-100"
+                              )}
+                              placeholder="Informe a quantidade"
+                            />
+                            <label className="flex items-center gap-2 px-1 cursor-pointer group">
+                              <input
+                                type="checkbox"
+                                checked={teacherForm.childrenCount === 0}
+                                onChange={(e) => setTeacherForm({ ...teacherForm, childrenCount: e.target.checked ? 0 : 1 })}
+                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all"
+                              />
+                              <span className="text-[10px] font-bold text-slate-500 group-hover:text-indigo-600 uppercase tracking-widest transition-colors">
+                                Quantidade não informada
+                              </span>
+                            </label>
+                          </div>
                         </div>
                       )}
                       <div className="space-y-1">
