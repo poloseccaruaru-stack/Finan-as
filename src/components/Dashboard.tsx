@@ -1516,10 +1516,15 @@ export default function Dashboard({ user, selectedSchoolYear, hasFullAccess: pro
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
                           <AlertCircle className="w-5 h-5 text-red-500" />
-                          <div>
-                            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight font-black">Alertas de Frequência</h3>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight font-black">Alertas de Frequência</h3>
+                              <div className="px-3 py-1 bg-red-100 text-red-600 rounded-xl text-sm font-black border-2 border-red-200 animate-pulse shadow-sm shadow-red-100">
+                                {frequencyAlerts.length} {frequencyAlerts.length === 1 ? 'ALUNO' : 'ALUNOS'}
+                              </div>
+                            </div>
                             {(config.frequencyStartDate || config.frequencyEndDate) && (
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-0.5">
                                 {config.frequencyStartDate ? safeFormat(config.frequencyStartDate, 'dd/MM/yy') : 'Início'} — {config.frequencyEndDate ? safeFormat(config.frequencyEndDate, 'dd/MM/yy') : 'Fim'}
                               </p>
                             )}
