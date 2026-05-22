@@ -78,6 +78,12 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
 
+  // Reschedule flow state
+  const [rescheduleTarget, setRescheduleTarget] = useState<Planning | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | null>(null);
+  const [rescheduleMonth, setRescheduleMonth] = useState<Date>(new Date());
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+
   const handlePinClass = async () => {
     if (!selectedClassId || !user.id) return;
     try {
@@ -272,6 +278,88 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
       }
     });
   };
+
+  // Reschedule sequence calculator
+  const rescheduleCascade = useMemo(() => {
+    if (!rescheduleTarget || !rescheduleDate) return { updates: [], hasConflict: false };
+    const dateStr = safeFormat(rescheduleDate, 'yyyy-MM-dd');
+    
+    // Filter plannings for the selected class
+    const classPlannings = plannings.filter(p => p.classId === selectedClassId);
+    
+    // Others (excluding target) that might need to shift
+    const others = classPlannings.filter(p => p.id !== rescheduleTarget.id);
+    
+    const updates: Array<{ id: string; planning: Planning; from: string; to: string }> = [
+      { id: rescheduleTarget.id, planning: rescheduleTarget, from: rescheduleTarget.date, to: dateStr }
+    ];
+    
+    let hasConflict = false;
+    let currentCheck = dateStr;
+    let loop = true;
+    const maxIterations = 52; // Keep safe limit (up to a year) to avoid infinite loops
+    let iter = 0;
+    
+    while (loop && iter < maxIterations) {
+      iter++;
+      const conflict = others.find(p => p.date === currentCheck);
+      if (conflict) {
+        hasConflict = true;
+        const nextSun = parseISO(currentCheck);
+        nextSun.setDate(nextSun.getDate() + 7);
+        const nextSunStr = safeFormat(nextSun, 'yyyy-MM-dd');
+        
+        updates.push({
+          id: conflict.id,
+          planning: conflict,
+          from: conflict.date,
+          to: nextSunStr
+        });
+        currentCheck = nextSunStr;
+      } else {
+        loop = false;
+      }
+    }
+    
+    return { updates, hasConflict };
+  }, [rescheduleTarget, rescheduleDate, plannings, selectedClassId]);
+
+  const handleConfirmReschedule = async () => {
+    if (!rescheduleTarget || !rescheduleDate) return;
+    
+    try {
+      const { updates } = rescheduleCascade;
+      
+      // Update each planning sequentially
+      for (const update of updates) {
+        const parsedDate = parseISO(update.to);
+        const monthStr = safeFormat(parsedDate, 'yyyy-MM') || "";
+        
+        await updateDoc(doc(db, 'planning', update.id), {
+          date: update.to,
+          month: monthStr,
+          updatedAt: serverTimestamp()
+        });
+      }
+      
+      // Clear forms, states & close modals
+      setSelectedDate(null);
+      setShowForm(false);
+      setShowRescheduleModal(false);
+      setRescheduleTarget(null);
+      setRescheduleDate(null);
+      
+      showAlert('Sucesso', 'Planejamento reagendado com sucesso.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'planning');
+    }
+  };
+
+  const rescheduleSundays = useMemo(() => {
+    const start = startOfMonth(rescheduleMonth);
+    const end = endOfMonth(rescheduleMonth);
+    return eachDayOfInterval({ start, end }).filter(date => isSunday(date));
+  }, [rescheduleMonth]);
 
   return (
     <div className="space-y-6">
@@ -559,16 +647,36 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                           Salvar Planejamento
                         </button>
                         {plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
-                              if (p) handleDelete(p.id);
-                            }}
-                            className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
-                          >
-                            <Trash2 className="w-6 h-6" />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
+                                if (p) {
+                                  setRescheduleTarget(p);
+                                  setRescheduleMonth(parseISO(p.date));
+                                  setRescheduleDate(null);
+                                  setShowRescheduleModal(true);
+                                }
+                              }}
+                              className="px-4 py-4 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-2xl transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-wider"
+                              title="Reagendar Planejamento"
+                            >
+                              <CalendarIcon className="w-5 h-5 shrink-0" />
+                              <span>Reagendar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const p = plannings.find(p => p.date === safeFormat(selectedDate, 'yyyy-MM-dd') && p.classId === selectedClassId);
+                                if (p) handleDelete(p.id);
+                              }}
+                              className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all"
+                              title="Excluir Planejamento"
+                            >
+                              <Trash2 className="w-6 h-6 shrink-0" />
+                            </button>
+                          </>
                         )}
                       </>
                     ) : (
@@ -630,6 +738,20 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
                         </div>
                       </div>
                       <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
+                        {hasFullAccess && (
+                          <button 
+                            onClick={() => {
+                              setRescheduleTarget(planning);
+                              setRescheduleMonth(parseISO(planning.date));
+                              setRescheduleDate(null);
+                              setShowRescheduleModal(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                            title="Reagendar Planejamento"
+                          >
+                            <CalendarIcon className="w-5 h-5" />
+                          </button>
+                        )}
                         <button 
                           onClick={() => {
                             setSelectedDate(parseISO(planning.date));
@@ -753,6 +875,283 @@ export default function PlanningModule({ user, selectedSchoolYear, hasFullAccess
     </motion.div>
     )}
     </AnimatePresence>
+
+      {/* Reschedule Planning Modal */}
+      <AnimatePresence>
+        {showRescheduleModal && rescheduleTarget && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                    <CalendarIcon className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                      Reagendar Planejamento
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                      Reorganização de cronograma semanal
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowRescheduleModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Target Planning Card Snapshot */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                    Planejamento selecionado:
+                  </p>
+                  <p className="font-bold text-slate-800 text-sm line-clamp-2">
+                    {rescheduleTarget.content}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
+                    <span className="px-2.5 py-1 bg-white rounded-lg border border-slate-150">
+                      Data atual: {safeFormat(parseISO(rescheduleTarget.date), 'dd/MM/yyyy')}
+                    </span>
+                  </div>
+                </div>
+
+                {rescheduleDate === null ? (
+                  /* Step 1: Selection of New Date */
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        Escolha a Nova Data (Domingos):
+                      </p>
+                    </div>
+
+                    {/* Month Navigator */}
+                    <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setRescheduleMonth(subMonths(rescheduleMonth, 1))}
+                        className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all border border-transparent"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider capitalize">
+                        {safeFormat(rescheduleMonth, 'MMMM yyyy', { locale: ptBR })}
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setRescheduleMonth(addMonths(rescheduleMonth, 1))}
+                        className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all border border-transparent"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Sunday Selector List */}
+                    <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
+                      {rescheduleSundays.map((sunday) => {
+                        const sDateStr = safeFormat(sunday, 'yyyy-MM-dd') || "";
+                        const isTargetDate = sDateStr === rescheduleTarget.date;
+                        const conflictingPlanning = plannings.find(
+                          (p) => p.date === sDateStr && p.classId === selectedClassId && p.id !== rescheduleTarget.id
+                        );
+
+                        return (
+                          <button
+                            key={sDateStr}
+                            type="button"
+                            disabled={isTargetDate}
+                            onClick={() => setRescheduleDate(sunday)}
+                            className={cn(
+                              "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
+                              isTargetDate
+                                ? "bg-slate-100 border-slate-100 text-slate-400 cursor-not-allowed opacity-60"
+                                : conflictingPlanning
+                                  ? "bg-amber-50/55 border-amber-100 text-slate-700 hover:bg-amber-50 hover:border-amber-300"
+                                  : "bg-white border-slate-150 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/20"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={cn(
+                                  "w-10 h-10 rounded-xl flex flex-col items-center justify-center font-bold text-xs shrink-0",
+                                  isTargetDate
+                                    ? "bg-slate-200 text-slate-500"
+                                    : conflictingPlanning
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-indigo-50 text-indigo-600"
+                                )}
+                              >
+                                <span>{safeFormat(sunday, 'dd')}</span>
+                                <span className="text-[8px] uppercase font-black leading-none">{safeFormat(sunday, 'MMM', { locale: ptBR })}</span>
+                              </div>
+                              <div>
+                                <p className="font-bold text-sm">{safeFormat(sunday, 'EEEE', { locale: ptBR })}</p>
+                                <p className="text-xs opacity-70">
+                                  {isTargetDate
+                                    ? "Data atual deste planejamento"
+                                    : conflictingPlanning
+                                      ? `Ocupado: ${conflictingPlanning.content.substring(0, 30)}...`
+                                      : "Disponível"}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div>
+                              {isTargetDate ? (
+                                <span className="text-[8px] font-black uppercase tracking-widest bg-slate-200 text-slate-500 px-2.5 py-1 rounded-lg">
+                                  Atual
+                                </span>
+                              ) : conflictingPlanning ? (
+                                <span className="text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg">
+                                  Conflito
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                  Livre
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  /* Step 2: Safety Summary and Sequence Shift preview */
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                        Resumo da Mudança:
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRescheduleDate(null)}
+                        className="text-xs font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-wider"
+                      >
+                        ← Escolher outra data
+                      </button>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                            De (Data Antiga)
+                          </p>
+                          <p className="text-base font-black text-slate-600 mt-1">
+                            {safeFormat(parseISO(rescheduleTarget.date), 'dd/MM/yyyy')}
+                          </p>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                            Para (Nova Data)
+                          </p>
+                          <p className="text-base font-black text-indigo-600 mt-1">
+                            {safeFormat(rescheduleDate, 'dd/MM/yyyy')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {rescheduleCascade.hasConflict ? (
+                      /* Warning / Conflict shift view */
+                      <div className="space-y-4">
+                        <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl">
+                          <div className="flex gap-3">
+                            <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <h4 className="text-xs font-black text-amber-800 uppercase tracking-wider">
+                                Reorganização em Cadeia Necessária
+                              </h4>
+                              <p className="text-xs text-amber-700 font-medium mt-1">
+                                Já existe um planejamento programado para esta data. Deseja reorganizar automaticamente os planejamentos seguintes?
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Shifts List preview */}
+                        <div className="space-y-2 border border-slate-100 rounded-2xl p-4 bg-slate-50/50">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                            Planejamentos que serão deslocados:
+                          </p>
+                          <div className="space-y-2 max-h-[20vh] overflow-y-auto pr-1">
+                            {rescheduleCascade.updates.map((upd, idx) => (
+                              <div
+                                key={upd.id}
+                                className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-100 text-xs"
+                              >
+                                <div className="w-6 h-6 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black text-xs shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-extrabold text-slate-800 text-[10px] uppercase tracking-wider">
+                                    {upd.id === rescheduleTarget.id
+                                      ? "Planejamento Atual"
+                                      : `Deslocado: "${upd.planning.content.substring(0, 32)}..."`}
+                                  </p>
+                                  <p className="text-slate-500 font-medium mt-0.5">
+                                    {safeFormat(parseISO(upd.from), 'dd/MM/yyyy')} →{" "}
+                                    <span className="font-bold text-indigo-600">
+                                      {safeFormat(parseISO(upd.to), 'dd/MM/yyyy')}
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* No conflicts info card */
+                      <div className="p-4 bg-emerald-50 text-emerald-800 rounded-2xl border border-emerald-100 flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider font-bold">A Nova Data está Livre!</p>
+                          <p className="text-xs text-emerald-700 font-medium mt-1">
+                            Nenhum outro planejamento será deslocado. A data anterior ({safeFormat(parseISO(rescheduleTarget.date), 'dd/MM/yyyy')}) ficará totalmente livre para novos planejamentos.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer actions */}
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRescheduleModal(false)}
+                  className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl transition-all hover:bg-slate-100 hover:text-slate-800 text-xs uppercase tracking-widest"
+                >
+                  Cancelar
+                </button>
+                {rescheduleDate !== null && (
+                  <button
+                    type="button"
+                    onClick={handleConfirmReschedule}
+                    className="flex-1 py-3.5 bg-indigo-600 text-white font-black rounded-2xl transition-all hover:bg-indigo-700 shadow-lg shadow-indigo-100 text-xs uppercase tracking-widest"
+                  >
+                    {rescheduleCascade.hasConflict ? "Reorganizar Sequência" : "Confirmar Reagendamento"}
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Generic Confirmation/Alert Modal */}
       <AnimatePresence>
         {modalConfig.show && (
